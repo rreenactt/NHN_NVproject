@@ -34,10 +34,16 @@ Player          CharacterController + FirstPersonController + BlockRig
                 + BlockCharacterAnimator + ProceduralReload + WeaponController + WeaponSwitcher
  └─ FP Camera   local (0, 1.62, 0); nearClip 0.02; cullingMask excludes PlayerBody
      └─ Viewmodel Arms   ← built at runtime, framing = BlockRig.viewmodelOffset
+Backrooms       BackroomsMap — the whole level, built at runtime from a seed
+Mirror / Mirror Frame        repositioned into the spawn room by BackroomsMap
+Global Volume, Directional Light (disabled)
 
 built at runtime under Player:
  Hips ─ Torso ─┬─ Neck ─ Head        Arm R ─ Hand R ─ Pistol ─ Muzzle
                ├─ Arm R / Arm L      Leg R / Leg L (children of Hips)
+
+built at runtime under Backrooms:
+ Floor, Ceiling (one slab each) ─ Walls/* (merged runs) ─ Ceiling Lights/*
 ```
 
 **Proportions are Minecraft's, on a 16-per-block pixel grid** (`head 8³`, `torso 8×12×4`, `limbs 4×12×4`; legs 12 + torso 12 + head 8 = 32 px). At `totalHeight` 1.8 m the eyes land at 1.62 m, which is where the camera already sat. Every limb's pivot is at its **joint**, with the cube offset half its length below it — get that wrong and limbs orbit their own centre, which is the usual reason a blocky walk looks broken.
@@ -79,6 +85,19 @@ so the stride is *derived from measured speed* and the planted foot tracks the g
 **The body arms move too**, since that is what the mirror and other players read. `armedBodySway` (0.55) keeps over half the walk's arm swing alive inside the held-weapon pose — welding the arms to the gun makes the body read as a mannequin being slid around. `armAimFollow` (0.5) adds a share of the look pitch on top of the torso's own, so an 80° look sweep swings the arms through 56° of elevation.
 
 **Feet-on-floor shim.** A `CharacterController` rests its own `skinWidth` (0.08 by default) above the ground, so a body hung straight off the transform floats by exactly that much — plainly visible. `BlockRig.GroundOffset` reads `skinWidth` and the animator subtracts it from the hip height. Residual gap is 0.0067 m, which is just the `seam` shrink.
+
+**The level is a Backrooms maze, also generated in code.** `BackroomsMap` (on the `Backrooms` root) builds it in `Awake` from a seed — 56×56 cells at 3.2 m, ~179 m square, 3 m ceiling. The scene itself holds no level geometry. `Ground`, `Plane` and the test `Cube` are gone; the `Directional Light` is **disabled, not deleted** (there is no sun indoors, but it is easy to put back). Note `GameObject.Find` will not return it while it is inactive.
+
+Layout is three passes and all three earn their place:
+- **Recursive backtracker maze** over the cells. This is what guarantees connectivity — verified by flood-filling the *actual colliders*, not the grid: 3136/3136 cells reachable from spawn. Later passes only ever *remove* walls, so connectivity cannot regress.
+- **Rectangular rooms** for contrast; a uniform maze reads as corridor soup.
+- **Random extra doorways** (`loopChance`). A perfect maze has exactly one path between any two points, which reads as a puzzle to solve rather than as being lost.
+
+**Watch the openness metric, not the wall count.** A spanning-tree maze is already **~51% open** by neighbour-link count, so that is the floor, not zero. The first attempt (34 rooms, `loopChance` 0.16, 4 m cells) measured **70.7% open** and felt like a warehouse. Now 18 rooms / 0.08 / 3.2 m cells gives **60.2%**, and the metric that actually predicts claustrophobia is the **mean straight sightline: 6.3 m** (longest hallway 52.7 m — those long runs are worth keeping).
+
+**Cost control.** Each straight run of wall is merged into **one box with one collider**, which is why 56×56 costs 1365 wall pieces rather than ~3000. All walls share the built-in cube mesh and one instanced material. Ceiling light panels are emissive boxes with **no collider** (they must not block shots); real point lights are far sparser (`lightSpacing` 5 → 121 lights) and have **shadows off** — a hundred shadow-casting lights would be ruinous and flat diffuse light is what the reference looks like anyway. Levers if it runs badly: `lightSpacing`, `panelSpacing`, then `gridWidth`/`gridHeight`.
+
+Atmosphere is set at runtime in `ApplyAtmosphere`: exponential-squared fog (density 0.028, sickly yellow), flat ambient, skybox nulled. The fog does most of the dread — not being able to see how far the room goes.
 
 **Mirror:** `PlanarMirror` (on the `Mirror` quad, material `Assets/Shaders/MirrorSurface.mat`) reflects the viewer camera through the surface and renders into a RenderTexture that the `NV/Mirror Surface` shader samples **by screen position** — mesh UVs would not line up with the reflection camera's frustum. It moves a real camera rather than applying a mirror matrix, so face culling stays correct and URP renders it in the normal loop; URP does not support calling `camera.Render()` manually. Unity's Quad has normals along −Z, hence `flipNormal = true`. It **assigns** `reflectLayers` straight to the reflection camera's `cullingMask` (it does not AND with the viewer's), so `reflectLayers` must include `PlayerBody` and exclude `FirstPersonArms`.
 
