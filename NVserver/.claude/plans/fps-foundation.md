@@ -555,6 +555,9 @@ WebGL 에서 확인할 항목이다.
 | 3 | `Infrastructure/Logging` | 내장 `Microsoft.Extensions.Logging` 만 사용. `Logging/Serilog/` 폴더를 만들지 않는다. 새 NuGet 패키지 없음 |
 | 6 | 참가 티켓 | 이번 단계는 티켓 없이 진행. 업그레이드 시 프로토콜 버전만 검사하고 서버가 룸 슬롯에서 `PlayerId` 를 발급한다. 티켓 검증은 `Identity`·`Matchmaking` 도입 시 추가한다 |
 | — | 모듈·`Infrastructure` 의 웹 타입 접근 | `FrameworkReference Include="Microsoft.AspNetCore.App"` 사용. 공유 프레임워크 참조이며 NuGet 패키지가 아니다 |
+| 5b | WebGL WebSocket 구현 | `.jslib` 직접 작성. 새 라이브러리를 도입하지 않는다. 필요한 함수는 open·send·receive·close 넷뿐이다. 에디터 반복을 위해 `ClientWebSocket` 기반 구현을 `#if` 로 분리하되 `IClientTransport` 표면만 채운다 |
+| 12 | `Welcome` 의 `MapHash` | `0` 을 센티널로 쓰지 않는다. `MapData/arena.json` 을 실제로 로드하고, 로드 실패 시 기동을 멈춘다 |
+| 10 | `MapData/` | 생성 완료. `arena.json` 40x40 바닥·외벽 4면·엄폐물 5개·스폰 8개. T28 의 Unity export 가 대체한다 |
 
 ---
 
@@ -566,11 +569,8 @@ WebGL 에서 확인할 항목이다.
 |---|---|---|---|---|
 | 4 | 배포 대상 플랫폼과 도메인 | `wss://` 필수이므로 TLS 종단이 필요하다. 대상이 정해지지 않으면 M3을 완료할 수 없다 | 대상 플랫폼 지정 / 도메인·인증서 발급 주체 지정 / 리버스 프록시 사용 여부 | T25 |
 | 5 | Unity 버전 | Unity 6 LTS의 정확한 패치 버전이 필요하다 | 버전 지정 | T13 |
-| 5b | WebGL WebSocket 구현 방식 | 전송 방식 자체는 브라우저 `WebSocket` + `.jslib` 로 확정됐다(위 검토 표). 남은 것은 `.jslib` 을 직접 쓸지 기존 라이브러리를 쓸지다. 기존 라이브러리는 새 의존성이라 확인 대상이다 | `.jslib` 직접 작성 — 필요한 것은 open·send·onmessage·close 네 함수뿐이고 의존성이 늘지 않는다 / 기존 WebGL WebSocket 라이브러리 도입 승인 | T22 |
 | 9 | `Client/`의 Git 관리 | Unity 프로젝트는 LFS 대상 바이너리를 포함한다. 같은 저장소에 둘지 결정이 필요하다. `.gitignore`·`.gitattributes`는 같은 저장소를 전제로 작성했고 LFS 규칙이 이미 들어 있다 (git-lfs 3.7.1 설치 확인). 별도 저장소로 가면 두 파일에서 `Client/` 관련 줄을 제거한다 | 같은 저장소 + LFS(현재 반영 상태) / 별도 저장소 | T14 |
 | 11 | `EntityState` 필드 목록과 크기 불일치 | `architecture.md`의 필드 목록 `id(u8), x/y/z(i16), yaw(u16), flags(u8), hp(u8)` 은 11B 로 합산되는데 명시된 크기는 13B 다. 같은 문서의 스냅샷 총계(8인 114B)는 10B 헤더 + 8×13B 와 정확히 맞는다. 필드 목록에서 `pitch(i16)` 가 누락된 것으로 판단해 13B 로 구현했다. 원격 플레이어의 조준 방향이 필요하므로 내용상으로도 `pitch` 가 맞다 | 13B + `pitch` 유지(현재 구현) / 11B 로 줄이고 총계 수정 / 다른 2B 필드 지정 | T16 이후 프로토콜 변경 |
-| 12 | `Welcome` 의 `MapHash` | 맵 데이터가 없는 동안 `0` 을 보낸다. T28 에서 실제 해시로 채운다. `0` 을 "맵 없음" 으로 쓸지, 맵이 없을 때는 접속을 거부할지 | `0` 을 센티널로 유지(현재 구현) / 맵 미로드 시 접속 거부 | T28 |
-| 10 | `MapData/` 생성 시점 | `data/`는 DB가 없어 만들지 않고 ignore 규칙만 넣었다. `MapData/`는 T28에서 처음 필요하다 | T28에서 생성(계획의 기본 가정) / 미리 생성 | T28 |
 
 ---
 
