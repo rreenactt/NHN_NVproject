@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/Modules/" />
+  <Folder Name="/Solution Items/">
+    <File Path="compose.yaml" />
+  </Folder>
+  <Project Path="Api/Api.csproj" />
+  <Project Path="Infrastructure/Infrastructure.csproj" />
+  <Project Path="Realtime/Realtime.csproj" />
+  <Project Path="Shared/Shared.csproj" />
+  <Project Path="SourceGenerator/SourceGenerator.csproj" />
+</Solution>
