@@ -1,5 +1,34 @@
+# 빌드 산출물 — Directory.Build.props 가 artifacts/ 로 리디렉션한다.
+# bin/ obj/ 규칙은 리디렉션 이전 상태와 도구가 만드는 잔여물 대비로 남겨 둔다.
+artifacts/
 bin/
 obj/
 /packages/
+
+# IDE
 riderModule.iml
 /_ReSharper.Caches/
+*.csproj.user
+*.sln.DotSettings.user
+.vs/
+
+# WebGL 빌드 산출물. 자리표시자만 추적한다.
+Api/wwwroot/*
+!Api/wwwroot/.gitkeep
+
+# SQLite 파일
+data/
+
+# Unity 클라이언트
+Client/Library/
+Client/Temp/
+Client/Obj/
+Client/obj/
+Client/Logs/
+Client/UserSettings/
+Client/Build/
+Client/Builds/
+Client/MemoryCaptures/
+Client/Recordings/
+Client/*.csproj
+Client/*.sln

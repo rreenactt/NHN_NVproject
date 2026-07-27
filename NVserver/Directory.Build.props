@@ -1,0 +1,18 @@
+<Project>
+
+    <!-- obj/bin 을 artifacts/ 로 리디렉션한다.
+         Shared/obj/ 가 생기면 Unity 가 그 안의 AssemblyInfo.cs 를 패키지 범위로 인식해
+         중복 정의 에러를 낸다. 선택 사항이 아니다. -->
+    <PropertyGroup>
+        <UseArtifactsOutput>true</UseArtifactsOutput>
+        <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <InvariantGlobalization>true</InvariantGlobalization>
+    </PropertyGroup>
+
+</Project>

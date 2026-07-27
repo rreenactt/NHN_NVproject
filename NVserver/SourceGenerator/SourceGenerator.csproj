@@ -1,8 +1,15 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
+    <!-- Roslyn 분석기와 소스 제너레이터는 netstandard2.0 만 로드된다.
+         이번 단계에서는 TFM 만 맞추고 비워 둔다. Shared 에 분석기로 연결하지 않는다. -->
     <PropertyGroup>
-        <TargetFramework>netstandard2.1</TargetFramework>
-        <Nullable>enable</Nullable>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>disable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <RootNamespace>NV.SourceGenerator</RootNamespace>
+        <AssemblyName>SourceGenerator</AssemblyName>
+        <IsPackable>false</IsPackable>
     </PropertyGroup>
 
 </Project>

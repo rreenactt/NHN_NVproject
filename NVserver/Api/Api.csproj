@@ -3,9 +3,17 @@
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
-        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>NV.Api</RootNamespace>
+        <AssemblyName>Api</AssemblyName>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     </PropertyGroup>
+
+    <!-- 참조 규칙: Api -> 전부. 컴포지션 루트다. -->
+    <ItemGroup>
+        <ProjectReference Include="..\Shared\Shared.csproj" />
+        <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+        <ProjectReference Include="..\Modules\Realtime\Realtime.csproj" />
+    </ItemGroup>
 
     <ItemGroup>
       <Content Include="..\.dockerignore">
