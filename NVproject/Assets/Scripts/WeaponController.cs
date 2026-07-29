@@ -2,10 +2,19 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Simple raycast pistol.
-/// - Left mouse button: fire one round (raycast from the aim camera center).
+/// Projectile pistol.
+/// - Left mouse button: launches an actual <see cref="Bullet"/> out of the muzzle.
 /// - R: reload (plays the coded arms-to-hip motion, refills after reloadTime).
 /// - Magazine holds 8 rounds; firing on empty forces a reload.
+///
+/// The shot is **not** hitscan. Nothing here resolves a hit: the round travels and works out
+/// its own impact, so distant shots take visible time to land and a target that moves after the
+/// trigger pull can be missed.
+///
+/// One raycast remains, in <see cref="UpdateAim"/>, and it is not hit detection — it is what the
+/// animator uses to converge the barrel onto whatever the crosshair is over. Without it the gun
+/// would fire parallel to the camera and every close shot would land beside the reticle by the
+/// width of the muzzle offset.
 ///
 /// Uses the new Input System low-level API (Mouse.current / Keyboard.current).
 /// Put this on the Player, alongside BlockRig. Assign aimCamera.
@@ -27,18 +36,27 @@ public class WeaponController : MonoBehaviour
     [Tooltip("Character animator, told about each shot so the hands kick.")]
     public BlockCharacterAnimator characterAnimator;
 
+    [Tooltip("Crosshair, flashed as a hit marker when a round connects.")]
+    public Crosshair crosshair;
+
     [Header("Ballistics")]
     public int magazineSize = 8;
+    [Tooltip("How far ahead the crosshair looks when converging the barrel. Not a bullet range — " +
+             "the round itself is limited by its own lifetime.")]
     public float range = 100f;
     public float damage = 20f;
     public LayerMask hitMask = ~0;   // everything by default
 
+    [Tooltip("Muzzle velocity in m/s. Fast enough to read as a bullet, slow enough to watch.")]
+    public float bulletSpeed = 120f;
+    [Tooltip("Bullet drop in m/s². 0 keeps the round on the crosshair at every range.")]
+    public float bulletGravity = 0f;
+    [Tooltip("Seconds a round survives before expiring.")]
+    public float bulletLifetime = 3f;
+
     [Header("Timing")]
     public float fireCooldown = 0.15f;
     public float reloadTime = 1.5f;
-
-    [Header("FX")]
-    public float tracerDuration = 0.03f;
 
     private int _ammo;
     private float _nextFireTime;
@@ -66,6 +84,7 @@ public class WeaponController : MonoBehaviour
         if (reloadMotion == null) reloadMotion = GetComponent<ProceduralReload>();
         if (blockRig == null) blockRig = GetComponent<BlockRig>();
         if (characterAnimator == null) characterAnimator = GetComponent<BlockCharacterAnimator>();
+        if (crosshair == null) crosshair = GetComponent<Crosshair>();
         _ammo = magazineSize;
     }
 
@@ -115,6 +134,11 @@ public class WeaponController : MonoBehaviour
         AimPoint = ray.origin + ray.direction * AimDistance;
     }
 
+    /// <summary>
+    /// Launches an actual round. There is no hit detection here at all any more — the bullet
+    /// resolves its own impact as it travels, so a shot can miss a target that walks out of the
+    /// way after you pulled the trigger, which hitscan could never do.
+    /// </summary>
     private void Fire()
     {
         _ammo--;
@@ -125,35 +149,39 @@ public class WeaponController : MonoBehaviour
         Camera cam = aimCamera != null ? aimCamera : Camera.main;
         if (cam == null) return;
 
-        // Hit detection still comes off the screen centre, so what you hit always matches
-        // the crosshair rather than the barrel's own offset position.
-        Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
-        float travel = range;
+        Vector3 origin = muzzle != null ? muzzle.position : cam.transform.position;
 
-        if (Physics.Raycast(ray, out RaycastHit hit, range, hitMask, QueryTriggerInteraction.Ignore))
+        // Standing flush against a wall can push the muzzle through it. Starting the round there
+        // would let you shoot through walls by hugging them, so fall back to the eye position.
+        if (muzzle != null
+            && Physics.Linecast(cam.transform.position, origin, hitMask, QueryTriggerInteraction.Ignore))
         {
-            travel = hit.distance;
-            Debug.Log($"[Weapon] Hit '{hit.collider.name}' at {hit.point} ({hit.distance:F1}m). Ammo {_ammo}/{magazineSize}");
-
-            // Push rigidbodies and send a damage message if the target listens for it.
-            if (hit.rigidbody != null)
-                hit.rigidbody.AddForceAtPosition(ray.direction * 300f, hit.point);
-            hit.collider.SendMessageUpwards("OnHit", damage, SendMessageOptions.DontRequireReceiver);
-        }
-        else
-        {
-            Debug.Log($"[Weapon] Miss. Ammo {_ammo}/{magazineSize}");
+            origin = cam.transform.position;
         }
 
-        // The tracer runs along the barrel, not from the muzzle across to the reticle — the
-        // animator has already turned the gun onto the aim point, so the two agree, and the
-        // shot reads as leaving the muzzle dead straight.
-        if (muzzle != null)
-            SpawnTracer(muzzle.position, muzzle.position + muzzle.forward * travel);
-        else
-            SpawnTracer(ray.origin, ray.origin + ray.direction * travel);
+        // Aim at the crosshair, NOT along muzzle.forward. The muzzle is a viewmodel bone: it bobs
+        // with the walk, sways, and is re-aimed in LateUpdate — so reading its rotation here, in
+        // Update, uses last frame's orientation and adds the bob on top. Rounds fired while moving
+        // or turning then leave at visibly wrong angles. AimPoint was refreshed at the top of this
+        // same Update, so it is the one direction that is both current and on the reticle.
+        Vector3 direction = AimPoint - origin;
+        if (direction.sqrMagnitude < 1e-6f) direction = cam.transform.forward;
+
+        Bullet.Spawn(origin, direction.normalized, bulletSpeed, damage, bulletGravity, hitMask,
+            bulletLifetime, OnBulletImpact);
+        Debug.Log($"[Weapon] Fired. Ammo {_ammo}/{magazineSize}");
 
         if (_ammo <= 0) StartReload();
+    }
+
+    /// <summary>
+    /// Called by a round when it lands, however long after the trigger pull that is. Marking the
+    /// hit here rather than at fire time is the whole point — with projectiles you genuinely do
+    /// not know yet whether the shot connected.
+    /// </summary>
+    private void OnBulletImpact(RaycastHit hit)
+    {
+        if (crosshair != null) crosshair.ShowHitMarker();
     }
 
     public void StartReload()
@@ -174,18 +202,4 @@ public class WeaponController : MonoBehaviour
         Debug.Log($"[Weapon] Reloaded. Ammo {_ammo}/{magazineSize}");
     }
 
-    // Quick and cheap hit-scan tracer using a LineRenderer that self-destructs.
-    private void SpawnTracer(Vector3 start, Vector3 end)
-    {
-        var go = new GameObject("Tracer");
-        var lr = go.AddComponent<LineRenderer>();
-        lr.material = new Material(Shader.Find("Sprites/Default"));
-        lr.startColor = lr.endColor = new Color(1f, 0.85f, 0.4f);
-        lr.startWidth = 0.02f;
-        lr.endWidth = 0.005f;
-        lr.positionCount = 2;
-        lr.SetPosition(0, start);
-        lr.SetPosition(1, end);
-        Destroy(go, tracerDuration);
-    }
 }

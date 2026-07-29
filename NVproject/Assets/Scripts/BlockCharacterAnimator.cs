@@ -166,6 +166,9 @@ public class BlockCharacterAnimator : MonoBehaviour
     private float _recoilElapsed = -1f;   // negative = no shot in flight
     private float _recoilWeight;
 
+    /// <summary>How far through the recoil kick we currently are, 0..1. Read by the crosshair.</summary>
+    public float RecoilWeight => _recoilWeight;
+
     /// <summary>
     /// Called by the weapon on each shot. Restarts the kick from the top rather than adding to
     /// it, so holding the trigger gives an even chatter instead of the hands climbing away.
@@ -260,8 +263,16 @@ public class BlockCharacterAnimator : MonoBehaviour
             ? Vector3.Slerp(reference.normalized, toTarget.normalized, barrelAlignClamp / angle)
             : toTarget;
 
-        // World up keeps the pistol upright rather than rolling with the arm.
-        Quaternion aimed = Quaternion.LookRotation(aimDirection, Vector3.up);
+        // The up reference must be the CAMERA's up, not world up. Look far enough up and the
+        // barrel approaches world up itself; LookRotation's two arguments become parallel, the
+        // roll is then undefined, and the pistol spins on screen — measured at -131° of roll by
+        // 82° of look pitch. Camera up is always near-perpendicular to where the gun points,
+        // since the barrel is clamped to within barrelAlignClamp of the look direction.
+        Vector3 upReference = controller.cameraTransform != null
+            ? controller.cameraTransform.up
+            : Vector3.up;
+
+        Quaternion aimed = Quaternion.LookRotation(aimDirection, upReference);
 
         // The muzzle rises with the hand. This lands after the shot has already been traced
         // from last frame's orientation, so the kick never pulls the bullet off target.

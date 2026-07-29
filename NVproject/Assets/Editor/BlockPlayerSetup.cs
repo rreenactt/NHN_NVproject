@@ -81,6 +81,12 @@ public static class BlockPlayerSetup
         switcher.blockRig = rig;
         switcher.characterAnimator = animator;
 
+        var crosshair = GetOrAdd<Crosshair>(player);
+        crosshair.controller = firstPerson;
+        crosshair.weaponSwitcher = switcher;
+        crosshair.characterAnimator = animator;
+        weapon.crosshair = crosshair;
+
         FixMirrorLayers();
         EnsureGround();
         EnsureLight();

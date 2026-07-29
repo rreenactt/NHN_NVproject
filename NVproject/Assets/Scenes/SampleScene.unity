@@ -399,6 +399,7 @@ GameObject:
   - component: {fileID: 565932574}
   - component: {fileID: 565932576}
   - component: {fileID: 565932575}
+  - component: {fileID: 565932577}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -427,6 +428,7 @@ MonoBehaviour:
   gravity: -19.62
   acceleration: 45
   deceleration: 55
+  controlMode: 0
 --- !u!143 &565932569
 CharacterController:
   m_ObjectHideFlags: 0
@@ -485,15 +487,18 @@ MonoBehaviour:
   reloadMotion: {fileID: 565932572}
   blockRig: {fileID: 565932576}
   characterAnimator: {fileID: 565932575}
+  crosshair: {fileID: 565932577}
   magazineSize: 8
   range: 100
   damage: 20
   hitMask:
     serializedVersion: 2
     m_Bits: 55
+  bulletSpeed: 120
+  bulletGravity: 0
+  bulletLifetime: 3
   fireCooldown: 0.15
   reloadTime: 1.1
-  tracerDuration: 0.03
 --- !u!114 &565932572
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -597,6 +602,39 @@ MonoBehaviour:
   bodyLayer: 9
   armsLayer: 8
   viewmodelOffset: {x: -0.1692, y: -0.0028, z: 0.1027}
+--- !u!114 &565932577
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 565932567}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 836b206bc779fa345bcac9579fa743af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Crosshair
+  controller: {fileID: 565932568}
+  weaponSwitcher: {fileID: 565932574}
+  characterAnimator: {fileID: 565932575}
+  barLength: 9
+  barThickness: 2
+  restGap: 5
+  centreDot: 1
+  moveSpread: 12
+  shotSpread: 10
+  openSmoothing: 0.02
+  closeSmoothing: 0.13
+  showHitMarker: 1
+  hitMarkerLength: 7
+  hitMarkerThickness: 2
+  hitMarkerGap: 7
+  hitMarkerExpand: 4
+  hitMarkerDuration: 0.22
+  hitMarkerColor: {r: 1, g: 0.95, b: 0.85, a: 1}
+  color: {r: 1, g: 1, b: 1, a: 0.9}
+  outlineColor: {r: 0, g: 0, b: 0, a: 0.55}
+  hideWhenUnarmed: 1
 --- !u!1 &677390664
 GameObject:
   m_ObjectHideFlags: 0
