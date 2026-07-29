@@ -39,6 +39,7 @@ NVserver/
 │   │   ├── Contracts/               룸 조회·커맨드 인터페이스, 발행 이벤트
 │   │   ├── Simulation/              룸, 월드 상태, 판정 규칙, 틱 루프
 │   │   ├── Transport/               세션, 송수신 펌프, WebSocket
+│   │   ├── RealtimeConstants.cs     판정·용량 상수의 유일한 출처
 │   │   └── Realtime.csproj
 │   │
 │   ├── Identity/                    net10.0 · 프로젝트
@@ -145,6 +146,7 @@ Unity 는 로컬 패키지로 참조한 `Shared/` 안에도 `.meta` 를 만든�
 Modules/{모듈}/                      ← .NET 프로젝트 하나
 ├── Contracts/                       public — 다른 모듈과 Api가 보는 전부
 ├── {모듈}.csproj
+├── {모듈}Constants.cs               internal — 판정·용량 상수. 폴더로 나뉜 모듈도 루트에 둔다
 ├── {모듈}Module.cs                  public — DI 등록 + 엔드포인트 매핑
 ├── AssemblyInfo.cs                  InternalsVisibleTo("Modules.Tests")
 └── (그 외 구현 파일)                internal — 루트에 평평하게

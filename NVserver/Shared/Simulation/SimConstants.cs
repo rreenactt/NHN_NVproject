@@ -5,6 +5,10 @@ namespace NV.Shared.Simulation
     ///
     /// 여기 있는 값은 클라이언트가 안다고 가정한다. WebGL 빌드는 디컴파일된다.
     /// 값 공유와 검증 위임은 다르다. 위반 판정은 모듈에서 다시 한다.
+    ///
+    /// 서버만 정하는 판정과 용량(룸 정원, 입력 상한, 버퍼 크기)은 여기가 아니라
+    /// `Modules/Realtime/RealtimeConstants.cs` 에 모아 둔다. 클라이언트가 같은 값으로
+    /// 계산해야 하는지가 두 파일을 가르는 기준이다.
     public static class SimConstants
     {
         public const int TickRate = 30;

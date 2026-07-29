@@ -1,4 +1,5 @@
 using System.Numerics;
+using NV.Realtime;
 using NV.Realtime.Simulation;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
@@ -79,13 +80,13 @@ namespace NV.Modules.Tests.Realtime
             state.Velocity = new Vector3(500f, -12f, 500f);
 
             Assert.True(InputValidator.TryClampSpeed(ref state, out var speed));
-            Assert.True(speed > InputValidator.MaxHorizontalSpeed);
+            Assert.True(speed > RealtimeConstants.Validation.MaxHorizontalSpeed);
 
             var clamped = System.MathF.Sqrt(
                 (state.Velocity.X * state.Velocity.X) + (state.Velocity.Z * state.Velocity.Z));
 
             Assert.True(
-                clamped <= InputValidator.MaxHorizontalSpeed * InputValidator.SpeedTolerance + 0.001f,
+                clamped <= RealtimeConstants.Validation.MaxHorizontalSpeed * RealtimeConstants.Validation.SpeedTolerance + 0.001f,
                 $"clamped = {clamped}");
 
             Assert.Equal(-12f, state.Velocity.Y);

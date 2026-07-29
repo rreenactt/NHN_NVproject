@@ -15,7 +15,10 @@ namespace NV.Realtime.Contracts
     public sealed class RoomMaps
     {
         /// 이 키의 맵이 룸 id 에 대응하는 항목이 없을 때 쓰인다. 반드시 있어야 한다.
-        public const string FallbackKey = "default";
+        ///
+        /// 값을 다시 적지 않고 기본 룸 id 에서 가져온다. 둘이 갈리면 룸을 지정하지 않은
+        /// 접속이 등록되지 않은 룸으로 들어가 기본 맵으로 조용히 열린다.
+        public const string FallbackKey = RealtimeConstants.Rooms.DefaultRoomId;
 
         private readonly Dictionary<string, WorldMap> _byRoom;
 

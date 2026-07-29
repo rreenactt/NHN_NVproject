@@ -1,4 +1,5 @@
 using System.Numerics;
+using NV.Realtime;
 using NV.Realtime.Simulation;
 using NV.Realtime.Transport;
 using NV.Shared.Contracts.Enums;
@@ -71,8 +72,8 @@ namespace NV.Modules.Tests.Realtime
 
             Assert.True(player.TryBuffer(Input(1)));
             Assert.False(player.TryBuffer(Input(uint.MaxValue)));
-            Assert.False(player.TryBuffer(Input(1 + PlayerEntity.MaxInputLead + 1)));
-            Assert.True(player.TryBuffer(Input(1 + PlayerEntity.MaxInputLead)));
+            Assert.False(player.TryBuffer(Input(1 + RealtimeConstants.Players.MaxInputLead + 1)));
+            Assert.True(player.TryBuffer(Input(1 + RealtimeConstants.Players.MaxInputLead)));
         }
 
         [Fact]
@@ -111,7 +112,7 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(-5f, player.State.Position.Z);
             Assert.Equal(1.5f, player.State.Yaw);
             Assert.Equal(3, player.Wire.Id);
-            Assert.Equal(PlayerEntity.MaxHealth, player.State.Health);
+            Assert.Equal(RealtimeConstants.Players.MaxHealth, player.State.Health);
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Logging.Abstractions;
+using NV.Realtime;
 using NV.Realtime.Contracts;
 using NV.Realtime.Simulation;
 using NV.Realtime.Transport;
@@ -97,7 +98,7 @@ namespace NV.Modules.Tests.Realtime
                 return false;
             }
 
-            var buffer = new EntityState[Room.MaxPlayers];
+            var buffer = new EntityState[RealtimeConstants.Rooms.MaxPlayers];
             var count = MessageCodec.ReadSnapshot(list[^1], out header, buffer);
 
             entities = new EntityState[count];

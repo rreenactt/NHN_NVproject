@@ -20,17 +20,6 @@ namespace NV.Realtime.Simulation
     /// - 다른 스레드: PostCommand, PostInput, TryReserveSlot, Summarize 만 호출
     internal sealed class Room
     {
-        /// 룸당 인원. 고정 파라미터의 출처다.
-        public const int MaxPlayers = 8;
-
-        /// 한 틱에 적용할 입력의 상한. 지터로 밀려 쌓인 입력을 따라잡되,
-        /// 무제한으로 적용하면 한 틱에 순간이동한다.
-        public const int MaxInputsPerTick = 2;
-
-        /// 새 입력이 없을 때 마지막 입력을 반복하는 상한.
-        /// 짧은 손실은 흡수하고, 그 이상 끊기면 이동을 멈춘다.
-        public const int MaxInputRepeatTicks = 3;
-
         private readonly ConcurrentQueue<RoomCommand> _commands = new();
         private readonly ConcurrentQueue<InboundInput> _inputs = new();
         private readonly Dictionary<int, PlayerEntity> _players = new();
@@ -38,10 +27,10 @@ namespace NV.Realtime.Simulation
         /// 도착 시점이 아직 안 된 입력. 틱 루프만 만진다.
         private readonly List<InboundInput> _heldInputs = new();
 
-        private readonly EntityState[] _entityBuffer = new EntityState[MaxPlayers];
-        private readonly byte[] _sendBuffer = new byte[MessageCodec.SnapshotWireSize(MaxPlayers)];
+        private readonly EntityState[] _entityBuffer = new EntityState[RealtimeConstants.Rooms.MaxPlayers];
+        private readonly byte[] _sendBuffer = new byte[MessageCodec.SnapshotWireSize(RealtimeConstants.Rooms.MaxPlayers)];
 
-        private readonly bool[] _slots = new bool[MaxPlayers];
+        private readonly bool[] _slots = new bool[RealtimeConstants.Rooms.MaxPlayers];
         private readonly object _slotGate = new();
 
         private readonly WorldMap _map;
@@ -120,7 +109,7 @@ namespace NV.Realtime.Simulation
 
         public RoomSummary Summarize()
         {
-            return new RoomSummary(RoomId, _tick, Volatile.Read(ref _playerCount), MaxPlayers);
+            return new RoomSummary(RoomId, _tick, Volatile.Read(ref _playerCount), RealtimeConstants.Rooms.MaxPlayers);
         }
 
         /// 틱 루프에서만 호출한다.
@@ -180,7 +169,7 @@ namespace NV.Realtime.Simulation
         {
             var applied = 0;
 
-            while (applied < MaxInputsPerTick && player.TryTakeNext(out var input))
+            while (applied < RealtimeConstants.Rooms.MaxInputsPerTick && player.TryTakeNext(out var input))
             {
                 var frame = InputValidator.Sanitize(input.Frame);
                 Simulate(player, frame);
@@ -192,7 +181,7 @@ namespace NV.Realtime.Simulation
 
             if (applied == 0)
             {
-                if (player.RepeatCount < MaxInputRepeatTicks)
+                if (player.RepeatCount < RealtimeConstants.Rooms.MaxInputRepeatTicks)
                 {
                     Simulate(player, player.LastInput);
                     player.RepeatCount++;
@@ -243,7 +232,7 @@ namespace NV.Realtime.Simulation
 
         private void Join(int sessionId, byte playerId)
         {
-            if (_players.ContainsKey(sessionId) || _players.Count >= MaxPlayers)
+            if (_players.ContainsKey(sessionId) || _players.Count >= RealtimeConstants.Rooms.MaxPlayers)
             {
                 return;
             }

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using NV.Realtime;
 using NV.Realtime.Contracts;
 using NV.Realtime.Simulation;
 using NV.Shared.Collision;
@@ -24,7 +25,7 @@ namespace NV.Modules.Tests.Realtime
                 { "test", testRoom },
             }));
 
-            var defaultRoom = registry.GetOrCreate(RoomRegistry.DefaultRoomId);
+            var defaultRoom = registry.GetOrCreate(RealtimeConstants.Rooms.DefaultRoomId);
             var named = registry.GetOrCreate("test");
 
             Assert.NotNull(defaultRoom);

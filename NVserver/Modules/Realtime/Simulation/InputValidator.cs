@@ -12,12 +12,6 @@ namespace NV.Realtime.Simulation
     /// 여기서 독립적으로 다시 검사한다.
     internal static class InputValidator
     {
-        /// 스프린트까지 감안한 이론 최대 수평 속도.
-        public const float MaxHorizontalSpeed = SimConstants.MoveSpeed * SimConstants.SprintMultiplier;
-
-        /// 양자화 오차와 부동소수점 누적을 감안한 여유.
-        public const float SpeedTolerance = 1.05f;
-
         /// 조작된 입력을 사용 가능한 형태로 자른다. 연결을 끊지는 않는다.
         /// 손상된 프레임 하나로 끊으면 정상 클라이언트가 패킷 손상으로 튕긴다.
         public static InputFrame Sanitize(in InputFrame frame)
@@ -44,7 +38,7 @@ namespace NV.Realtime.Simulation
             var velocity = state.Velocity;
             speed = DeterministicMath.Sqrt((velocity.X * velocity.X) + (velocity.Z * velocity.Z));
 
-            var limit = MaxHorizontalSpeed * SpeedTolerance;
+            var limit = RealtimeConstants.Validation.MaxHorizontalSpeed * RealtimeConstants.Validation.SpeedTolerance;
             if (speed <= limit)
             {
                 return false;

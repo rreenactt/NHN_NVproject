@@ -11,23 +11,14 @@ namespace NV.Realtime.Simulation
     /// 예외는 TryBuffer 로, 수신 펌프가 호출한다 — Room 이 큐를 통해 직렬화한다.
     internal sealed class PlayerEntity
     {
-        public const byte MaxHealth = 100;
-
-        /// 지터를 흡수할 만큼만 담는다. 넘치면 오래된 입력을 버린다.
-        private const int InputBufferCapacity = 16;
-
-        /// 클라이언트가 틱 카운터를 갑자기 크게 올리면 이후 입력이 전부 막힌다.
-        /// 조작이든 버그든 플레이어가 영구히 굳으므로 도약을 이 폭으로 제한한다.
-        public const uint MaxInputLead = 64;
-
-        private readonly InboundInput[] _inputs = new InboundInput[InputBufferCapacity];
+        private readonly InboundInput[] _inputs = new InboundInput[RealtimeConstants.Players.InputBufferCapacity];
         private int _inputCount;
 
         public PlayerEntity(int sessionId, byte playerId, Vector3 spawnPosition, float spawnYaw)
         {
             SessionId = sessionId;
             PlayerId = playerId;
-            State = PlayerState.Spawn(spawnPosition, spawnYaw, MaxHealth);
+            State = PlayerState.Spawn(spawnPosition, spawnYaw, RealtimeConstants.Players.MaxHealth);
             LastInput = new InputFrame(ButtonFlags.None, 0, 0, Quantization.ToFixedYaw(spawnYaw), 0);
             Wire = StateProjection.ToEntityState(playerId, State);
         }
@@ -66,7 +57,7 @@ namespace NV.Realtime.Simulation
                 return false;
             }
 
-            if (HasInputBaseline && input.Tick > HighestInputTick + MaxInputLead)
+            if (HasInputBaseline && input.Tick > HighestInputTick + RealtimeConstants.Players.MaxInputLead)
             {
                 return false;
             }
@@ -79,7 +70,7 @@ namespace NV.Realtime.Simulation
                 }
             }
 
-            if (_inputCount == InputBufferCapacity)
+            if (_inputCount == RealtimeConstants.Players.InputBufferCapacity)
             {
                 RemoveAt(0);
             }

@@ -126,7 +126,7 @@ namespace NV.Realtime.Transport
         private static string ReadRoomId(IQueryCollection query)
         {
             var raw = query[ProtocolInfo.RoomQueryKey].ToString();
-            return string.IsNullOrEmpty(raw) ? RoomRegistry.DefaultRoomId : raw;
+            return string.IsNullOrEmpty(raw) ? RealtimeConstants.Rooms.DefaultRoomId : raw;
         }
     }
 }

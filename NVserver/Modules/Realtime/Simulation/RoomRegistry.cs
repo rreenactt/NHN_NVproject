@@ -12,11 +12,6 @@ namespace NV.Realtime.Simulation
     /// 임의의 문자열로 룸이 무한히 생기지 않도록 형식과 개수를 제한한다.
     internal sealed class RoomRegistry : IRoomQuery
     {
-        public const string DefaultRoomId = "default";
-
-        private const int MaxRoomIdLength = 32;
-        private const int MaxRooms = 16;
-
         private readonly ConcurrentDictionary<string, Room> _rooms = new(StringComparer.Ordinal);
         private readonly RoomMaps _maps;
         private readonly NetworkConditionSimulator _network;
@@ -44,9 +39,9 @@ namespace NV.Realtime.Simulation
                 return existing;
             }
 
-            if (_rooms.Count >= MaxRooms)
+            if (_rooms.Count >= RealtimeConstants.Rooms.MaxRooms)
             {
-                _logger.LogWarning("룸 수 상한 {MaxRooms} 에 도달해 {RoomId} 를 만들지 않는다.", MaxRooms, roomId);
+                _logger.LogWarning("룸 수 상한 {MaxRooms} 에 도달해 {RoomId} 를 만들지 않는다.", RealtimeConstants.Rooms.MaxRooms, roomId);
                 return null;
             }
 
@@ -94,7 +89,7 @@ namespace NV.Realtime.Simulation
 
         public static bool IsValidRoomId(string roomId)
         {
-            if (string.IsNullOrEmpty(roomId) || roomId.Length > MaxRoomIdLength)
+            if (string.IsNullOrEmpty(roomId) || roomId.Length > RealtimeConstants.Rooms.MaxRoomIdLength)
             {
                 return false;
             }

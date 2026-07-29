@@ -1,4 +1,5 @@
 using System;
+using NV.Realtime;
 using NV.Realtime.Simulation;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
@@ -48,15 +49,15 @@ namespace NV.Modules.Tests.Realtime
             var room = RoomFixture.Create();
             var transport = new RecordingTransport();
 
-            for (var sessionId = 1; sessionId <= Room.MaxPlayers + 3; sessionId++)
+            for (var sessionId = 1; sessionId <= RealtimeConstants.Rooms.MaxPlayers + 3; sessionId++)
             {
-                room.PostCommand(RoomCommand.Join(sessionId, (byte)((sessionId - 1) % Room.MaxPlayers)));
+                room.PostCommand(RoomCommand.Join(sessionId, (byte)((sessionId - 1) % RealtimeConstants.Rooms.MaxPlayers)));
             }
 
             Run(room, transport, 1);
 
             Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
-            Assert.Equal(Room.MaxPlayers, entities.Length);
+            Assert.Equal(RealtimeConstants.Rooms.MaxPlayers, entities.Length);
         }
 
         [Fact]
@@ -148,7 +149,7 @@ namespace NV.Modules.Tests.Realtime
 
             Assert.True(transport.TryLastSnapshot(1, out var header, out _));
             Assert.True(
-                header.AckedInputTick <= Room.MaxInputsPerTick,
+                header.AckedInputTick <= RealtimeConstants.Rooms.MaxInputsPerTick,
                 $"한 틱에 {header.AckedInputTick} 개를 적용했다.");
         }
 

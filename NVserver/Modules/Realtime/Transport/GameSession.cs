@@ -16,12 +16,6 @@ namespace NV.Realtime.Transport
     /// RunSendPumpAsync 한 곳뿐이어야 한다.
     internal sealed class GameSession
     {
-        /// 밀리면 오래된 스냅샷을 버린다. 다음 틱이 대체하므로 유실이 문제되지 않는다.
-        private const int OutboundCapacity = 32;
-
-        /// 입력 메시지 최대 크기보다 크게 잡되, 이보다 큰 프레임은 끊는다.
-        private const int ReceiveBufferBytes = 256;
-
         private readonly WebSocket _socket;
         private readonly Channel<byte[]> _outbound;
 
@@ -32,7 +26,7 @@ namespace NV.Realtime.Transport
             RoomId = roomId;
             _socket = socket;
 
-            _outbound = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(OutboundCapacity)
+            _outbound = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(RealtimeConstants.Sessions.OutboundCapacity)
             {
                 FullMode = BoundedChannelFullMode.DropOldest,
                 SingleReader = true,
@@ -90,7 +84,7 @@ namespace NV.Realtime.Transport
 
         public async Task RunReceivePumpAsync(Room room, ILogger logger, CancellationToken cancellationToken)
         {
-            var buffer = new byte[ReceiveBufferBytes];
+            var buffer = new byte[RealtimeConstants.Sessions.ReceiveBufferBytes];
 
             try
             {
