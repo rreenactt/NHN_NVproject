@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using NV.Realtime.Contracts;
 using NV.Realtime.Transport;
 using NV.Shared.Collision;
 using NV.Shared.Simulation;
@@ -18,32 +19,37 @@ namespace NV.Realtime.Simulation
         private readonly RoomRegistry _rooms;
         private readonly NetworkConditionTransport _transport;
         private readonly NetworkConditionSimulator _network;
-        private readonly WorldMap _map;
+        private readonly RoomMaps _maps;
         private readonly ILogger<GameLoopService> _logger;
 
         public GameLoopService(
             RoomRegistry rooms,
             NetworkConditionTransport transport,
             NetworkConditionSimulator network,
-            WorldMap map,
+            RoomMaps maps,
             ILogger<GameLoopService> logger)
         {
             _rooms = rooms;
             _transport = transport;
             _network = network;
-            _map = map;
+            _maps = maps;
             _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation(
-                "틱 루프 시작. {TickRate}Hz, 간격 {Interval}ms, 맵 {MapName} 해시 {MapHash:X8} 박스 {BoxCount}개",
+                "틱 루프 시작. {TickRate}Hz, 간격 {Interval}ms",
                 SimConstants.TickRate,
-                TickInterval.TotalMilliseconds,
-                _map.Name,
-                _map.Hash,
-                _map.Collision.BoxCount);
+                TickInterval.TotalMilliseconds);
+
+            // 로드된 맵을 전부 남긴다. 클라이언트가 보고할 해시와 대조할 대상이며,
+            // 룸별로 다른 맵을 쓰므로 하나만 찍으면 어느 쪽과 비교해야 할지 알 수 없다.
+            LogMap("기본", _maps.Fallback);
+            foreach (var pair in _maps.ByRoom)
+            {
+                LogMap("룸 " + pair.Key, pair.Value);
+            }
 
             if (_network.Enabled)
             {
@@ -77,6 +83,17 @@ namespace NV.Realtime.Simulation
             }
 
             _logger.LogInformation("틱 루프 종료.");
+        }
+
+        private void LogMap(string label, WorldMap map)
+        {
+            _logger.LogInformation(
+                "맵 {Label}: {MapName} 해시 {MapHash:X8} 박스 {BoxCount}개 스폰 {SpawnCount}개",
+                label,
+                map.Name,
+                map.Hash,
+                map.Collision.BoxCount,
+                map.SpawnCount);
         }
 
         /// 송신 지연은 룸 틱이 아니라 이 카운터를 기준으로 한다.

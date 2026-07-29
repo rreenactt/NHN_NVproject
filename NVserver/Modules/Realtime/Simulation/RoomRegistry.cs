@@ -18,13 +18,13 @@ namespace NV.Realtime.Simulation
         private const int MaxRooms = 16;
 
         private readonly ConcurrentDictionary<string, Room> _rooms = new(StringComparer.Ordinal);
-        private readonly WorldMap _map;
+        private readonly RoomMaps _maps;
         private readonly NetworkConditionSimulator _network;
         private readonly ILogger<RoomRegistry> _logger;
 
-        public RoomRegistry(WorldMap map, NetworkConditionSimulator network, ILogger<RoomRegistry> logger)
+        public RoomRegistry(RoomMaps maps, NetworkConditionSimulator network, ILogger<RoomRegistry> logger)
         {
-            _map = map;
+            _maps = maps;
             _network = network;
             _logger = logger;
         }
@@ -50,7 +50,23 @@ namespace NV.Realtime.Simulation
                 return null;
             }
 
-            return _rooms.GetOrAdd(roomId, id => new Room(id, _map, _network, _logger));
+            // 맵은 룸 id 로 고른다. 등록되지 않은 id 는 기본 맵으로 열린다 —
+            // 빈 콜리전으로 열면 플레이어가 지형을 통과하고 증상이 로직 버그처럼 보인다.
+            return _rooms.GetOrAdd(roomId, id =>
+            {
+                var map = _maps.For(id);
+
+                // 어느 룸이 어느 맵을 물었는지 남긴다. 해시 불일치를 만났을 때
+                // 클라이언트가 어느 씬을 열었는지만 확인하면 원인이 갈린다.
+                _logger.LogInformation(
+                    "룸 {RoomId} 생성. 맵 {MapName} 해시 {MapHash:X8} 박스 {BoxCount}개",
+                    id,
+                    map.Name,
+                    map.Hash,
+                    map.Collision.BoxCount);
+
+                return new Room(id, map, _network, _logger);
+            });
         }
 
         public bool TryGetRoom(string? roomId, out RoomSummary summary)
