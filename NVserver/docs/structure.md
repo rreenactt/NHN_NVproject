@@ -71,7 +71,6 @@ NVserver/
 │
 ├── MapData/                         Unity에서 export한 맵 콜리전 JSON
 ├── data/                            SQLite 파일 (gitignore)
-├── Client/                          Unity 프로젝트 (솔루션 밖)
 ├── artifacts/                       obj/bin 출력 (gitignore)
 │
 ├── docs/                            readme · architecture · structure · conventions
@@ -96,13 +95,45 @@ NVserver/
 
 | 파일 | 역할 |
 |---|---|
-| `NVserver.slnx` | 솔루션. `.sln` 대신 사용 — GUID가 없어 머지 충돌이 적다. `Client/`는 포함하지 않는다 |
+| `NVserver.slnx` | 솔루션. `.sln` 대신 사용 — GUID가 없어 머지 충돌이 적다. Unity 클라이언트는 포함하지 않는다 |
 | `Directory.Build.props` | **obj/bin을 `artifacts/`로 리디렉션.** `Shared/obj/`가 생기면 Unity 컴파일이 깨진다 |
 | `Directory.Packages.props` | 패키지 버전 중앙 관리 |
 | `global.json` | .NET 10 SDK 버전 고정 |
 | `.gitattributes` | Unity YAML 개행 고정(`eol=lf`), 바이너리 에셋 LFS |
 
 `Directory.Build.props`의 출력 경로 리디렉션은 선택이 아니다. Unity를 연결하기 전에 반드시 적용한다.
+
+---
+
+## Unity 클라이언트
+
+클라이언트는 이 저장소 안이 아니라 **형제 폴더 `../NVproject`** 다. 계획서의 `Client/` 자리를 그 프로젝트가 대신한다 — 게임(블록 캐릭터, 절차적 애니메이션, Backrooms 레벨)이 이미 거기서 만들어져 있었고, 서버 폴더 안에 두 번째 Unity 프로젝트를 만드는 것은 그것을 복제하는 일이었다.
+
+```
+NHN_NVproject/
+├── NVserver/                        이 저장소의 서버 부분
+│   └── Shared/                      ← Unity 로컬 패키지로 참조된다
+└── NVproject/                       Unity 프로젝트
+    ├── Packages/manifest.json       "com.nv.shared": "file:../../NVserver/Shared"
+    └── Assets/
+        ├── Scripts/Net/             전송, 스냅샷 버퍼, 입력 송신, 원격 플레이어
+        ├── Plugins/WebGL/           NvWebSocket.jslib
+        └── Editor/                  맵 export, 네트워크 셋업 메뉴
+```
+
+| 위치 | 내용 |
+|---|---|
+| `Assets/Scripts/Net/NetworkClient.cs` | 접속, Welcome, 스냅샷 디코드, 30Hz 입력 송신. 와이어만 다룬다 |
+| `Assets/Scripts/Net/NetworkBootstrap.cs` | 씬과 네트워크를 잇는 유일한 지점. 씬에 없으면 클라이언트는 혼자 돈다 |
+| `Assets/Scripts/Net/SnapshotBuffer.cs` | 100ms 보간 버퍼 |
+| `Assets/Scripts/Net/RemotePlayerPuppet.cs` | 원격 플레이어 몸. 로컬과 같은 리그·같은 애니메이터를 쓴다 |
+| `Assets/Scripts/Net/BackroomsCollision.cs` | 레벨 생성기 → `MapData`. export 와 런타임 해시가 같은 함수를 쓴다 |
+| `Assets/Editor/MapCollisionExporter.cs` | **Tools ▸ NV Network ▸ Export Map Collision** → `MapData/backrooms.json` |
+| `Assets/Editor/NetworkSetup.cs` | **Tools ▸ NV Network ▸ Setup Networking** |
+
+Unity 는 로컬 패키지로 참조한 `Shared/` 안에도 `.meta` 를 만든다. 그 파일들은 커밋한다 — ignore 하면 클론마다 GUID 가 새로 생기고, 나중에 `Shared.asmdef` 를 GUID 로 참조하는 어셈블리가 생겼을 때 참조가 끊어진다. `Shared/` 에 이미 `Shared.asmdef` 와 `package.json` 이 커밋되어 있으므로 같은 취급이다.
+
+**맵의 출처는 클라이언트다.** 레벨이 씨드에서 코드로 생성되므로 서버는 export 된 박스 목록으로만 그 지형을 안다. 씨드·격자·벽 두께를 바꾸면 export 를 다시 돌린다. 잊으면 접속 직후 콘솔에 맵 해시 불일치가 뜬다 — 그 검사가 이 결합의 유일한 방어선이다.
 
 ---
 
