@@ -41,5 +41,30 @@ namespace NV.Client.Net
             ((EditorWebSocketTransport)transport).Connect(url);
 #endif
         }
+
+        /// 접속이 실패했는지. 실패를 표면에 올리지 않으면 화면에는 "연결 중" 만
+        /// 영원히 남고, 서버를 띄우지 않은 것과 URL 이 틀린 것을 구분할 수 없다.
+        public static bool HasFailed(IClientTransport transport)
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return ((WebGlWebSocketTransport)transport).HasError;
+#else
+            return ((EditorWebSocketTransport)transport).HasError;
+#endif
+        }
+
+        public static string FailureReason(IClientTransport transport)
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            var webgl = (WebGlWebSocketTransport)transport;
+
+            // 브라우저는 보안상 실패 사유를 JS 에 주지 않는다. 닫힘 코드가 유일한 단서다.
+            // 1006 은 핸드셰이크 자체가 성립하지 않은 경우이며, 서버 미기동·mixed
+            // content 차단·프로토콜 버전 거부(426)가 모두 여기로 뭉쳐서 온다.
+            return "WebSocket 닫힘 코드 " + webgl.CloseCode;
+#else
+            return ((EditorWebSocketTransport)transport).Failure;
+#endif
+        }
     }
 }

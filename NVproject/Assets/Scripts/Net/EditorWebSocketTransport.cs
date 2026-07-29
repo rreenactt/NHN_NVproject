@@ -26,9 +26,17 @@ namespace NV.Client.Net
         private ClientWebSocket _socket;
         private Task _receiveLoop;
         private volatile bool _connected;
+        private volatile bool _failed;
+        private volatile string _failure;
         private bool _disposed;
 
         public bool IsConnected => _connected;
+
+        /// 접속이 끝내 성립하지 않았거나 도중에 끊겼다. UI 가 이 값으로 재시도를 제안한다.
+        /// 예외를 조용히 먹으면 화면에는 "연결 중" 만 영원히 남는다.
+        public bool HasError => _failed;
+
+        public string Failure => _failure;
 
         public int QueuedMessages => _inbound.Count;
 
@@ -134,12 +142,29 @@ namespace NV.Client.Net
             catch (OperationCanceledException)
             {
             }
-            catch (WebSocketException)
+            catch (WebSocketException exception)
             {
+                _failed = true;
+                _failure = exception.Message;
+            }
+            catch (Exception exception)
+            {
+                // 잘못된 URL 은 UriFormatException 으로 온다. WebSocketException 만 잡으면
+                // 그 경우가 조용히 사라진다.
+                _failed = true;
+                _failure = exception.Message;
             }
             finally
             {
                 _connected = false;
+
+                // 정상 종료도 UI 관점에서는 연결이 사라진 것이다. 서버가 정원 초과로
+                // 끊었을 때 예외 없이 여기로 온다.
+                if (!_failed && !cancellationToken.IsCancellationRequested)
+                {
+                    _failed = true;
+                    _failure = _failure ?? "연결이 닫혔다.";
+                }
             }
         }
     }

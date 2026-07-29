@@ -19,16 +19,5 @@ Api/wwwroot/*
 # SQLite 파일
 data/
 
-# Unity 클라이언트
-Client/Library/
-Client/Temp/
-Client/Obj/
-Client/obj/
-Client/Logs/
-Client/UserSettings/
-Client/Build/
-Client/Builds/
-Client/MemoryCaptures/
-Client/Recordings/
-Client/*.csproj
-Client/*.sln
+# Unity 클라이언트는 형제 폴더 ../NVproject 다. Unity 산출물 ignore 규칙은
+# 그 폴더의 .gitignore 가 소유한다. Shared/ 를 로컬 패키지로 참조만 한다.
