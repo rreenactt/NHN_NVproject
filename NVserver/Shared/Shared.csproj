@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- Unity(IL2CPP)와 .NET 이 같은 .cs 파일을 각자 컴파일하는 유일한 어셈블리다.
+         제약은 docs/conventions.md "Shared 컴파일" 절이 출처다.
+         NuGet 참조와 UnityEngine 참조를 추가하지 않는다. -->
+    <PropertyGroup>
+        <TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>
+        <LangVersion>9.0</LangVersion>
+        <Nullable>disable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RootNamespace>NV.Shared</RootNamespace>
+        <AssemblyName>Shared</AssemblyName>
+    </PropertyGroup>
+
+</Project>

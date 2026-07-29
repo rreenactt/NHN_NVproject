@@ -1,0 +1,8 @@
+{
+  "name": "com.nv.shared",
+  "version": "0.1.0",
+  "displayName": "NV Shared",
+  "description": "서버와 공유하는 결정적 시뮬레이션과 와이어 포맷. 엔진 참조를 갖지 않는다.",
+  "unity": "6000.0",
+  "hideInEditor": false
+}

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <RootNamespace>NV.Realtime</RootNamespace>
+        <AssemblyName>Realtime</AssemblyName>
+    </PropertyGroup>
+
+    <!-- 호스팅·라우팅 타입을 쓰기 위한 공유 프레임워크 참조다. NuGet 패키지가 아니다. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <!-- 참조 규칙: Modules/* -> Shared, Infrastructure.
+         다른 모듈을 참조하면 tests/Architecture.Tests 가 실패한다. -->
+    <ItemGroup>
+        <ProjectReference Include="..\..\Shared\Shared.csproj" />
+        <ProjectReference Include="..\..\Infrastructure\Infrastructure.csproj" />
+    </ItemGroup>
+
+</Project>

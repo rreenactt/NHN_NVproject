@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NV.Client.Net;
 using UnityEngine;
 
 /// <summary>
@@ -21,7 +22,7 @@ using UnityEngine;
 /// corridor wall is one object with one collider instead of ten. That typically cuts the object
 /// count by about half.
 /// </summary>
-public class BackroomsMap : MonoBehaviour
+public class BackroomsMap : MonoBehaviour, INetworkMapSource
 {
     [Header("Size")]
     [Tooltip("Cells across. 56 x 56 at 3.2 m per cell is roughly 180 m square.")]
@@ -85,11 +86,69 @@ public class BackroomsMap : MonoBehaviour
 
     private readonly List<Light> _flickerLights = new List<Light>();
     private readonly List<float> _flickerPhase = new List<float>();
+    private readonly List<Bounds> _collisionBoxes = new List<Bounds>();
+    private Vector2Int _spawnCell;
     private float _originX, _originZ;
 
     /// <summary>Number of wall boxes actually built, after run merging.</summary>
     public int WallPieces { get; private set; }
     public int LightCount { get; private set; }
+
+    /// <summary>
+    /// Every box that carries a collider, in build order. This is what the game server judges
+    /// movement against, so it has to be the same list the player is walking into rather than a
+    /// second description of the level — the two drifting apart is what makes a player stick to
+    /// nothing, or walk through a wall that is plainly there.
+    ///
+    /// Light panels are absent because they carry no collider: they must not block shots.
+    /// </summary>
+    public IReadOnlyList<Bounds> CollisionBoxes => _collisionBoxes;
+
+    /// <summary>The cell the player is dropped into. The spawn room is cleared around it.</summary>
+    public Vector2Int SpawnCell => _spawnCell;
+
+    /// <summary>World centre of a cell, at floor level.</summary>
+    public Vector3 CellCentreOf(int x, int z) => CellCentre(x, z);
+
+    /// <inheritdoc />
+    public string MapName => "backrooms";
+
+    /// <summary>
+    /// Spawns inside the cleared spawn room, all facing its middle. Scattering them through
+    /// the maze instead means two players lose each other immediately, which is exactly the
+    /// wrong property for the only room where they are guaranteed to meet.
+    /// </summary>
+    public void GetSpawns(List<(Vector3 position, float yaw)> into)
+    {
+        // 스폰 개수는 서버 Room.MaxPlayers 와 같다.
+        const int spawnCount = 8;
+
+        if (_spawnCell == Vector2Int.zero) _spawnCell = new Vector2Int(gridWidth / 2, gridHeight / 2);
+
+        int x0 = Mathf.Max(1, _spawnCell.x - 1);
+        int x1 = Mathf.Min(gridWidth - 1, _spawnCell.x + 2);
+        int z0 = Mathf.Max(1, _spawnCell.y - 1);
+        int z1 = Mathf.Min(gridHeight - 1, _spawnCell.y + 2);
+
+        Vector3 near = CellCentre(x0, z0);
+        Vector3 far = CellCentre(x1, z1);
+        var roomCentre = new Vector3((near.x + far.x) * 0.5f, 0f, (near.z + far.z) * 0.5f);
+
+        for (int x = x0; x <= x1 && into.Count < spawnCount; x++)
+        {
+            for (int z = z0; z <= z1 && into.Count < spawnCount; z++)
+            {
+                Vector3 cell = CellCentre(x, z);
+                var toCentre = new Vector3(roomCentre.x - cell.x, 0f, roomCentre.z - cell.z);
+
+                // Yaw 0 is +Z, and the server's move function uses the same convention.
+                float yaw = toCentre.sqrMagnitude > 1e-4f ? Mathf.Atan2(toCentre.x, toCentre.z) : 0f;
+
+                // The floor slab's top face is y = 0, and the server's position is the feet.
+                into.Add((new Vector3(cell.x, 0f, cell.z), yaw));
+            }
+        }
+    }
 
     private void Awake()
     {
@@ -104,12 +163,15 @@ public class BackroomsMap : MonoBehaviour
         _originX = -gridWidth * cellSize * 0.5f;
         _originZ = -gridHeight * cellSize * 0.5f;
 
+        _collisionBoxes.Clear();
+
         EnsureMaterials();
         CarveMaze(random);
         CarveRooms(random);
         PunchLoops(random);
 
         Vector2Int spawn = new Vector2Int(gridWidth / 2, gridHeight / 2);
+        _spawnCell = spawn;
         OpenSpawnRoom(spawn);
 
         BuildFloorAndCeiling();
@@ -118,6 +180,48 @@ public class BackroomsMap : MonoBehaviour
         PlaceActors(spawn);
         ApplyAtmosphere();
     }
+
+    /// <summary>
+    /// Runs the layout passes and records the collision boxes without building any geometry.
+    /// The editor exporter needs the box list in edit mode, where instantiating a hundred and
+    /// eighty metres of level into the open scene would be unacceptable.
+    ///
+    /// It draws from the seeded random in exactly the order <see cref="Generate"/> does, and
+    /// stops before the lighting pass, which draws afterwards and touches no collider. Change
+    /// that order in one place and not the other and the exported map silently stops matching
+    /// the level the player sees.
+    /// </summary>
+    public IReadOnlyList<Bounds> ComputeCollision()
+    {
+        var random = new System.Random(seed);
+
+        _originX = -gridWidth * cellSize * 0.5f;
+        _originZ = -gridHeight * cellSize * 0.5f;
+
+        _collisionBoxes.Clear();
+
+        CarveMaze(random);
+        CarveRooms(random);
+        PunchLoops(random);
+
+        _spawnCell = new Vector2Int(gridWidth / 2, gridHeight / 2);
+        OpenSpawnRoom(_spawnCell);
+
+        _collisionOnly = true;
+        try
+        {
+            BuildFloorAndCeiling();
+            BuildWalls();
+        }
+        finally
+        {
+            _collisionOnly = false;
+        }
+
+        return _collisionBoxes;
+    }
+
+    private bool _collisionOnly;
 
     // ---------------------------------------------------------------- layout
 
@@ -238,8 +342,13 @@ public class BackroomsMap : MonoBehaviour
     /// </summary>
     private void BuildWalls()
     {
-        var walls = new GameObject("Walls").transform;
-        walls.SetParent(transform, false);
+        Transform walls = null;
+        if (!_collisionOnly)
+        {
+            walls = new GameObject("Walls").transform;
+            walls.SetParent(transform, false);
+        }
+
         int pieces = 0;
 
         // Runs along X, for walls lying on the -Z face of a row of cells.
@@ -400,6 +509,11 @@ public class BackroomsMap : MonoBehaviour
     private void AddBox(string name, Vector3 centre, Vector3 size, Material material,
         bool collider, Transform parent = null)
     {
+        // Recorded before the early-out, so the exported list is exactly the set of boxes that
+        // would have carried a collider — one source, not a parallel description.
+        if (collider) _collisionBoxes.Add(new Bounds(centre, size));
+        if (_collisionOnly) return;
+
         var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
         box.name = name;
         box.transform.SetParent(parent != null ? parent : transform, false);

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <RootNamespace>NV.Architecture.Tests</RootNamespace>
+        <AssemblyName>Architecture.Tests</AssemblyName>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="xunit" />
+        <PackageReference Include="xunit.runner.visualstudio" />
+    </ItemGroup>
+
+    <!-- 모듈 어셈블리를 출력 폴더로 끌어오기 위한 참조다.
+         새 모듈이 생기면 여기에 추가해야 검사 대상에 들어온다. -->
+    <ItemGroup>
+        <ProjectReference Include="..\..\Infrastructure\Infrastructure.csproj" />
+        <ProjectReference Include="..\..\Modules\Realtime\Realtime.csproj" />
+    </ItemGroup>
+
+</Project>

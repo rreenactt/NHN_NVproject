@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <RootNamespace>NV.Infrastructure</RootNamespace>
+        <AssemblyName>Infrastructure</AssemblyName>
+    </PropertyGroup>
+
+    <!-- 로깅·호스팅 타입을 쓰기 위한 공유 프레임워크 참조다. NuGet 패키지가 아니다. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <!-- 참조 규칙: Infrastructure -> Shared 만. 모듈을 참조하면 허브가 되어 추출이 막힌다. -->
+    <ItemGroup>
+        <ProjectReference Include="..\Shared\Shared.csproj" />
+    </ItemGroup>
+
+</Project>

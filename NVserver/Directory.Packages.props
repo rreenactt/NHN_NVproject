@@ -1,0 +1,16 @@
+<Project>
+
+    <PropertyGroup>
+        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+        <CentralPackageTransitivePinning>true</CentralPackageTransitivePinning>
+    </PropertyGroup>
+
+    <!-- 패키지 버전은 전부 여기서만 지정한다. 개별 .csproj 에 Version 을 쓰지 않는다.
+         Shared 에는 어떤 NuGet 패키지도 추가하지 않는다. -->
+    <ItemGroup>
+        <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+        <PackageVersion Include="xunit" Version="2.9.3" />
+        <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    </ItemGroup>
+
+</Project>

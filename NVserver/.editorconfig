@@ -1,0 +1,62 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{json,yaml,yml,md}]
+indent_size = 2
+
+[*.{csproj,props,targets,slnx}]
+indent_size = 4
+
+[*.cs]
+# using 순서: System.* → 외부 패키지 → Shared·Infrastructure → 같은 모듈
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:warning
+
+csharp_style_namespace_declarations = block_scoped:silent
+csharp_prefer_braces = true:warning
+csharp_style_var_for_built_in_types = false:silent
+csharp_style_var_when_type_is_apparent = true:silent
+
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+
+# 네이밍 — structure.md 코딩 컨벤션
+dotnet_naming_rule.interfaces_start_with_i.severity = warning
+dotnet_naming_rule.interfaces_start_with_i.symbols = interface_symbols
+dotnet_naming_rule.interfaces_start_with_i.style = i_prefixed_pascal
+dotnet_naming_symbols.interface_symbols.applicable_kinds = interface
+dotnet_naming_style.i_prefixed_pascal.required_prefix = I
+dotnet_naming_style.i_prefixed_pascal.capitalization = pascal_case
+
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_rule.private_fields_underscore.symbols = private_field_symbols
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel
+dotnet_naming_symbols.private_field_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_field_symbols.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel.required_prefix = _
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+
+dotnet_naming_rule.members_pascal.severity = warning
+dotnet_naming_rule.members_pascal.symbols = member_symbols
+dotnet_naming_rule.members_pascal.style = pascal
+dotnet_naming_symbols.member_symbols.applicable_kinds = class,struct,enum,property,method,event,namespace
+dotnet_naming_style.pascal.capitalization = pascal_case
+
+dotnet_naming_rule.locals_camel.severity = warning
+dotnet_naming_rule.locals_camel.symbols = local_symbols
+dotnet_naming_rule.locals_camel.style = camel
+dotnet_naming_symbols.local_symbols.applicable_kinds = local,parameter
+dotnet_naming_style.camel.capitalization = camel_case
+
+# 테스트 메서드명은 한글 스네이크를 허용한다.
+[tests/**/*.cs]
+dotnet_naming_rule.members_pascal.severity = none

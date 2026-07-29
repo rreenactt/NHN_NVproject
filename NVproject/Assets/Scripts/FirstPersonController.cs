@@ -18,10 +18,30 @@ using UnityEngine.InputSystem;
 ///
 /// Uses the new Input System low-level API (Keyboard.current / Mouse.current),
 /// so no .inputactions asset or PlayerInput component is required.
+///
+/// It runs in one of three modes (<see cref="controlMode"/>). Offline it moves the
+/// CharacterController itself, as it always has. Connected to the game server it stops moving
+/// anything — the server owns the position and this only samples input and turns the view —
+/// and on a remote player's puppet it samples nothing at all. Only <see cref="HandleMove"/>
+/// and the state the animator reads differ between the three; the animator itself cannot tell
+/// them apart, which is the point: one pose composer, three sources of motion.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 public class FirstPersonController : MonoBehaviour
 {
+    /// <summary>Who decides where this character is.</summary>
+    public enum ControlMode
+    {
+        /// <summary>Offline. This script moves the CharacterController from local input.</summary>
+        Local,
+
+        /// <summary>Our own character on a server. Input is sampled and sent; the position arrives back.</summary>
+        NetworkAuthority,
+
+        /// <summary>Somebody else's character. Everything comes off the wire.</summary>
+        Remote,
+    }
+
     [Header("References")]
     [Tooltip("The first-person camera. Should be a child of this object, placed at eye height.")]
     public Transform cameraTransform;
@@ -44,11 +64,21 @@ public class FirstPersonController : MonoBehaviour
     [Tooltip("Deceleration when the stick is released, in m/s².")]
     public float deceleration = 55f;
 
+    [Header("Networking")]
+    [Tooltip("Who decides where this character is. Left at Local the project behaves exactly as " +
+             "it does offline; the network bootstrap switches it.")]
+    public ControlMode controlMode = ControlMode.Local;
+
     private CharacterController _controller;
+    private BlockRig _rig;
     private float _pitch;              // current camera pitch
     private float _verticalVel;        // vertical velocity for gravity/jump
     private Vector3 _planarVelocity;   // world-space horizontal velocity
     private Vector3 _lastPosition;
+
+    private bool _networkGrounded = true;
+    private bool _jumpLatched;
+    private bool _inputEnabled = true;
 
     /// <summary>Current look pitch in degrees (negative = looking up).</summary>
     public float Pitch => _pitch;
@@ -62,7 +92,84 @@ public class FirstPersonController : MonoBehaviour
     /// <summary>Vertical velocity, for the animator's jump and landing states.</summary>
     public float VerticalVelocity => _verticalVel;
 
-    public bool IsGrounded => _controller != null && _controller.isGrounded;
+    /// <summary>
+    /// Grounded state. Offline this is the CharacterController's own; on the network it is the
+    /// server's, because the controller is not being moved and would report a permanent fall.
+    /// </summary>
+    public bool IsGrounded => controlMode == ControlMode.Local
+        ? _controller != null && _controller.isGrounded
+        : _networkGrounded;
+
+    /// <summary>Body yaw in degrees, as sent to the server.</summary>
+    public float Yaw => transform.eulerAngles.y;
+
+    /// <summary>Sprint key held this frame. Sampled even when this script is not moving anything.</summary>
+    public bool SprintHeld { get; private set; }
+
+    /// <summary>Fire button held this frame.</summary>
+    public bool FireHeld { get; private set; }
+
+    /// <summary>
+    /// True once if jump was pressed since the last call, then false. The network tick runs at
+    /// 30 Hz and the render loop faster, so a jump pressed between ticks has to be latched or it
+    /// is simply lost — the symptom is a jump key that works about half the time.
+    /// </summary>
+    public bool ConsumeJump()
+    {
+        bool jumped = _jumpLatched;
+        _jumpLatched = false;
+        return jumped;
+    }
+
+    /// <summary>
+    /// Places the character where the server says it is. Position is the server's *feet*; the
+    /// body is lifted by the rig's ground shim so the blocks still sit on the floor rather than
+    /// sinking by the CharacterController's skin width.
+    /// </summary>
+    public void ApplyNetworkState(Vector3 feetPosition, bool grounded, float verticalVelocity)
+    {
+        float lift = _rig != null ? _rig.GroundOffset : 0f;
+        transform.position = new Vector3(feetPosition.x, feetPosition.y + lift, feetPosition.z);
+        _networkGrounded = grounded;
+        _verticalVel = verticalVelocity;
+    }
+
+    /// <summary>
+    /// While false the character ignores mouse and keyboard entirely and releases the cursor.
+    /// The connection UI needs the pointer, and a controller that keeps grabbing it back turns
+    /// every click on a button into a click that re-locks the mouse instead.
+    /// </summary>
+    public bool InputEnabled
+    {
+        get => _inputEnabled;
+        set
+        {
+            if (_inputEnabled == value) return;
+
+            _inputEnabled = value;
+
+            if (controlMode == ControlMode.Remote) return;
+
+            Cursor.lockState = value ? CursorLockMode.Locked : CursorLockMode.None;
+            Cursor.visible = !value;
+
+            if (!value)
+            {
+                // 입력을 끊을 때 이동 입력을 비운다. 남겨 두면 UI 를 띄운 채로 계속 달린다.
+                MoveInput = Vector2.zero;
+                SprintHeld = false;
+                FireHeld = false;
+                _jumpLatched = false;
+            }
+        }
+    }
+
+    /// <summary>Turns a remote puppet's body and head. Never called on the local player, whose look is its own.</summary>
+    public void ApplyRemoteLook(float yawDegrees, float pitchDegrees)
+    {
+        transform.rotation = Quaternion.Euler(0f, yawDegrees, 0f);
+        SetPitch(pitchDegrees);
+    }
 
     /// <summary>
     /// Sets the look pitch directly, e.g. to face the player somewhere on spawn.
@@ -77,8 +184,9 @@ public class FirstPersonController : MonoBehaviour
     private void Awake()
     {
         _controller = GetComponent<CharacterController>();
+        _rig = GetComponent<BlockRig>();
 
-        if (cameraTransform == null && Camera.main != null)
+        if (cameraTransform == null && controlMode != ControlMode.Remote && Camera.main != null)
             cameraTransform = Camera.main.transform;
 
         _lastPosition = transform.position;
@@ -86,15 +194,22 @@ public class FirstPersonController : MonoBehaviour
 
     private void Start()
     {
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        // A remote player's puppet must not touch the cursor — it is not the one being played.
+        if (controlMode == ControlMode.Remote) return;
+
+        Cursor.lockState = _inputEnabled ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !_inputEnabled;
     }
 
     private void Update()
     {
-        HandleCursor();
-        HandleLook();
-        HandleMove();
+        if (controlMode != ControlMode.Remote && _inputEnabled)
+        {
+            HandleCursor();
+            HandleLook();
+            HandleMove();
+        }
+
         MeasureSpeed();
     }
 
@@ -156,6 +271,15 @@ public class FirstPersonController : MonoBehaviour
         MoveInput = input;
 
         bool sprinting = keyboard != null && keyboard.leftShiftKey.isPressed;
+        SprintHeld = sprinting;
+        FireHeld = Mouse.current != null && Mouse.current.leftButton.isPressed;
+        if (keyboard != null && keyboard.spaceKey.wasPressedThisFrame) _jumpLatched = true;
+
+        // Under server authority the sampling above is the whole job: the position comes back
+        // from the server. Moving the controller here as well would fight it, and the two
+        // would disagree in exactly the places that matter — against a wall, off a ledge.
+        if (controlMode == ControlMode.NetworkAuthority) return;
+
         float targetSpeed = sprinting ? sprintSpeed : walkSpeed;
 
         Vector3 desired = (transform.right * input.x + transform.forward * input.y) * targetSpeed;
@@ -188,5 +312,22 @@ public class FirstPersonController : MonoBehaviour
         delta.y = 0f;
         PlanarSpeed = Time.deltaTime > 0f ? delta.magnitude / Time.deltaTime : 0f;
         _lastPosition = transform.position;
+
+        // A remote puppet has no input to read, but the animator needs one: the swing axis comes
+        // from the move direction, which is how strafing abducts the legs and walking backwards
+        // reverses the cycle. Recovering it from the displacement gets all of that for free
+        // instead of putting the direction on the wire.
+        if (controlMode != ControlMode.Remote) return;
+
+        if (PlanarSpeed > 0.05f)
+        {
+            Vector3 local = transform.InverseTransformDirection(delta.normalized);
+            float magnitude = Mathf.Clamp01(PlanarSpeed / Mathf.Max(0.1f, sprintSpeed));
+            MoveInput = new Vector2(local.x, local.z) * magnitude;
+        }
+        else
+        {
+            MoveInput = Vector2.zero;
+        }
     }
 }
