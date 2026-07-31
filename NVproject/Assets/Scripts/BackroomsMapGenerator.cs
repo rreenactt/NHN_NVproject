@@ -189,6 +189,168 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
         }
     }
 
+    // ================================================================ level queries
+    //
+    // The match layer needs to ask the level questions the renderer never had to: where can a key
+    // sit, where does a shot Runner land, is that point inside a wall. All of it comes off the
+    // solved grid rather than off the colliders — the grid already knows, and a physics sweep for
+    // "somewhere valid, anywhere" would be both slower and vaguer.
+
+    public int GridSize => gridSize;
+    public int FloorCount => Mathf.Max(1, floors);
+    public float CellSize => cellSize;
+    public float FloorSpacing => floorHeight;
+
+    /// <summary>True once <see cref="Generate"/> has solved a grid. Nothing below means anything before that.</summary>
+    public bool HasGrid => _cell != null;
+
+    /// <summary>
+    /// Re-derives the grid if it has gone missing, without rebuilding a single GameObject.
+    ///
+    /// The grid is a plain C# array, so a domain reload — which a script edit triggers mid-play,
+    /// without exiting play mode — wipes it while the level's geometry, being made of
+    /// UnityEngine.Objects, survives intact. Anything that then asks the level a question gets
+    /// "there is no level". Re-solving from the same seed reproduces exactly the grid the standing
+    /// geometry was built from, because every procedural draw comes from that one seeded sequence.
+    /// </summary>
+    public void EnsureGrid()
+    {
+        if (HasGrid) return;
+
+        _originX = -gridSize * cellSize * 0.5f;
+        _originZ = -gridSize * cellSize * 0.5f;
+        SolveGrid(new System.Random(UsedSeed != 0 ? UsedSeed : seed));
+    }
+
+    /// <summary>Floor level of a storey in world Y.</summary>
+    public float FloorLevel(int floor) => FloorY(floor);
+
+    /// <summary>Centre of the spawn room, on the ground floor.</summary>
+    public Vector3 SpawnCentre => RectCentre(0, spawnRoom);
+
+    /// <summary>Centre of the exit room, which is on the top floor — so it needs the stairs first.</summary>
+    public Vector3 ExitCentre => RectCentre(FloorCount - 1, exitRoom);
+
+    /// <summary>
+    /// Can something stand here? Solid cells are wall; the upper storey's stairwell shaft is
+    /// walkable in the grid but has no floor built over it, so anything dropped there falls
+    /// through to the storey below.
+    /// </summary>
+    public bool IsStandable(int floor, int x, int z)
+    {
+        if (!HasGrid || floor < 0 || floor >= _cell.Length) return false;
+        if (!Walkable(floor, x, z)) return false;
+        return !(floor > 0 && InRect(stairwell, x, z) && IsShaftCell(z));
+    }
+
+    /// <summary>Floor-level world position at the centre of a cell.</summary>
+    public Vector3 CellToWorld(int floor, int x, int z) => CellCentre(floor, x, z);
+
+    /// <summary>Nearest cell to a world position, whether or not that cell is standable.</summary>
+    public bool TryWorldToCell(Vector3 world, out int floor, out int x, out int z)
+    {
+        floor = Mathf.Clamp(Mathf.RoundToInt((world.y + 0.5f) / Mathf.Max(0.01f, floorHeight)),
+                            0, FloorCount - 1);
+        x = Mathf.FloorToInt((world.x - _originX) / cellSize);
+        z = Mathf.FloorToInt((world.z - _originZ) / cellSize);
+        return x >= 0 && z >= 0 && x < gridSize && z < gridSize;
+    }
+
+    /// <summary>Every standable cell centre in the level, as (x, z, floor).</summary>
+    public void CollectStandableCells(List<Vector3Int> into)
+    {
+        if (into == null || !HasGrid) return;
+        for (int f = 0; f < FloorCount; f++)
+        for (int x = 0; x < gridSize; x++)
+        for (int z = 0; z < gridSize; z++)
+            if (IsStandable(f, x, z)) into.Add(new Vector3Int(x, z, f));
+    }
+
+    /// <summary>
+    /// A random standable point, jittered inside its cell so ten keys do not line up on a lattice.
+    /// Drawn from a caller-owned <see cref="System.Random"/>: the match seed has to stay separate
+    /// from the level seed, or moving a key would reshape the walls.
+    /// </summary>
+    public bool TryRandomPoint(System.Random random, out Vector3 point, float margin = 0.55f)
+    {
+        point = SpawnCentre;
+        if (!HasGrid) return false;
+
+        // Rejection sampling. Roughly half the grid is standable, so this lands in a couple of
+        // draws — cheaper than materialising the whole cell list for one point.
+        for (int attempt = 0; attempt < 512; attempt++)
+        {
+            int f = random.Next(FloorCount);
+            int x = random.Next(gridSize);
+            int z = random.Next(gridSize);
+            if (!IsStandable(f, x, z)) continue;
+
+            Vector3 centre = CellCentre(f, x, z);
+            float spread = Mathf.Max(0f, cellSize * 0.5f - margin);
+            point = new Vector3(
+                centre.x + (float)(random.NextDouble() * 2.0 - 1.0) * spread,
+                centre.y,
+                centre.z + (float)(random.NextDouble() * 2.0 - 1.0) * spread);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Nearest standable point to somewhere that may be inside a wall. This is what the "teleport
+    /// landed in an invalid cell" edge case rerolls to.
+    /// </summary>
+    public bool TryNearestStandablePoint(Vector3 near, out Vector3 point)
+    {
+        point = near;
+        if (!HasGrid || !TryWorldToCell(near, out int floor, out int cx, out int cz)) return false;
+
+        for (int radius = 0; radius < gridSize; radius++)
+        {
+            for (int dx = -radius; dx <= radius; dx++)
+            for (int dz = -radius; dz <= radius; dz++)
+            {
+                if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dz)) != radius) continue;   // ring only
+                int x = cx + dx, z = cz + dz;
+                if (!IsStandable(floor, x, z)) continue;
+                point = CellCentre(floor, x, z);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Fades the walls out for the freeze device's x-ray. One shared material drives every wall in
+    /// the level, so this is a single material switch rather than a pass over 1300 renderers —
+    /// which also means it cannot be done per-player, and does not need to be: the freeze is
+    /// global by rule.
+    /// </summary>
+    public void SetWallTransparency(float alpha)
+    {
+        if (_wallMaterial == null) return;
+        bool transparent = alpha < 0.999f;
+
+        _wallMaterial.SetFloat("_Surface", transparent ? 1f : 0f);
+        _wallMaterial.SetInt("_SrcBlend", (int)(transparent
+            ? UnityEngine.Rendering.BlendMode.SrcAlpha : UnityEngine.Rendering.BlendMode.One));
+        _wallMaterial.SetInt("_DstBlend", (int)(transparent
+            ? UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha : UnityEngine.Rendering.BlendMode.Zero));
+        _wallMaterial.SetInt("_ZWrite", transparent ? 0 : 1);
+        _wallMaterial.SetOverrideTag("RenderType", transparent ? "Transparent" : "Opaque");
+
+        if (transparent) _wallMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        else _wallMaterial.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+
+        _wallMaterial.renderQueue = (int)(transparent
+            ? UnityEngine.Rendering.RenderQueue.Transparent
+            : UnityEngine.Rendering.RenderQueue.Geometry);
+
+        Color c = wallColor;
+        c.a = Mathf.Clamp01(alpha);
+        _wallMaterial.color = c;
+    }
+
     private Vector3 RectCentre(int floor, RectInt rect)
     {
         Vector3 near = CellCentre(floor, rect.x, rect.y);

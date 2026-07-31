@@ -78,6 +78,20 @@ public class WeaponController : MonoBehaviour
     /// <summary>False while the player has empty hands; set by the weapon switcher.</summary>
     public bool Armed { get; set; } = true;
 
+    /// <summary>
+    /// Trigger disabled without unarming. The chain-drag holds this while the Seeker is being
+    /// hauled about — the pistol is still in shot, it just cannot be fired.
+    /// </summary>
+    public bool FireBlocked { get; set; }
+
+    /// <summary>
+    /// Raised the instant the last round leaves the magazine, and it *replaces* the reload rather
+    /// than running alongside it. The Seeker's magazine does not refill on its own: the chain-drag
+    /// hooks this, drags the shooter off, and only then calls <see cref="ForceReload"/>. Left
+    /// unhooked, the weapon reloads by itself as it always did.
+    /// </summary>
+    public System.Action onMagazineEmpty;
+
     private void Awake()
     {
         if (aimCamera == null) aimCamera = Camera.main;
@@ -110,14 +124,18 @@ public class WeaponController : MonoBehaviour
         var mouse = Mouse.current;
         var keyboard = Keyboard.current;
 
-        if (keyboard != null && keyboard.rKey.wasPressedThisFrame)
+        if (FireBlocked) return;
+
+        // A manual reload is only offered when nothing else owns the empty magazine. Under the
+        // chain rule the Seeker does not get to top up mid-fight — that is the whole cost.
+        if (keyboard != null && keyboard.rKey.wasPressedThisFrame && onMagazineEmpty == null)
             StartReload();
 
         if (mouse != null && mouse.leftButton.wasPressedThisFrame
             && Time.time >= _nextFireTime && !_reloading)
         {
             if (_ammo > 0) Fire();
-            else StartReload();   // click on empty -> reload
+            else if (onMagazineEmpty == null) StartReload();   // click on empty -> reload
         }
     }
 
@@ -171,7 +189,44 @@ public class WeaponController : MonoBehaviour
             bulletLifetime, OnBulletImpact);
         Debug.Log($"[Weapon] Fired. Ammo {_ammo}/{magazineSize}");
 
-        if (_ammo <= 0) StartReload();
+        if (_ammo > 0) return;
+
+        if (onMagazineEmpty != null) onMagazineEmpty();
+        else StartReload();
+    }
+
+    /// <summary>
+    /// Reloads on someone else's schedule — the chain-drag calls this once it has finished with
+    /// the Seeker. It bypasses the "already reloading" guard because the magazine has been empty
+    /// for several seconds by then and nothing else was ever going to refill it.
+    /// </summary>
+    public void ForceReload(float duration)
+    {
+        CancelInvoke(nameof(FinishReload));
+        _reloading = true;
+
+        if (reloadMotion != null) reloadMotion.Play(duration);
+        Invoke(nameof(FinishReload), duration);
+    }
+
+    /// <summary>Magazine capacity, so the HUD does not have to guess. Resizes the current magazine.</summary>
+    public void SetMagazineSize(int size)
+    {
+        magazineSize = Mathf.Max(1, size);
+        _ammo = Mathf.Min(_ammo, magazineSize);
+    }
+
+    /// <summary>
+    /// Full magazine, now, cancelling any reload in progress. A match starts with a full weapon —
+    /// without this, whatever was left in the magazine when the last match ended carries over, and
+    /// a Seeker can begin a round one round from being chained.
+    /// </summary>
+    public void Refill()
+    {
+        CancelInvoke(nameof(FinishReload));
+        _ammo = magazineSize;
+        _reloading = false;
+        _nextFireTime = 0f;
     }
 
     /// <summary>

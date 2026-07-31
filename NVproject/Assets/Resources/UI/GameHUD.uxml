@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/Resources/UI/game-hud.uss" />
+
+    <!--
+        The whole HUD. Role gating is structural, not cosmetic: GameHudController deletes the
+        panel belonging to the other side outright, so a Runner's build of this tree contains no
+        ammo counter and a Seeker's contains no door marker, hidden or otherwise.
+    -->
+    <ui:VisualElement name="hud-root" class="hud-root" picking-mode="Ignore">
+
+        <!-- full-screen atmosphere: fluorescent scanlines, then the wound vignette over them -->
+        <ui:VisualElement name="scanlines" class="scanlines" picking-mode="Ignore" />
+        <ui:VisualElement name="vignette" class="vignette" picking-mode="Ignore" />
+
+        <!-- ============================================================ shared bar -->
+        <ui:VisualElement name="shared-bar" class="shared-bar" picking-mode="Ignore">
+            <ui:VisualElement name="role-chip" class="chip" picking-mode="Ignore">
+                <ui:Label name="role-label" text="—" class="chip__text" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="clock-block" class="clock-block" picking-mode="Ignore">
+                <ui:Label name="clock" text="08:00" class="clock" />
+                <ui:Label name="clock-caption" text="LEVEL 0 · TIME REMAINING" class="clock__caption" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="escape-block" class="chip" picking-mode="Ignore">
+                <ui:Label name="escape-label" text="ESCAPED 0 / 2" class="chip__text" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:Label name="notice" text="" class="notice" picking-mode="Ignore" />
+
+        <!-- ============================================================ runner panel -->
+        <ui:VisualElement name="runner-panel" class="role-panel" picking-mode="Ignore">
+
+            <ui:VisualElement name="objective-block" class="panel panel--bottom-left" picking-mode="Ignore">
+                <ui:Label name="key-caption" text="KEYS INSERTED" class="panel__caption" />
+                <ui:VisualElement name="key-slots" class="slot-row" picking-mode="Ignore" />
+                <ui:Label name="carried-label" text="CARRIED 0" class="panel__line" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="health-block" class="panel panel--bottom-right" picking-mode="Ignore">
+                <ui:Label name="health-caption" text="CONDITION" class="panel__caption" />
+                <ui:VisualElement name="health-pips" class="slot-row" picking-mode="Ignore" />
+                <ui:Label name="bleed-label" text="" class="panel__line panel__line--alert" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="device-block" class="panel panel--right" picking-mode="Ignore">
+                <ui:Label name="device-caption" text="DEVICES" class="panel__caption" />
+                <ui:Label name="teleport-label" text="TELEPORT READY" class="panel__line" />
+                <ui:VisualElement name="effect-list" class="effect-list" picking-mode="Ignore" />
+            </ui:VisualElement>
+
+            <!-- Runners only, always. The Seeker's tree never contains this element. -->
+            <ui:VisualElement name="door-compass" class="compass" picking-mode="Ignore">
+                <ui:Label name="compass-arrow" text="▲" class="compass__arrow" />
+                <ui:Label name="compass-distance" text="" class="compass__distance" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- ============================================================ seeker panel -->
+        <ui:VisualElement name="seeker-panel" class="role-panel" picking-mode="Ignore">
+
+            <ui:VisualElement name="ammo-block" class="panel panel--bottom-right" picking-mode="Ignore">
+                <ui:Label name="ammo-caption" text="MAGAZINE" class="panel__caption" />
+                <ui:VisualElement name="shells" class="slot-row" picking-mode="Ignore" />
+                <ui:Label name="ammo-line" text="" class="panel__line" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="trail-block" class="panel panel--bottom-left" picking-mode="Ignore">
+                <ui:Label name="trail-caption" text="SENSE" class="panel__caption" />
+                <ui:Label name="trail-label" text="◉ TRAIL VISION" class="panel__line panel__line--sense" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="destroy-block" class="destroy" picking-mode="Ignore">
+                <ui:Label name="destroy-caption" text="DEVICE INTEGRITY" class="panel__caption" />
+                <ui:VisualElement name="destroy-pips" class="slot-row slot-row--centred" picking-mode="Ignore" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="chain-banner" class="chain" picking-mode="Ignore">
+                <ui:Label name="chain-title" text="CHAINED" class="chain__title" />
+                <ui:Label name="chain-line" text="" class="chain__line" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- ============================================================ prompt -->
+        <ui:Label name="prompt" text="" class="prompt" picking-mode="Ignore" />
+
+        <!-- ============================================================ device overlays -->
+        <ui:VisualElement name="map-overlay" class="overlay-holder overlay-holder--centre" picking-mode="Ignore">
+            <ui:VisualElement name="map-frame" class="frame" picking-mode="Ignore">
+                <ui:Label name="map-title" text="FACILITY SCHEMATIC" class="overlay__title" />
+                <ui:VisualElement name="map-image" class="overlay__image" picking-mode="Ignore" />
+                <ui:Label name="map-caption" text="" class="overlay__caption" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="feed-overlay" class="overlay-holder overlay-holder--corner" picking-mode="Ignore">
+            <ui:VisualElement name="feed-frame" class="frame" picking-mode="Ignore">
+                <ui:Label name="feed-title" text="CAM 07 · SUBJECT" class="overlay__title" />
+                <ui:VisualElement name="feed-image" class="overlay__image overlay__image--crt" picking-mode="Ignore" />
+                <ui:Label name="feed-caption" text="" class="overlay__caption" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="freeze-banner" class="freeze" picking-mode="Ignore">
+            <ui:Label name="freeze-title" text="ALL FROZEN" class="freeze__title" />
+            <ui:Label name="freeze-line" text="THE WALLS ARE THIN" class="freeze__line" />
+        </ui:VisualElement>
+
+        <!-- ============================================================ full-screen cards -->
+        <ui:VisualElement name="reveal-card" class="card" picking-mode="Ignore">
+            <ui:Label name="reveal-role" text="RUNNER" class="card__title" />
+            <ui:Label name="reveal-flavor" text="" class="card__flavor" />
+            <ui:Label name="reveal-count" text="" class="card__count" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="end-card" class="card" picking-mode="Ignore">
+            <ui:Label name="end-title" text="" class="card__title" />
+            <ui:Label name="end-detail" text="" class="card__flavor" />
+            <ui:Label name="end-hint" text="F2 — RUN IT AGAIN" class="card__count" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

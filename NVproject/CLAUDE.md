@@ -36,6 +36,10 @@ Player          CharacterController + FirstPersonController + BlockRig
  └─ FP Camera   local (0, 1.62, 0); nearClip 0.02; cullingMask excludes PlayerBody
      └─ Viewmodel Arms   ← built at runtime, framing = BlockRig.viewmodelOffset
 Backrooms       BackroomsMap — the whole level, built at runtime from a seed
+Match           MatchBootstrap — the rules layer; builds everything below at runtime
+ ├─ Match Manager / Device System / Match HUD
+ ├─ __Objectives   Escape Door, Key ×10, Device ×9
+ └─ __PracticeRunners  wandering Runner dummies (offline testing only)
 Mirror / Mirror Frame        repositioned into the spawn room by BackroomsMap
 Global Volume, Directional Light (disabled)
 
@@ -122,3 +126,37 @@ The gap is **dynamic**: `restGap` + `moveSpread` × (speed / sprintSpeed) + `sho
 - **One raycast survives, in `UpdateAim`, and it is not hit detection** — it is what converges the barrel on the crosshair. Delete it and the gun fires parallel to the camera, so every close shot lands beside the reticle by the muzzle offset.
 - `bulletGravity` defaults to **0** so the round stays on the crosshair at any range; turning it on makes the reticle lie at distance.
 - Watch out when debugging: `RaycastHit.distance` here is only the portion of *one frame's step* before impact (0.0–0.7 m), not the flight distance. `Bullet` tracks `_travelled` for that reason.
+
+## The match layer (`Assets/Scripts/Game/`)
+
+The game itself — one Seeker against Runners who insert **10 keys** into a hidden door and escape. The ruleset is `.claude/skills/game-rules/references/ruleset.md` and it is **the source of truth**: change it first, then `GameConfig`, then the systems. Tunables live in `Assets/Settings/GameConfig.asset` (menu **Tools ▸ Backrooms ▸ Create Game Config Asset**); the scene object comes from **Tools ▸ Backrooms ▸ Set Up Match**.
+
+**Every rule is decided in `MatchManager` and nowhere else.** Keys, door, devices and agents hold state and raise intentions; the manager resolves them. That is not tidiness — the game is asymmetric, so every rule is also an *information* rule, and a client that decides its own hits decides it was never hit. Wiring the existing `NVserver` in later means running this class on the host and replicating its events; the event list on it (`PhaseChanged`, `KeysChanged`, `EscapesChanged`, `AgentHit`, `MatchEnded`, `RolesAssigned`, `Notified`) is exactly what a replication layer has to carry. Nothing in it assumes the single local player it currently has.
+
+**Asymmetric visibility is two culling layers, not two copies of the world.** `RunnerVision` (10) carries the door, `SeekerVision` (11) carries the blood trail, and `MatchLayers.ApplyRoleVisibility` points each camera at the half its owner may see. Toggling renderers per role leaks the moment a new object forgets the rule; a culling mask cannot leak because the camera never renders the layer. The Seeker's HUD is also told nothing about key progress — only the escape count.
+
+**The door has no collider**, and neither do the keys. A door the Seeker cannot see but *can* walk into would be found by bumping into thin air.
+
+**Combat counts hits, not health.** `Bullet` still calls `SendMessageUpwards("OnHit", damage)`; `PlayerAgent.OnHit` throws the number away. First hit → bleeding + teleport to a random standable cell; second → death, dropping carried keys where they fell. `hitImmunity` (0.75 s) exists because three rounds can be in the air at once — without it one burst kills through the teleport by hitting the place the victim just left.
+
+**Bleeding is enforced by the trail, not by a timer.** Running lays a thin dotted line; standing still past `bleedStillGrace` pools blood on the spot, bigger and lasting `bleedPoolLifetimeScale`× longer. Hiding while wounded paints a sign over the hiding place, which is what "must keep moving" means here.
+
+**The chain-drag is the Seeker's whole cost.** Emptying the 3-round magazine hands the empty to `ChainDrag` via `WeaponController.onMagazineEmpty`, which *replaces* the reload: a chain anchors on the nearest wall, drags the Seeker there, holds them `chainWait` 3 s, and only then reloads. `MovementLocked` (new on `FirstPersonController`) blocks movement while leaving the look free — `InputEnabled` would release the cursor, which mid-match reads as the game losing focus.
+
+**Agents are never deactivated when they die or escape** — `SetPresent(false)` hides them instead. `SetActive(false)` fires `OnDisable`, which unregisters the agent in the middle of the manager's own loop over the roster, and the win conditions still need to count them.
+
+**Two Unity traps this layer paid for, both the domain-reload family** (a script edit during play wipes managed state without re-running `Awake`):
+- `MatchManager.Instance` / `DeviceSystem.Instance` re-find themselves lazily, `BackroomsMapGenerator.EnsureGrid()` re-solves the wiped grid from the same seed without rebuilding geometry, and every `System.Random` is behind a lazy `Rng` property. Each of these was a live NullReference every frame first.
+- **Win conditions are evaluated in `Update`, never on unregister.** Leaving play mode disables agents one at a time, which read as the Seeker having wiped them out and wrote a fictional result into the log on every exit.
+
+`MapDevice` registers *itself* in `OnEnable` and `DeviceSystem.Start` sweeps once for stragglers: the first match is started from `MatchBootstrap.Start`, too early to assume the system it wants is awake — measured as nine devices in the level and none of them registered.
+
+**The HUD is UI Toolkit** (`Assets/Resources/UI/GameHUD.uxml` + `game-hud.uss` + `GameHudPanelSettings`, driven by `GameHudController`), and it is the one part of this project that is *not* built in code — a stylesheet is the only sane way to get flickering signage. It lives under `Resources/` so the controller can load it without anything wired in the scene. The **crosshair stays uGUI**: its canvas sits at `sortingOrder` 100 and the panel at 0, so the reticle draws over the HUD.
+
+- **Role gating is structural, not cosmetic.** On `RolesAssigned` the tree is rebuilt from the UXML and the other side's panel is `RemoveFromHierarchy()`'d. A Runner's HUD contains no ammo counter; a Seeker's contains no key slots, no carried count and no door marker — verified by querying the live tree, not by reading the code. Hiding them instead would be one `display: flex` away from handing the Seeker the objective.
+- Everything role-exclusive must therefore live *inside* `#runner-panel` or `#seeker-panel`. An element parked outside them is an element both sides get.
+- The **door compass** is drawn on a ring around screen centre from the yaw between the camera and the door (verified to 0.09° against the true bearing, with a ↑/↓ when the door is on another storey). It makes a hidden door easy to find — `GameConfig.showDoorCompass` turns it off if locating the door should be most of the job.
+- Scanlines and the wound vignette are **generated textures**, not art. The scanline texture is rebuilt at the screen's pixel height so the lines land one pixel apart; stretched, it degrades into a grey wash and the effect is lost.
+- The full-map overlay is drawn from the level grid into a `Texture2D` (358×175 for the 35×35 two-floor map), not rendered by a second camera — a top-down camera here photographs ceiling tiles. The Seeker camera feed *is* a real camera, and it renders with the Seeker's own culling mask so the Runners' device cannot leak the door back to them.
+
+**Offline testing.** `practiceRunners` (3) spawns NavMeshAgent dummies so the Seeker's half of the ruleset can be exercised solo; they deliberately **do not collect keys** (`PlayerAgent.collectsKeys`) or the objective is swept clean in a minute. Debug keys: **F1** swap side and restart, **F2** restart, **F5** take a hit. Set `practiceRunners` to 0 and `debugKeys` off for a real match.

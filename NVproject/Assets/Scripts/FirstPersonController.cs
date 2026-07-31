@@ -164,6 +164,45 @@ public class FirstPersonController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Blocks movement while leaving the look alone. The chain-drag strands the Seeker where the
+    /// chain lands and the freeze device stops everyone; both want a player who can still look
+    /// around, so this is deliberately not <see cref="InputEnabled"/> — that one releases the
+    /// cursor, which mid-match reads as the game having lost focus.
+    /// </summary>
+    public bool MovementLocked { get; set; }
+
+    /// <summary>
+    /// Puts the body somewhere else in one frame — used by the teleport-on-hit rule, the teleport
+    /// device and the chain-drag.
+    ///
+    /// A CharacterController writes its own position back on every Move, so assigning
+    /// transform.position while it is enabled is silently undone; it has to be switched off
+    /// across the assignment. The last-position sample is reset too, or the animator sees one
+    /// frame of displacement the width of the map and the legs blur.
+    /// </summary>
+    /// <param name="feetPosition">Ground position. The rig's ground shim is added here.</param>
+    public void Teleport(Vector3 feetPosition)
+    {
+        float lift = _rig != null ? _rig.GroundOffset : 0f;
+        var target = new Vector3(feetPosition.x, feetPosition.y + lift, feetPosition.z);
+
+        if (_controller != null)
+        {
+            _controller.enabled = false;
+            transform.position = target;
+            _controller.enabled = true;
+        }
+        else
+        {
+            transform.position = target;
+        }
+
+        _planarVelocity = Vector3.zero;
+        _verticalVel = 0f;
+        _lastPosition = target;
+    }
+
     /// <summary>Turns a remote puppet's body and head. Never called on the local player, whose look is its own.</summary>
     public void ApplyRemoteLook(float yawDegrees, float pitchDegrees)
     {
@@ -268,12 +307,17 @@ public class FirstPersonController : MonoBehaviour
             if (keyboard.aKey.isPressed) input.x -= 1f;
         }
         input = Vector2.ClampMagnitude(input, 1f);
+
+        // Held in place by the chain or by a freeze: the keys are still read above so nothing
+        // latches a stale press, then thrown away here. The look is untouched.
+        if (MovementLocked) input = Vector2.zero;
         MoveInput = input;
 
-        bool sprinting = keyboard != null && keyboard.leftShiftKey.isPressed;
+        bool sprinting = !MovementLocked && keyboard != null && keyboard.leftShiftKey.isPressed;
         SprintHeld = sprinting;
         FireHeld = Mouse.current != null && Mouse.current.leftButton.isPressed;
-        if (keyboard != null && keyboard.spaceKey.wasPressedThisFrame) _jumpLatched = true;
+        if (!MovementLocked && keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
+            _jumpLatched = true;
 
         // Under server authority the sampling above is the whole job: the position comes back
         // from the server. Moving the controller here as well would fight it, and the two
@@ -292,7 +336,7 @@ public class FirstPersonController : MonoBehaviour
         {
             // A small downward bias keeps isGrounded stable on slopes and steps.
             if (_verticalVel < 0f) _verticalVel = -2f;
-            if (keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
+            if (!MovementLocked && keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
                 _verticalVel = Mathf.Sqrt(jumpHeight * -2f * gravity);
         }
         _verticalVel += gravity * Time.deltaTime;

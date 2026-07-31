@@ -1,0 +1,54 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0338f09701cae540a5bcc9b499f81c0, type: 3}
+  m_Name: GameConfig
+  m_EditorClassIdentifier: Assembly-CSharp::NV.Game.GameConfig
+  matchDuration: 480
+  roleRevealDuration: 4
+  escapesToWin: 2
+  seekerWinsOnWipe: 1
+  keysRequired: 10
+  keysPlaced: 10
+  carryLimit: 0
+  keyPickupRadius: 1.4
+  keyInsertInterval: 0.6
+  doorUseRadius: 2.2
+  escapeHoldTime: 0.8
+  dropKeysOnDeath: 1
+  runnerHitsToDie: 2
+  teleportOnHit: 1
+  hitImmunity: 0.75
+  bloodSpacing: 1.1
+  bloodLifetime: 25
+  bleedStillGrace: 2
+  bleedPoolInterval: 0.7
+  bleedPoolLifetimeScale: 2.5
+  seekerMagazine: 3
+  chainWait: 3
+  chainDragTime: 0.45
+  chainAnchorRange: 9
+  chainReloadTime: 1.5
+  deviceCount: 9
+  deviceDestroyHits: 4
+  teleportSharedCooldown: 12
+  repeatableDeviceCooldown: 8
+  deviceTimeBonus: 60
+  mapViewDuration: 6
+  seekerCamDuration: 6
+  freezeDuration: 5
+  xrayWallAlpha: 0.18
+  deviceUseRadius: 2.2
+  seekerCanActivateDevices: 0
+  localRole: 1
+  practiceRunners: 3
+  practiceRunnerSpeed: 3.2
+  placementSeed: 0
