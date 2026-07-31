@@ -805,7 +805,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1777473616}
-  - component: {fileID: 1777473615}
+  - component: {fileID: 1777473617}
   m_Layer: 0
   m_Name: Backrooms
   m_TagString: Untagged
@@ -813,46 +813,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1777473615
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1777473614}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 18ac2779900afe24587436f028924242, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BackroomsMap
-  gridWidth: 56
-  gridHeight: 56
-  cellSize: 3.2
-  wallHeight: 3
-  wallThickness: 0.25
-  seed: 1337
-  roomCount: 18
-  roomMinCells: 3
-  roomMaxCells: 7
-  loopChance: 0.08
-  panelSpacing: 3
-  lightSpacing: 5
-  lightRange: 11
-  lightIntensity: 2.2
-  flickerFraction: 0.07
-  wallColor: {r: 0.8, g: 0.72, b: 0.38, a: 1}
-  floorColor: {r: 0.5, g: 0.43, b: 0.28, a: 1}
-  ceilingColor: {r: 0.76, g: 0.73, b: 0.6, a: 1}
-  lightColor: {r: 1, g: 0.96, b: 0.78, a: 1}
-  fogColor: {r: 0.36, g: 0.33, b: 0.2, a: 1}
-  fogDensity: 0.028
-  wallMaterial: {fileID: 0}
-  floorMaterial: {fileID: 0}
-  ceilingMaterial: {fileID: 0}
-  lightMaterial: {fileID: 0}
-  player: {fileID: 565932570}
-  mirror: {fileID: 1985780353}
-  mirrorFrame: {fileID: 677390668}
 --- !u!4 &1777473616
 Transform:
   m_ObjectHideFlags: 0
@@ -868,6 +828,62 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1777473617
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1777473614}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d287251ede95d14996150dd4f15f602, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BackroomsMapGenerator
+  gridSize: 35
+  cellSize: 3
+  floors: 2
+  floorHeight: 3.2
+  wallThickness: 0.25
+  seed: 0
+  randomizeSeed: 0
+  roomAttempts: 22
+  roomMin: 3
+  roomMax: 8
+  corridorWidth: 1
+  loopChance: 0.15
+  spawnRoom:
+    x: 3
+    y: 3
+    width: 6
+    height: 6
+  exitRoom:
+    x: 26
+    y: 26
+    width: 6
+    height: 6
+  stairwell:
+    x: 16
+    y: 15
+    width: 3
+    height: 5
+  stairSteps: 16
+  lightSpacing: 3
+  lightIntensity: 1.6
+  flickerFraction: 0.18
+  wallColor: {r: 0.7882353, g: 0.7019608, b: 0.41960785, a: 1}
+  trimColor: {r: 0.65882355, g: 0.57254905, b: 0.30588236, a: 1}
+  carpetColor: {r: 0.5411765, g: 0.49803922, b: 0.32156864, a: 1}
+  ceilingColor: {r: 0.84705883, g: 0.8117647, b: 0.65882355, a: 1}
+  lightColor: {r: 1, g: 0.9647059, b: 0.8392157, a: 1}
+  fogColor: {r: 0.7176471, g: 0.6745098, b: 0.49411765, a: 1}
+  fogDensity: 0.022
+  ambientHum: 1
+  humVolume: 0.35
+  player: {fileID: 565932570}
+  mirror: {fileID: 1985780353}
+  mirrorFrame: {fileID: 677390668}
+  bakeNavMesh: 1
 --- !u!1 &1985780348
 GameObject:
   m_ObjectHideFlags: 0
