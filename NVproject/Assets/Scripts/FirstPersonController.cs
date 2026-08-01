@@ -83,6 +83,7 @@ public class FirstPersonController : MonoBehaviour
     private bool _networkGrounded = true;
     private bool _jumpLatched;
     private bool _inputEnabled = true;
+    private bool _phasing;
 
     /// <summary>Current look pitch in degrees (negative = looking up).</summary>
     public float Pitch => _pitch;
@@ -192,21 +193,43 @@ public class FirstPersonController : MonoBehaviour
     /// across the assignment. The last-position sample is reset too, or the animator sees one
     /// frame of displacement the width of the map and the legs blur.
     /// </summary>
+    /// <summary>
+    /// Suspends collision entirely so a scripted move can pass through the building.
+    ///
+    /// The chain-drag needs this. Hauling the Seeker across the level by calling
+    /// <see cref="Teleport"/> every frame means enabling the CharacterController inside a wall
+    /// dozens of times on the way, and each of those is an invitation for Unity to depenetrate the
+    /// capsule somewhere it likes better — measured as landing 3.8 m off target and half a metre in
+    /// the air. Held off for the whole sweep and switched back on at the far end, the path cannot
+    /// be argued with.
+    /// </summary>
+    public bool Phasing
+    {
+        get => _phasing;
+        set
+        {
+            if (_phasing == value) return;
+            _phasing = value;
+            if (_controller != null) _controller.enabled = !value;
+        }
+    }
+
     /// <param name="feetPosition">Ground position. The rig's ground shim is added here.</param>
     public void Teleport(Vector3 feetPosition)
     {
         float lift = _rig != null ? _rig.GroundOffset : 0f;
         var target = new Vector3(feetPosition.x, feetPosition.y + lift, feetPosition.z);
 
-        if (_controller != null)
+        if (_phasing || _controller == null)
+        {
+            // Already switched off for the duration; just move.
+            transform.position = target;
+        }
+        else
         {
             _controller.enabled = false;
             transform.position = target;
             _controller.enabled = true;
-        }
-        else
-        {
-            transform.position = target;
         }
 
         _planarVelocity = Vector3.zero;
@@ -341,6 +364,11 @@ public class FirstPersonController : MonoBehaviour
         // from the server. Moving the controller here as well would fight it, and the two
         // would disagree in exactly the places that matter — against a wall, off a ledge.
         if (controlMode == ControlMode.NetworkAuthority) return;
+
+        // Something else owns the body this frame — the chain, mid-haul. Move() on a disabled
+        // controller is an error log per frame, and gravity has no business running while the
+        // player is being dragged through a wall.
+        if (_controller == null || !_controller.enabled) return;
 
         float targetSpeed = sneaking ? sneakSpeed : sprinting ? sprintSpeed : walkSpeed;
 

@@ -35,6 +35,8 @@ MonoBehaviour:
   seekerMagazine: 3
   chainWait: 3
   chainDragTime: 0.45
+  chainDragSpeed: 45
+  chainDragMaxTime: 3.5
   chainAnchorRange: 9
   chainReloadTime: 1.5
   deviceCount: 9
@@ -48,7 +50,8 @@ MonoBehaviour:
   xrayWallAlpha: 0.18
   deviceUseRadius: 2.2
   seekerCanActivateDevices: 0
-  localRole: 1
-  practiceRunners: 3
+  showDoorCompass: 1
+  localRole: 2
+  practiceRunners: 0
   practiceRunnerSpeed: 3.2
   placementSeed: 0

@@ -295,14 +295,14 @@ public class FootstepAudio : MonoBehaviour
         _stepClips = new AudioClip[5];
         for (int i = 0; i < _stepClips.Length; i++)
             _stepClips[i] = BuildShoeStep("Footstep " + i, 4021 + i * 977,
-                tockHz: 300f + i * 38f,
-                bodyHz: 60f + i * 4.5f,
-                bodyDecay: 21f,
+                tockHz: 560f + i * 48f,
+                bodyHz: 112f + i * 7f,
+                bodyDecay: 30f,
                 toeDelay: 0.050f + i * 0.004f,
-                toeLevel: 0.48f,
-                clickLevel: 0.22f,
-                bodyLevel: 1.15f,
-                length: 0.36f);
+                toeLevel: 0.44f,
+                clickLevel: 0.34f,
+                bodyLevel: 0.80f,
+                length: 0.28f);
 
         return _stepClips;
     }
@@ -314,8 +314,8 @@ public class FootstepAudio : MonoBehaviour
         // Both shoes at once and flat, so there is no heel-then-toe — just a lower, longer slam
         // with all the weight behind it.
         _landClip = BuildShoeStep("Landing", 90210,
-            tockHz: 225f, bodyHz: 46f, bodyDecay: 13f, toeDelay: 0.022f, toeLevel: 0.55f,
-            clickLevel: 0.30f, bodyLevel: 1.5f, length: 0.55f);
+            tockHz: 400f, bodyHz: 84f, bodyDecay: 16f, toeDelay: 0.022f, toeLevel: 0.55f,
+            clickLevel: 0.42f, bodyLevel: 1.15f, length: 0.42f);
         return _landClip;
     }
 
@@ -361,7 +361,7 @@ public class FootstepAudio : MonoBehaviour
             float white = (float)(random.NextDouble() * 2.0 - 1.0);
             float bright = white - previousWhite;                 // differentiator = high-pass
             previousWhite = white;
-            lowPassed = Mathf.Lerp(lowPassed, white, 0.12f);      // grit, darker still
+            lowPassed = Mathf.Lerp(lowPassed, white, 0.20f);      // grit under the heel
 
             float value = Tap(t, bright, lowPassed);
 
@@ -397,16 +397,17 @@ public class FootstepAudio : MonoBehaviour
         float Tap(float u, float bright, float grit)
         {
             float click = bright * Mathf.Exp(-u * 300f) * clickLevel;
-            // The tock is kept alive even down here on purpose: 60 Hz alone is inaudible on a
-            // laptop speaker, and this partial is what survives to say a step happened at all.
-            float tock = Mathf.Sin(2f * Mathf.PI * tockHz * u) * Mathf.Exp(-u * 55f) * 0.30f;
-            float knock = Mathf.Sin(2f * Mathf.PI * tockHz * 1.63f * u) * Mathf.Exp(-u * 95f) * 0.12f;
+            // The tock carries the sound. This is the part the ear hears as "a shoe", and it has
+            // to stay in the range a small speaker can actually reproduce — the weight below it is
+            // felt more than heard.
+            float tock = Mathf.Sin(2f * Mathf.PI * tockHz * u) * Mathf.Exp(-u * 58f) * 0.40f;
+            float knock = Mathf.Sin(2f * Mathf.PI * tockHz * 1.63f * u) * Mathf.Exp(-u * 100f) * 0.16f;
 
             // The weight. A slow decay here is what separates a heavy shoe from a light one —
             // the low end has to still be there when the toe lands, or the step reads as a tap
             // with a thud stapled to the front of it.
             float weight = Mathf.Sin(2f * Mathf.PI * bodyHz * u) * Mathf.Exp(-u * bodyDecay) * bodyLevel;
-            float scuff = grit * Mathf.Exp(-u * 70f) * 0.18f;
+            float scuff = grit * Mathf.Exp(-u * 80f) * 0.20f;
 
             return click + tock + knock + weight + scuff;
         }

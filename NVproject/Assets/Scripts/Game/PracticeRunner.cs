@@ -96,7 +96,7 @@ namespace NV.Game
             if (!arrived && _repathTimer > 0f) return;
 
             if (match.Map != null && match.Map.TryRandomPoint(Rng, out Vector3 point)
-                && NavMesh.SamplePosition(point, out NavMeshHit hit, 4f, NavMesh.AllAreas))
+                && NavMesh.SamplePosition(point, out NavMeshHit hit, 1.5f, NavMesh.AllAreas))
             {
                 _navAgent.SetDestination(hit.position);
             }

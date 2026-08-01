@@ -39,6 +39,9 @@ public class WeaponController : MonoBehaviour
     [Tooltip("Crosshair, flashed as a hit marker when a round connects.")]
     public Crosshair crosshair;
 
+    [Tooltip("The bang. Added automatically if missing, so every scene with a weapon has one.")]
+    public WeaponAudio weaponAudio;
+
     [Header("Ballistics")]
     public int magazineSize = 8;
     [Tooltip("How far ahead the crosshair looks when converging the barrel. Not a bullet range — " +
@@ -99,6 +102,12 @@ public class WeaponController : MonoBehaviour
         if (blockRig == null) blockRig = GetComponent<BlockRig>();
         if (characterAnimator == null) characterAnimator = GetComponent<BlockCharacterAnimator>();
         if (crosshair == null) crosshair = GetComponent<Crosshair>();
+
+        // Self-supplying: a scene that has a weapon at all should make a noise when it fires,
+        // without anything having to remember to wire it.
+        if (weaponAudio == null) weaponAudio = GetComponent<WeaponAudio>();
+        if (weaponAudio == null) weaponAudio = gameObject.AddComponent<WeaponAudio>();
+
         _ammo = magazineSize;
     }
 
@@ -161,6 +170,10 @@ public class WeaponController : MonoBehaviour
     {
         _ammo--;
         _nextFireTime = Time.time + fireCooldown;
+
+        // Before the round is even resolved. The bang is not feedback about a hit — it is the
+        // event itself, and everyone within sixty metres is entitled to hear it immediately.
+        if (weaponAudio != null) weaponAudio.PlayShot();
 
         if (characterAnimator != null) characterAnimator.AddRecoil();
 

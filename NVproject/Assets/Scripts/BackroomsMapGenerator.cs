@@ -101,6 +101,7 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
     private readonly List<Light> _flickerLights = new List<Light>();
     private readonly List<float> _flickerPhase = new List<float>();
 
+    private BoxCollider _ceilingLid;
     private Material _wallMaterial, _carpetMaterial, _ceilingMaterial, _lightMaterial, _trimMaterial;
     private float _originX, _originZ;
 
@@ -676,6 +677,40 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
             BuildWalls(f);
         }
         BuildStairs();
+        BuildCeilingLid();
+    }
+
+    /// <summary>
+    /// One invisible slab across the top storey, level with its ceiling.
+    ///
+    /// Ceiling tiles carry no collider — deliberately, since a grid of them would be a thousand
+    /// colliders and they never need to stop anything from below. That holds on every floor but
+    /// the last: the storey above provides the barrier, because its carpet slab *is* solid. The
+    /// top floor has nothing above it, so a player who climbs onto a device console (1 m) and
+    /// jumps (1.2 m) puts their eyes at 7.0 m against a 6.2 m ceiling and sees straight out of
+    /// the level.
+    ///
+    /// One box the size of the grid fixes it for the cost of a single collider. It is switched off
+    /// across the NavMesh bake — see <see cref="BakeNavMesh"/> — or the bots get a floor on the roof.
+    /// </summary>
+    private void BuildCeilingLid()
+    {
+        float span = gridSize * cellSize;
+        float y = FloorY(FloorCount - 1) + CeilingHeight;
+
+        // Sits *on* the ceiling plane rather than through it, so it takes no headroom away.
+        var centre = new Vector3(_originX + span * 0.5f, y + 0.1f, _originZ + span * 0.5f);
+        var size = new Vector3(span, 0.2f, span);
+
+        _collisionBoxes.Add(new Bounds(centre, size));
+        if (_collisionOnly) return;
+
+        var lid = new GameObject("Ceiling Lid");
+        lid.transform.SetParent(_root, false);
+        lid.transform.localPosition = centre;
+
+        _ceilingLid = lid.AddComponent<BoxCollider>();
+        _ceilingLid.size = size;
     }
 
     /// <summary>
@@ -1011,7 +1046,19 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
 
         surface.collectObjects = CollectObjects.All;
         surface.useGeometry = UnityEngine.AI.NavMeshCollectGeometry.PhysicsColliders;
+
+        // The ceiling lid is a ceiling, not a floor, and a 105 x 105 m horizontal collider is
+        // exactly the shape that bakes into a walkable roof. Measurement says it does not — the
+        // navmesh tops out at 6.30 with or without it, and those vertices are the tops of the
+        // top-floor walls, which have always been in there — but the lid is switched off across
+        // the bake anyway, because relying on that is relying on a detail of the voxelizer.
+        // (NavMeshModifier.ignoreFromBuild was tried first and did not take.)
+        bool hadLid = _ceilingLid != null && _ceilingLid.enabled;
+        if (hadLid) _ceilingLid.enabled = false;
+
         surface.BuildNavMesh();
+
+        if (hadLid) _ceilingLid.enabled = true;
     }
 
     // ================================================================ materials

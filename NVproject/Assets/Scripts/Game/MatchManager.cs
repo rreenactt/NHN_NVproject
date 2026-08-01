@@ -476,8 +476,12 @@ namespace NV.Game
             _objectiveRoot = new GameObject("__Objectives").transform;
             _objectiveRoot.SetParent(transform, false);
 
-            // The door goes down first and everything else keeps its distance, so a key never
-            // spawns inside the doorway and the objective is never trivially short.
+            // The altar first: it is the only fixed thing here, so everything random has to work
+            // around it rather than the other way round.
+            PlaceChainAltar();
+
+            // The door next, and everything else keeps its distance, so a key never spawns inside
+            // the doorway and the objective is never trivially short.
             if (map.TryRandomPoint(Rng, out Vector3 doorPoint))
             {
                 float yaw = (float)Rng.NextDouble() * 360f;
@@ -490,6 +494,76 @@ namespace NV.Game
                     _keys.Add(KeyPickup.Spawn(point, _objectiveRoot));
 
             PlaceDevices();
+        }
+
+        /// <summary>
+        /// The chain's altar, at the middle of the ground floor. Unlike everything else here it
+        /// does *not* move between matches — the Seeker is meant to learn exactly where the third
+        /// shot sends them, and a punishment you cannot predict is only a nuisance.
+        ///
+        /// The literal centre of the grid is inside the stairwell, so this walks outward until it
+        /// finds a standable cell that is clear of it and has a neighbour to stand on.
+        /// </summary>
+        private void PlaceChainAltar()
+        {
+            int centre = map.GridSize / 2;
+
+            for (int radius = 0; radius < map.GridSize; radius++)
+            {
+                for (int dx = -radius; dx <= radius; dx++)
+                for (int dz = -radius; dz <= radius; dz++)
+                {
+                    if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dz)) != radius) continue;   // ring only
+
+                    int x = centre + dx, z = centre + dz;
+                    if (!IsFreeFloor(x, z)) continue;
+                    if (!TryFindLandingSpot(x, z, out Vector3 dragPoint)) continue;
+
+                    ChainAltar.Spawn(map.CellToWorld(0, x, z), dragPoint, _objectiveRoot);
+                    return;
+                }
+            }
+
+            Debug.LogWarning("[Match] No room for the chain altar; the chain will fall back to walls.");
+        }
+
+        private static readonly Vector2Int[] Around =
+        {
+            new Vector2Int(1, 0), new Vector2Int(-1, 0), new Vector2Int(0, 1), new Vector2Int(0, -1),
+            new Vector2Int(1, 1), new Vector2Int(1, -1), new Vector2Int(-1, 1), new Vector2Int(-1, -1),
+        };
+
+        /// <summary>Somewhere next door a body can actually stand, for the chain to drop the Seeker on.</summary>
+        private bool TryFindLandingSpot(int x, int z, out Vector3 point)
+        {
+            foreach (Vector2Int offset in Around)
+            {
+                int nx = x + offset.x, nz = z + offset.y;
+                if (!IsFreeFloor(nx, nz)) continue;
+
+                point = map.CellToWorld(0, nx, nz);
+                return true;
+            }
+
+            point = Vector3.zero;
+            return false;
+        }
+
+        /// <summary>
+        /// Standable *and* empty. The grid alone is not enough to answer this: the stairwell's
+        /// cells are walkable in the grid while being full of staircase, and the first version of
+        /// the altar dropped the Seeker onto a step every single time — they landed 3.8 m from
+        /// where the chain aimed, because the CharacterController pushed itself out of the geometry
+        /// the moment collision came back on. A capsule the size of a player answers it properly.
+        /// </summary>
+        private bool IsFreeFloor(int x, int z)
+        {
+            if (!map.IsStandable(0, x, z)) return false;
+            if (map.stairwell.Contains(new Vector2Int(x, z))) return false;
+
+            Vector3 feet = map.CellToWorld(0, x, z);
+            return !Physics.CheckCapsule(feet + Vector3.up * 0.35f, feet + Vector3.up * 1.5f, 0.32f,
+                                         ~0, QueryTriggerInteraction.Ignore);
         }
 
         /// <summary>
@@ -541,6 +615,9 @@ namespace NV.Game
 
             if (_door != null && (point - _door.Position).sqrMagnitude < sqr) return false;
 
+            ChainAltar altar = ChainAltar.Instance;
+            if (altar != null && (point - altar.transform.position).sqrMagnitude < sqr) return false;
+
             for (int i = 0; i < _keys.Count; i++)
                 if (_keys[i] != null && (point - _keys[i].transform.position).sqrMagnitude < sqr) return false;
 
@@ -581,7 +658,15 @@ namespace NV.Game
             _door = null;
             DeviceSystem.Instance?.ClearAll();
 
-            if (_objectiveRoot != null) Destroy(_objectiveRoot.gameObject);
+            if (_objectiveRoot != null)
+            {
+                // Deactivate before destroying. Destroy is deferred to the end of the frame, so the
+                // old altar and devices are still solid to a physics query for the rest of *this*
+                // one — which made the altar's "is this cell free" test reject its own previous
+                // position and walk the altar somewhere new on every restart.
+                _objectiveRoot.gameObject.SetActive(false);
+                Destroy(_objectiveRoot.gameObject);
+            }
             _objectiveRoot = null;
 
             map?.SetWallTransparency(1f);

@@ -94,10 +94,20 @@ namespace NV.Game
         [Tooltip("Seconds the Seeker is stuck at the chain's anchor before the reload starts.")]
         public float chainWait = 3f;
 
-        [Tooltip("Seconds the drag itself takes. The Seeker is already locked during it.")]
+        [Tooltip("Seconds. Floor on the drag, for when the altar is already close.")]
         public float chainDragTime = 0.45f;
 
-        [Tooltip("Metres. How far away the chain looks for an anchor to yank the Seeker to.")]
+        [Tooltip("How fast the chain reels the Seeker in, in m/s, measured along the walked route " +
+                 "and not across the map. Fast enough to be violent; the three-second hold at the " +
+                 "far end is where the real cost lives.")]
+        public float chainDragSpeed = 45f;
+
+        [Tooltip("Seconds. Ceiling on the drag. The route can be 400 m through a maze from the far " +
+                 "corner upstairs, and nobody should spend fifteen seconds watching it.")]
+        public float chainDragMaxTime = 3.5f;
+
+        [Tooltip("Metres. Only used when there is no altar in the level: how far the chain looks " +
+                 "for a wall to yank the Seeker to instead.")]
         public float chainAnchorRange = 9f;
 
         [Tooltip("Seconds to reload once the chain lets go.")]
@@ -151,8 +161,9 @@ namespace NV.Game
         public Role localRole = Role.Runner;
 
         [Tooltip("Wandering practice Runners spawned when the match is offline, so the Seeker " +
-                 "side has something to shoot. 0 in a real match.")]
-        public int practiceRunners = 3;
+                 "side has something to shoot and something to hear. 0 by default — raise it to " +
+                 "bring the dummies back for solo testing.")]
+        public int practiceRunners = 0;
 
         [Tooltip("Practice Runner walk speed, in m/s.")]
         public float practiceRunnerSpeed = 3.2f;

@@ -91,10 +91,15 @@ namespace NV.Game
             _localAgent.controller = player;
             _localAgent.head = player.cameraTransform;
 
-            // Your own steps are heard flat and quiet; everyone else's carry positionally.
+            // Your own steps and your own gunshots are heard flat; everyone else's carry
+            // positionally, which is the whole of how either side finds the other.
             var steps = go.GetComponent<FootstepAudio>();
             if (steps == null) steps = go.AddComponent<FootstepAudio>();
             steps.isLocalListener = true;
+
+            var shots = go.GetComponent<WeaponAudio>();
+            if (shots == null) shots = go.AddComponent<WeaponAudio>();
+            shots.isLocalListener = true;
 
             if (go.GetComponent<PlayerInteractor>() == null) go.AddComponent<PlayerInteractor>();
             if (go.GetComponent<ChainDrag>() == null) go.AddComponent<ChainDrag>();
