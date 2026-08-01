@@ -213,6 +213,11 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
     /// "there is no level". Re-solving from the same seed reproduces exactly the grid the standing
     /// geometry was built from, because every procedural draw comes from that one seeded sequence.
     /// </summary>
+    /// <remarks>
+    /// Every public query below calls this first, so a caller can never be handed "there is no
+    /// level" by a reload it had no way to know about. The symptoms were quiet ones — a door
+    /// compass with no storey arrow, a blank map overlay — not exceptions.
+    /// </remarks>
     public void EnsureGrid()
     {
         if (HasGrid) return;
@@ -238,6 +243,7 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
     /// </summary>
     public bool IsStandable(int floor, int x, int z)
     {
+        EnsureGrid();
         if (!HasGrid || floor < 0 || floor >= _cell.Length) return false;
         if (!Walkable(floor, x, z)) return false;
         return !(floor > 0 && InRect(stairwell, x, z) && IsShaftCell(z));
@@ -246,11 +252,28 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
     /// <summary>Floor-level world position at the centre of a cell.</summary>
     public Vector3 CellToWorld(int floor, int x, int z) => CellCentre(floor, x, z);
 
+    /// <summary>
+    /// Which storey a world height belongs to. The storey you are on is the one whose floor is
+    /// *below* you, so this floors the division rather than rounding it.
+    ///
+    /// Rounding to the nearest storey was a real bug: the jump apex is 1.2 m and the storeys are
+    /// 3.2 m apart, so the nearest floor level to a jumping player is the one overhead, and the
+    /// map overlay flicked them up to the floor above every time they pressed space.
+    ///
+    /// The tolerance is deliberately one-sided. A little *below* the floor level is still this
+    /// storey — a CharacterController rests its skin width low, and a stair lip is lower still —
+    /// but any height above it is this storey until the next floor is actually reached.
+    /// </summary>
+    public int FloorIndexAt(float worldY)
+    {
+        float spacing = Mathf.Max(0.01f, floorHeight);
+        return Mathf.Clamp(Mathf.FloorToInt((worldY + 0.35f) / spacing), 0, FloorCount - 1);
+    }
+
     /// <summary>Nearest cell to a world position, whether or not that cell is standable.</summary>
     public bool TryWorldToCell(Vector3 world, out int floor, out int x, out int z)
     {
-        floor = Mathf.Clamp(Mathf.RoundToInt((world.y + 0.5f) / Mathf.Max(0.01f, floorHeight)),
-                            0, FloorCount - 1);
+        floor = FloorIndexAt(world.y);
         x = Mathf.FloorToInt((world.x - _originX) / cellSize);
         z = Mathf.FloorToInt((world.z - _originZ) / cellSize);
         return x >= 0 && z >= 0 && x < gridSize && z < gridSize;
@@ -259,6 +282,7 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
     /// <summary>Every standable cell centre in the level, as (x, z, floor).</summary>
     public void CollectStandableCells(List<Vector3Int> into)
     {
+        EnsureGrid();
         if (into == null || !HasGrid) return;
         for (int f = 0; f < FloorCount; f++)
         for (int x = 0; x < gridSize; x++)
@@ -273,6 +297,7 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
     /// </summary>
     public bool TryRandomPoint(System.Random random, out Vector3 point, float margin = 0.55f)
     {
+        EnsureGrid();
         point = SpawnCentre;
         if (!HasGrid) return false;
 
@@ -302,6 +327,7 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
     /// </summary>
     public bool TryNearestStandablePoint(Vector3 near, out Vector3 point)
     {
+        EnsureGrid();
         point = near;
         if (!HasGrid || !TryWorldToCell(near, out int floor, out int cx, out int cz)) return false;
 

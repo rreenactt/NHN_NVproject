@@ -60,7 +60,19 @@ namespace NV.Game.UI
         private float _mapTimer, _feedTimer, _freezeTimer;
         private int _scanlineHeight;
         private Texture2D _scanlineTexture, _vignetteTexture;
-        private bool _built;
+
+        /// <summary>
+        /// Is there a live tree to write into? This is asked instead of keeping a "built" flag,
+        /// and the difference is not stylistic.
+        ///
+        /// A domain reload during play preserves a private <c>bool</c> — it is a serializable
+        /// field — but wipes every <see cref="VisualElement"/> reference, because those are plain
+        /// managed objects. A flag therefore comes back saying "already built" while every element
+        /// it was describing is null, and the HUD throws once per frame at an empty screen for the
+        /// rest of the session. Checking the thing itself cannot lie: a wiped reference or a root
+        /// the panel has since replaced both read as "not built", and the next frame rebuilds it.
+        /// </summary>
+        private bool TreeIsLive => _clock != null && _root != null && _root.panel != null;
 
         private MatchMapView _mapViewCache;
         private SeekerFeed _feedCache;
@@ -78,26 +90,40 @@ namespace NV.Game.UI
 
         // ============================================================ setup
 
-        private void Awake()
-        {
-            _uxml = Resources.Load<VisualTreeAsset>(UxmlPath);
-            var panel = Resources.Load<PanelSettings>(PanelPath);
+        private void Awake() => EnsureAssets();
 
-            if (_uxml == null || panel == null)
+        /// <summary>
+        /// Finds the document and the UXML, re-loading them if they have gone.
+        ///
+        /// They *do* go: these are private fields, which Unity does not carry through the domain
+        /// reload a script edit triggers mid-play, and Awake does not get a second turn. The
+        /// symptom is not an exception — it is a HUD that silently stops rebuilding and leaves an
+        /// empty screen for the rest of the session, which is exactly how it was found.
+        /// </summary>
+        private bool EnsureAssets()
+        {
+            if (_uxml == null) _uxml = Resources.Load<VisualTreeAsset>(UxmlPath);
+
+            if (_document == null)
+            {
+                _document = GetComponent<UIDocument>();
+                if (_document == null) _document = gameObject.AddComponent<UIDocument>();
+            }
+
+            if (_document.panelSettings == null)
+                _document.panelSettings = Resources.Load<PanelSettings>(PanelPath);
+
+            if (_uxml == null || _document.panelSettings == null)
             {
                 Debug.LogError("[HUD] Missing " + UxmlPath + " or " + PanelPath +
                                " under Assets/Resources. Run Tools ▸ Backrooms ▸ Set Up Match.");
-                enabled = false;
-                return;
+                return false;
             }
-
-            _document = GetComponent<UIDocument>();
-            if (_document == null) _document = gameObject.AddComponent<UIDocument>();
-            _document.panelSettings = panel;
 
             // The tree is cloned by hand rather than assigned to the document, because the role
             // rebuild has to be able to throw half of it away and start again.
             _document.visualTreeAsset = null;
+            return true;
         }
 
         private void OnEnable()
@@ -151,7 +177,7 @@ namespace NV.Game.UI
         {
             _match = MatchManager.Instance;
             _local = _match != null ? _match.LocalAgent : null;
-            if (_uxml == null || _document == null || _local == null) return;
+            if (_local == null || !EnsureAssets()) return;
 
             _interactor = _local.GetComponent<PlayerInteractor>();
             _weapon = _local.GetComponent<WeaponController>();
@@ -211,7 +237,6 @@ namespace NV.Game.UI
             OnEscapesChanged(_match.Escapes, _match.Config.escapesToWin);
 
             _effects.Clear();
-            _built = true;
         }
 
         private void CacheRunner()
@@ -261,10 +286,10 @@ namespace NV.Game.UI
 
         private void Update()
         {
-            if (!_built || _match == null)
+            if (!TreeIsLive || _match == null)
             {
                 if (MatchManager.Instance != null && MatchManager.Instance.LocalAgent != null) Rebuild();
-                return;
+                if (!TreeIsLive || _match == null) return;
             }
 
             UpdateClock();
@@ -423,11 +448,20 @@ namespace NV.Game.UI
             _compass.style.opacity = 0.9f;
             _compassArrow.style.rotate = new StyleRotate(new Rotate(angle));
 
-            float distance = flat.magnitude;
-            float floors = Mathf.Abs(delta.y);
-            _compassDistance.text = floors > 1.5f
-                ? Mathf.RoundToInt(distance) + "m " + (delta.y > 0f ? "↑" : "↓")
-                : Mathf.RoundToInt(distance) + "m";
+            // Storey arrow by storey *index*, not by metres of height difference. The door's origin
+            // sits on its floor while the eye is 1.62 m up, so a raw comparison called every
+            // same-floor door "one storey down".
+            string storey = string.Empty;
+            BackroomsMapGenerator map = _match.Map;
+            if (map != null)
+            {
+                int mine = map.FloorIndexAt(_local.FeetPosition.y);
+                int theirs = map.FloorIndexAt(door.Position.y);
+                if (theirs > mine) storey = " ↑";
+                else if (theirs < mine) storey = " ↓";
+            }
+
+            _compassDistance.text = Mathf.RoundToInt(flat.magnitude) + "m" + storey;
         }
 
         // ============================================================ seeker HUD
@@ -561,7 +595,7 @@ namespace NV.Game.UI
 
         private void OnPhaseChanged(MatchPhase phase)
         {
-            if (!_built) return;
+            if (!TreeIsLive) return;
 
             _revealCard.style.display = phase == MatchPhase.RoleReveal ? DisplayStyle.Flex : DisplayStyle.None;
             if (phase != MatchPhase.Ended) _endCard.style.display = DisplayStyle.None;
@@ -586,7 +620,7 @@ namespace NV.Game.UI
 
         private void OnMatchEnded(MatchOutcome outcome)
         {
-            if (!_built) return;
+            if (!TreeIsLive) return;
 
             bool seeker = _local != null && _local.Role == Role.Seeker;
             bool runnersWon = outcome == MatchOutcome.RunnersEscaped;
@@ -635,7 +669,7 @@ namespace NV.Game.UI
 
         private void OnAgentHit(PlayerAgent victim, bool fatal)
         {
-            if (!_built || victim == null || !victim.isLocalPlayer) return;
+            if (!TreeIsLive || victim == null || !victim.isLocalPlayer) return;
             _vignette.style.opacity = fatal ? 0.85f : 0.55f;
         }
 

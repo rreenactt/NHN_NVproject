@@ -91,6 +91,11 @@ namespace NV.Game
             _localAgent.controller = player;
             _localAgent.head = player.cameraTransform;
 
+            // Your own steps are heard flat and quiet; everyone else's carry positionally.
+            var steps = go.GetComponent<FootstepAudio>();
+            if (steps == null) steps = go.AddComponent<FootstepAudio>();
+            steps.isLocalListener = true;
+
             if (go.GetComponent<PlayerInteractor>() == null) go.AddComponent<PlayerInteractor>();
             if (go.GetComponent<ChainDrag>() == null) go.AddComponent<ChainDrag>();
             if (go.GetComponent<PlayerRoleLoadout>() == null) go.AddComponent<PlayerRoleLoadout>();

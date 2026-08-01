@@ -55,6 +55,10 @@ public class FirstPersonController : MonoBehaviour
     [Header("Move")]
     public float walkSpeed = 4f;
     public float sprintSpeed = 7f;
+    [Tooltip("Ctrl. Under half of walkSpeed on purpose: sneaking buys total silence, and silence " +
+             "has to cost enough that crossing an open room quietly is a real decision. Note the " +
+             "scene's walk is 2.5, not the 4 this file defaults to — set both if you change it.")]
+    public float sneakSpeed = 1.1f;
     public float jumpHeight = 1.2f;
     public float gravity = -19.62f;
 
@@ -105,6 +109,13 @@ public class FirstPersonController : MonoBehaviour
 
     /// <summary>Sprint key held this frame. Sampled even when this script is not moving anything.</summary>
     public bool SprintHeld { get; private set; }
+
+    /// <summary>
+    /// Ctrl held: moving deliberately slowly. <see cref="FootstepAudio"/> reads this to go quiet,
+    /// which is the whole point of the key — in a game where the Seeker hunts by ear, the only
+    /// thing worth trading speed for is silence.
+    /// </summary>
+    public bool SneakHeld { get; private set; }
 
     /// <summary>Fire button held this frame.</summary>
     public bool FireHeld { get; private set; }
@@ -313,7 +324,14 @@ public class FirstPersonController : MonoBehaviour
         if (MovementLocked) input = Vector2.zero;
         MoveInput = input;
 
-        bool sprinting = !MovementLocked && keyboard != null && keyboard.leftShiftKey.isPressed;
+        // Sneak beats sprint when both are held. You cannot run quietly, and a player who has
+        // taken their thumb off shift is telling you which of the two they meant.
+        bool sneaking = !MovementLocked && keyboard != null
+                        && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed);
+        bool sprinting = !MovementLocked && !sneaking
+                         && keyboard != null && keyboard.leftShiftKey.isPressed;
+
+        SneakHeld = sneaking;
         SprintHeld = sprinting;
         FireHeld = Mouse.current != null && Mouse.current.leftButton.isPressed;
         if (!MovementLocked && keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
@@ -324,7 +342,7 @@ public class FirstPersonController : MonoBehaviour
         // would disagree in exactly the places that matter — against a wall, off a ledge.
         if (controlMode == ControlMode.NetworkAuthority) return;
 
-        float targetSpeed = sprinting ? sprintSpeed : walkSpeed;
+        float targetSpeed = sneaking ? sneakSpeed : sprinting ? sprintSpeed : walkSpeed;
 
         Vector3 desired = (transform.right * input.x + transform.forward * input.y) * targetSpeed;
 

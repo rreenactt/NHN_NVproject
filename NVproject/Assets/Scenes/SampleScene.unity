@@ -424,6 +424,7 @@ MonoBehaviour:
   pitchClamp: 85
   walkSpeed: 2.5
   sprintSpeed: 5
+  sneakSpeed: 1.1
   jumpHeight: 1.2
   gravity: -19.62
   acceleration: 45

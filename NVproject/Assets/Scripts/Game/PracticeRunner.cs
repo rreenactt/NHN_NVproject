@@ -54,6 +54,10 @@ namespace NV.Game
             agent.navAgent = nav;
             agent.collectsKeys = false;   // it wanders; it would strip the level of keys
 
+            // Audible, and the only way to practise hunting by ear offline.
+            var steps = go.AddComponent<FootstepAudio>();
+            steps.navAgent = nav;
+
             var runner = go.AddComponent<PracticeRunner>();
             runner._random = new System.Random(seed);
             return runner;

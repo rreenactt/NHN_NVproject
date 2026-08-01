@@ -25,7 +25,12 @@ namespace NV.Game.UI
 
         public bool EnsureBuilt(BackroomsMapGenerator map)
         {
-            if (map == null || !map.HasGrid) return false;
+            if (map == null) return false;
+
+            // The grid is managed memory and does not survive a domain reload; without this the
+            // device would come up as a blank rectangle.
+            map.EnsureGrid();
+            if (!map.HasGrid) return false;
             if (_texture != null) return true;
 
             int grid = map.GridSize;

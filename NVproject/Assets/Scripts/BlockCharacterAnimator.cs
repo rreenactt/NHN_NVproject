@@ -170,6 +170,17 @@ public class BlockCharacterAnimator : MonoBehaviour
     public float RecoilWeight => _recoilWeight;
 
     /// <summary>
+    /// Stride phase in radians, 0..2π. <c>Sin</c> of it is the leg swing, so it crosses zero
+    /// exactly at each footfall — which is what <see cref="FootstepAudio"/> listens for rather
+    /// than running a timer of its own. A step you hear at a moment the foot is not touching the
+    /// floor is worse than no step sound at all.
+    /// </summary>
+    public float StridePhase => _phase;
+
+    /// <summary>Current leg swing amplitude in radians. Near zero means the legs are not walking.</summary>
+    public float StrideSwing => _swing;
+
+    /// <summary>
     /// Called by the weapon on each shot. Restarts the kick from the top rather than adding to
     /// it, so holding the trigger gives an even chatter instead of the hands climbing away.
     /// </summary>
