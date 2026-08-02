@@ -1,0 +1,110 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this repository is
+
+One repo, two projects that ship together: a browser FPS whose **server holds authority over movement and combat**.
+
+| Folder | What it is |
+|---|---|
+| `NVproject/` | Unity 6.3 (`6000.3.20f1`) WebGL client — URP, new Input System, IL2CPP. **Has its own `CLAUDE.md`** |
+| `NVserver/` | .NET 10 server — Kestrel, Minimal API, raw `System.Net.WebSockets`, 30Hz tick loop, modular monolith |
+
+`NVserver/docs/` is the server's specification and is **written in Korean**, as are most server code comments. `NVproject/CLAUDE.md` is in English. Match the language of the file you are editing.
+
+| Question | Document |
+|---|---|
+| Scope, fixed parameters, how to run client+server together | `NVserver/docs/readme.md` |
+| Reference rules, what libraries are banned, module design, wire protocol | `NVserver/docs/architecture.md` |
+| Where a new file goes, naming, folder layout | `NVserver/docs/structure.md` |
+| Rules discovered while implementing — the trap list | `NVserver/docs/conventions.md` |
+| Everything Unity-side (block character, procedural animation, Backrooms level, match layer) | `NVproject/CLAUDE.md` |
+
+## Commands
+
+### Server — from `NVserver/`
+
+```bash
+dotnet run --project Api        # http://localhost:5202 (ws://localhost:5202/ws)
+dotnet build                    # must finish with 0 warnings — TreatWarningsAsErrors is on
+dotnet test                     # 137 tests: Architecture.Tests + Modules.Tests
+dotnet test --filter "FullyQualifiedName~MovementTests"
+dotnet test tests/Modules.Tests/Modules.Tests.csproj
+```
+
+`Api` is the only entry point; `Shared`, `Infrastructure`, `Modules/*` are class libraries. Build output goes to `artifacts/`, not `bin/obj` — that redirect in `Directory.Build.props` is **mandatory**, because a `Shared/obj/` directory makes Unity read the generated `AssemblyInfo.cs` and fail with duplicate definitions.
+
+Package versions live only in `Directory.Packages.props`. A `Version=` attribute on a `PackageReference` fails restore with NU1008 and the error message does not say why.
+
+### Client — from `NVproject/`
+
+**There is no CLI build and no test suite.** All client work happens in the Unity Editor, driven via Unity MCP (`mcp__unity-mcp__*`). Read `NVproject/CLAUDE.md` and the `unity-mcp-ops` skill first — the MCP bridge has a long list of failure modes that look like code bugs.
+
+Editor menus are the entry points:
+
+| Menu | Does |
+|---|---|
+| **Tools ▸ NV Network ▸ Export Map Collision** | Writes the current scene's level to `NVserver/MapData/{map}.json` |
+| **Tools ▸ NV Network ▸ Build and Launch 2 Clients** | Windows standalone + editor, the fast path to two players |
+| **Tools ▸ NV Network ▸ Create Multiplayer Test Scene** / **Setup Networking** | Regenerates `Assets/Scenes/MultiplayerTest.unity`; wires networking into a scene |
+| **Tools ▸ Block Player ▸ Build Block Player** | Rebuilds the player rig from scratch |
+| **Tools ▸ Backrooms ▸ Set Up Match** / **Create Game Config Asset** | Match layer scene object and `Assets/Settings/GameConfig.asset` |
+
+The client's skills (`fps-*`, `unity-mcp-ops`, `game-rules`, …) live in `NVproject/.claude/skills/`, so **a session started at the repo root does not load them** — work Unity tasks from `NVproject/` if you want them.
+
+### Running both
+
+1. `dotnet run --project Api` — no config edit needed, both maps are registered
+2. Open `Assets/Scenes/MultiplayerTest.unity`, Play, connect to room `test` in the connection panel
+3. Second client via **Build and Launch 2 Clients**
+
+Scene and room are a pair: `MultiplayerTest` ↔ room `test`, `SampleScene` ↔ any other room. Mismatch surfaces only as a map-hash warning. Full walkthrough with the connection-state table is in `NVserver/docs/readme.md`.
+
+## The seam between the two projects
+
+Three things cross the folder boundary. Everything else is independent.
+
+**1. `NVserver/Shared/` is a Unity local package.** `NVproject/Packages/manifest.json` has `"com.nv.shared": "file:../../NVserver/Shared"`, so Unity (IL2CPP, netstandard2.1) and the server (net10.0) compile *the same `.cs` files*. Client prediction only works if movement computes bit-identically on both sides, so this assembly is the strictest place in the repo:
+
+- C# 9 (Unity's ceiling), no NuGet references, no `UnityEngine` references, `ImplicitUsings` off
+- `System.Numerics.Vector3` — but only as a container. `Vector3.Normalize`/`Length`/`Dot`/`Distance` and `MathF.Sin`/`Cos`/`Tan` are banned; use `DeterministicMath`. SIMD/FMA paths and libm differences round differently, and the only symptom is character jitter after reconciliation.
+- No `deltaTime` parameter on movement functions — `SimConstants.TickDelta` only. A parameter lets a caller pass real elapsed time, and re-application then diverges.
+- Values that go into `Shared` are values the client knows: the WebGL build is decompilable. Sharing a number and delegating the *judgement* are different — the module re-checks.
+
+After changing `Shared`, `dotnet build` passing is half the check; confirm the Unity Editor compiles it too. `Shared/*.meta` files are committed on purpose.
+
+**2. The map's source of truth is the client.** The level is generated in code from a seed, so the server only knows the terrain as an exported box list in `NVserver/MapData/*.json`. Change the seed, grid, or wall thickness and re-run **Export Map Collision**, or you get a map-hash mismatch on connect — that hash is the only guard on this coupling. Rooms pick their map by id in `appsettings.json` under `Game:Maps` (`default` must exist; unregistered room ids fall back to it).
+
+**3. The wire protocol lives in `Shared/Contracts/Messages`.** Binary frames, opcode first, little-endian: `0x01` Input (C→S, last 3 ticks resent), `0x81` Snapshot (full, every tick), `0x82` Event, `0x83` Welcome. `ProtocolInfo.Version` is checked *before* the WebSocket upgrade and mismatch is rejected with 426 — the version and room travel in the query string because browsers cannot set handshake headers. Client sends input, never position.
+
+## Server architecture in one screen
+
+Modular monolith. Only two rules are structural, and both are compiler- or test-enforced: **modules never reference each other**, and **everything outside a module's `Contracts/` is `internal`**. `tests/Architecture.Tests` verifies this by reading `ProjectReference` declarations (reflection under-reports, so it would pass vacuously).
+
+```
+Shared          → nothing
+Infrastructure  → Shared
+Modules/*       → Shared, Infrastructure
+Api             → everything
+```
+
+`Api` has **no controllers** — each module registers its own endpoints via `{Module}Module.MapXxx()`. `Modules/` and `tests/` are grouping folders, not projects.
+
+Of the four modules the docs plan, **only `Realtime` exists today**; Identity, Matchmaking and Leaderboard are unbuilt, and there is no database yet — all state is in memory. `Realtime` deliberately has no `DbContext`: if EF Core starts appearing there, the design has drifted.
+
+Threading model: Kestrel threads drain into `InboundQueue`/`CommandQueue`, `GameLoopService` ticks at 30Hz and never touches a socket or DB outside those queues, and outbound snapshots go through a bounded (32, DropOldest) channel. HTTP threads must not mutate room state directly — the tick loop owns it, so mutations go through `IRoomCommand` and reads return immutable snapshots.
+
+Constants have exactly two homes: `Shared/Simulation/SimConstants.cs` when the client must compute with the same number, `Modules/{Module}/{Module}Constants.cs` when the server decides alone. Never re-type a value that can be derived from another.
+
+## Before writing server code
+
+`NVserver/docs/architecture.md` has a **기본값 대체표** (defaults-replacement table) listing the ordinary .NET/Unity choices that are wrong here — repository interfaces, layered folders, `EnsureCreated()`, delta compression, `await` inside the tick loop, cross-module JOINs, and a dozen more. Check it before reaching for a familiar pattern. `structure.md` has the 8-question table that decides where a new file goes; question 1 ("does the client run this same computation?") wins over everything else.
+
+**Ask instead of implementing** when you would need to break a documented prohibition, add a NuGet package, add a module, add an interface with only one implementation, add a synchronous call between modules, or change a fixed parameter (30Hz, 8 players, 1/64m quantization, 100ms interpolation, 200ms lag-compensation cap).
+
+Record any rule you settle or problem that cost more than 30 minutes in `NVserver/docs/conventions.md`, symptom → cause → fix. That file is the accumulated trap list and is worth reading in full before non-trivial network or simulation work.
+
+## Git
+
+Branches are `feature/{area}/{topic}` (`feature/client-main`, `feature/server/init`); `main` is the base for PRs. Commit subjects are conventional-commit prefixed (`feat(realtime):`, `docs:`, `refactor:`) with Korean or English bodies.

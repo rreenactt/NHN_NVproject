@@ -1,2 +1,9 @@
-.omc
 .idea
+
+# BEGIN OMC local artifacts
+!.omc/
+.omc/*
+!.omc/skills/
+!.omc/skills/**
+.omx/
+# END OMC local artifacts
