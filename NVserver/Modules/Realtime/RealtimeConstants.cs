@@ -37,6 +37,17 @@ namespace NV.Realtime
             /// 무제한으로 적용하면 한 틱에 순간이동한다.
             public const int MaxInputsPerTick = 2;
 
+            /// 매치를 시작할 수 있는 최소 인원. 룰셋의 하한이다 — Seeker 하나와
+            /// Runner 하나가 있어야 술래잡기가 성립한다. 혼자 시작하면 Runner 가 0명이라
+            /// 승리 조건이 즉시 충족되거나 아예 평가되지 않는다.
+            public const int MinPlayersToStart = 2;
+
+            /// 룸 상태 전문을 보내는 간격(틱). 30Hz 기준 2Hz 다.
+            ///
+            /// 상태가 바뀐 틱에는 이 간격과 무관하게 즉시 보낸다. 간격만으로 보내면
+            /// 시작 버튼과 화면 전환 사이에 최대 이 간격만큼 공백이 생긴다.
+            public const int RoomStateIntervalTicks = 15;
+
             /// 새 입력이 없을 때 마지막 입력을 반복하는 상한.
             /// 짧은 손실은 흡수하고, 그 이상 끊기면 이동을 멈춘다.
             /// 무제한 허용하면 입력을 끊은 클라이언트가 계속 달린다.

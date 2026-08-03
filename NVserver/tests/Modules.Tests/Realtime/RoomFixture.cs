@@ -6,6 +6,7 @@ using NV.Realtime.Contracts;
 using NV.Realtime.Simulation;
 using NV.Realtime.Transport;
 using NV.Shared.Collision;
+using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
 using NV.Shared.Transport;
@@ -50,9 +51,28 @@ namespace NV.Modules.Tests.Realtime
             });
         }
 
-        public static Room Create(NetworkConditionSimulator? network = null)
+        public static Room Create(
+            NetworkConditionSimulator? network = null,
+            bool requiresHost = true,
+            string roomId = "test")
         {
-            return new Room("test", Map(), network ?? NoConditions(), NullLogger.Instance);
+            return new Room(roomId, Map(), network ?? NoConditions(), NullLogger.Instance, requiresHost);
+        }
+
+        /// 세션 1..count 를 playerId 0..count-1 로 넣고 방장(세션 1)이 매치를 시작한다.
+        ///
+        /// 룸은 대기 단계로 열리므로 이 절차 없이는 스냅샷이 나오지 않는다.
+        /// Join 과 Start 가 같은 드레인에 들어가며, 큐가 FIFO 라 Start 는 이미 모인
+        /// 명단을 본다.
+        public static void FillAndStart(Room room, int count = RealtimeConstants.Rooms.MinPlayersToStart)
+        {
+            for (var index = 0; index < count; index++)
+            {
+                room.PostCommand(RoomCommand.Join(index + 1, (byte)index, string.Empty, index == 0));
+            }
+
+            room.PostCommand(RoomCommand.Start(1));
+            room.Advance();
         }
     }
 
@@ -88,22 +108,82 @@ namespace NV.Modules.Tests.Realtime
             return _sent.TryGetValue(sessionId, out var list) ? list.Count : 0;
         }
 
+        public int CountOf(int sessionId, MessageOpcode opcode)
+        {
+            if (!_sent.TryGetValue(sessionId, out var list))
+            {
+                return 0;
+            }
+
+            var count = 0;
+            foreach (var payload in list)
+            {
+                if (MessageCodec.ReadOpcode(payload) == opcode)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        /// 마지막 스냅샷. opcode 로 걸러야 한다 — 룸 상태 전문이 같은 대역으로 오므로
+        /// 마지막 메시지를 그대로 스냅샷으로 읽으면 종류가 다른 프레임을 파싱한다.
         public bool TryLastSnapshot(int sessionId, out SnapshotHeader header, out EntityState[] entities)
         {
             header = default;
             entities = Array.Empty<EntityState>();
 
-            if (!_sent.TryGetValue(sessionId, out var list) || list.Count == 0)
+            if (!TryLastOf(sessionId, MessageOpcode.Snapshot, out var payload))
             {
                 return false;
             }
 
             var buffer = new EntityState[RealtimeConstants.Rooms.MaxPlayers];
-            var count = MessageCodec.ReadSnapshot(list[^1], out header, buffer);
+            var count = MessageCodec.ReadSnapshot(payload, out header, buffer);
 
             entities = new EntityState[count];
             Array.Copy(buffer, entities, count);
             return true;
+        }
+
+        public bool TryLastRoomState(int sessionId, out RoomStateHeader header, out RoomPlayerEntry[] players)
+        {
+            header = default;
+            players = Array.Empty<RoomPlayerEntry>();
+
+            if (!TryLastOf(sessionId, MessageOpcode.Event, out var payload))
+            {
+                return false;
+            }
+
+            var buffer = new RoomPlayerEntry[RealtimeConstants.Rooms.MaxPlayers];
+            var count = MessageCodec.ReadRoomState(payload, out header, buffer);
+
+            players = new RoomPlayerEntry[count];
+            Array.Copy(buffer, players, count);
+            return true;
+        }
+
+        private bool TryLastOf(int sessionId, MessageOpcode opcode, out byte[] payload)
+        {
+            payload = Array.Empty<byte>();
+
+            if (!_sent.TryGetValue(sessionId, out var list))
+            {
+                return false;
+            }
+
+            for (var index = list.Count - 1; index >= 0; index--)
+            {
+                if (MessageCodec.ReadOpcode(list[index]) == opcode)
+                {
+                    payload = list[index];
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

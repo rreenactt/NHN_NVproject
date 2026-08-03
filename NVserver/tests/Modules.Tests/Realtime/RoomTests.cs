@@ -25,20 +25,20 @@ namespace NV.Modules.Tests.Realtime
         }
 
         [Fact]
-        public void 입장하면_스폰_위치에서_시작한다()
+        public void 시작하면_스폰_위치에서_출발한다()
         {
             var room = RoomFixture.Create();
             var transport = new RecordingTransport();
 
-            room.PostCommand(RoomCommand.Join(1, 0));
+            RoomFixture.FillAndStart(room);
             Run(room, transport, 1);
 
             Assert.True(transport.TryLastSnapshot(1, out var header, out var entities));
-            Assert.Single(entities);
-            Assert.Equal(0, entities[0].Id);
-            Assert.Equal(1u, header.Tick);
+            Assert.Equal(2, entities.Length);
+            Assert.Equal(2u, header.Tick);
 
-            // 스폰이 원점이고 바닥 위다.
+            // 0번 스폰이 원점이고 바닥 위다.
+            Assert.Equal(0, entities[0].Id);
             Assert.Equal(0, entities[0].X);
             Assert.Equal(0, entities[0].Z);
         }
@@ -51,9 +51,14 @@ namespace NV.Modules.Tests.Realtime
 
             for (var sessionId = 1; sessionId <= RealtimeConstants.Rooms.MaxPlayers + 3; sessionId++)
             {
-                room.PostCommand(RoomCommand.Join(sessionId, (byte)((sessionId - 1) % RealtimeConstants.Rooms.MaxPlayers)));
+                room.PostCommand(RoomCommand.Join(
+                    sessionId,
+                    (byte)((sessionId - 1) % RealtimeConstants.Rooms.MaxPlayers),
+                    string.Empty,
+                    sessionId == 1));
             }
 
+            room.PostCommand(RoomCommand.Start(1));
             Run(room, transport, 1);
 
             Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
@@ -66,8 +71,7 @@ namespace NV.Modules.Tests.Realtime
             var room = RoomFixture.Create();
             var transport = new RecordingTransport();
 
-            room.PostCommand(RoomCommand.Join(1, 0));
-            room.PostCommand(RoomCommand.Join(2, 1));
+            RoomFixture.FillAndStart(room);
             Run(room, transport, 1);
 
             Assert.True(transport.TryLastSnapshot(1, out _, out var before));
@@ -81,7 +85,7 @@ namespace NV.Modules.Tests.Realtime
         }
 
         [Fact]
-        public void 아무도_없으면_스냅샷을_보내지_않는다()
+        public void 아무도_없으면_아무것도_보내지_않는다()
         {
             var room = RoomFixture.Create();
             var transport = new RecordingTransport();
@@ -98,8 +102,7 @@ namespace NV.Modules.Tests.Realtime
             var room = RoomFixture.Create();
             var transport = new RecordingTransport();
 
-            room.PostCommand(RoomCommand.Join(1, 0));
-            room.Advance();
+            RoomFixture.FillAndStart(room);
 
             for (var tick = 1u; tick <= 30u; tick++)
             {
@@ -135,8 +138,7 @@ namespace NV.Modules.Tests.Realtime
             var room = RoomFixture.Create();
             var transport = new RecordingTransport();
 
-            room.PostCommand(RoomCommand.Join(1, 0));
-            room.Advance();
+            RoomFixture.FillAndStart(room);
 
             // 한 번에 10틱치를 몰아 보낸다.
             for (var tick = 1u; tick <= 10u; tick++)
@@ -159,8 +161,7 @@ namespace NV.Modules.Tests.Realtime
             var room = RoomFixture.Create();
             var transport = new RecordingTransport();
 
-            room.PostCommand(RoomCommand.Join(1, 0));
-            room.Advance();
+            RoomFixture.FillAndStart(room);
 
             for (var tick = 1u; tick <= 40u; tick++)
             {
@@ -194,8 +195,7 @@ namespace NV.Modules.Tests.Realtime
             var room = RoomFixture.Create();
             var transport = new RecordingTransport();
 
-            room.PostCommand(RoomCommand.Join(1, 0));
-            room.Advance();
+            RoomFixture.FillAndStart(room);
 
             // 요 90도로 벽(X = 5)을 향해 계속 전진한다.
             var toWall = new InputFrame(ButtonFlags.None, 0, 127, Quantization.ToFixedYaw(1.5707963f), 0);
@@ -220,9 +220,7 @@ namespace NV.Modules.Tests.Realtime
             var room = RoomFixture.Create();
             var transport = new RecordingTransport();
 
-            room.PostCommand(RoomCommand.Join(1, 0));
-            room.PostCommand(RoomCommand.Join(2, 1));
-            room.Advance();
+            RoomFixture.FillAndStart(room);
 
             // 1번만 입력을 보낸다.
             for (var tick = 1u; tick <= 5u; tick++)
@@ -241,6 +239,210 @@ namespace NV.Modules.Tests.Realtime
             // 본문은 같아야 한다. 둘 다 두 엔티티를 본다.
             Assert.Equal(2, first.EntityCount);
             Assert.Equal(2, second.EntityCount);
+        }
+
+        // ==================================================== 단계와 방장
+
+        [Fact]
+        public void 대기_단계에서는_스냅샷을_보내지_않는다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            room.PostCommand(RoomCommand.Join(1, 0, "host", true));
+            room.PostCommand(RoomCommand.Join(2, 1));
+            Run(room, transport, 10);
+
+            Assert.Equal(RoomPhase.Waiting, room.Phase);
+            Assert.Equal(0, transport.CountOf(1, MessageOpcode.Snapshot));
+
+            // 명단은 계속 간다. 로비 화면이 이것으로만 그려진다.
+            Assert.True(transport.CountOf(1, MessageOpcode.Event) > 0);
+        }
+
+        [Fact]
+        public void 대기_단계의_입력은_버려진다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            room.PostCommand(RoomCommand.Join(1, 0, "host", true));
+            room.PostCommand(RoomCommand.Join(2, 1));
+            room.Advance();
+
+            // 대기 중에 30틱치를 보낸다. 버려지지 않으면 시작 직후 몰아서 적용된다.
+            for (var tick = 1u; tick <= 30u; tick++)
+            {
+                room.PostInput(1, tick, Forward());
+                room.Advance();
+            }
+
+            room.PostCommand(RoomCommand.Start(1));
+            room.Advance();
+            room.Broadcast(transport);
+
+            Assert.True(transport.TryLastSnapshot(1, out var header, out var entities));
+            Assert.Equal(0u, header.AckedInputTick);
+            Assert.Equal(0, entities[0].Z);
+        }
+
+        [Fact]
+        public void 방장이_아니면_시작할_수_없다()
+        {
+            var room = RoomFixture.Create();
+
+            room.PostCommand(RoomCommand.Join(1, 0, "host", true));
+            room.PostCommand(RoomCommand.Join(2, 1));
+            room.PostCommand(RoomCommand.Start(2));
+            room.Advance();
+
+            Assert.Equal(RoomPhase.Waiting, room.Phase);
+
+            room.PostCommand(RoomCommand.Start(1));
+            room.Advance();
+
+            Assert.Equal(RoomPhase.Playing, room.Phase);
+        }
+
+        [Fact]
+        public void 방장이_필요없는_룸은_아무나_시작한다()
+        {
+            var room = RoomFixture.Create(requiresHost: false);
+
+            room.PostCommand(RoomCommand.Join(1, 0));
+            room.PostCommand(RoomCommand.Join(2, 1));
+            room.PostCommand(RoomCommand.Start(2));
+            room.Advance();
+
+            Assert.Equal(RoomPhase.Playing, room.Phase);
+        }
+
+        [Fact]
+        public void 최소_인원_미달이면_시작하지_않는다()
+        {
+            var room = RoomFixture.Create();
+
+            room.PostCommand(RoomCommand.Join(1, 0, "host", true));
+            room.PostCommand(RoomCommand.Start(1));
+            room.Advance();
+
+            Assert.Equal(RoomPhase.Waiting, room.Phase);
+        }
+
+        [Fact]
+        public void 시작하면_Seeker와_0이_아닌_배치_씨드가_정해진다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            room.Broadcast(transport);
+
+            Assert.True(transport.TryLastRoomState(1, out var state, out var players));
+            Assert.Equal(RoomPhase.Playing, state.Phase);
+            Assert.Equal(2, players.Length);
+            Assert.Equal(0, state.HostPlayerId);
+            Assert.True(state.SeekerPlayerId < RealtimeConstants.Rooms.MaxPlayers);
+
+            // 0 이면 클라이언트가 자기 시계로 배치를 만들어 플레이어마다 문이 달라진다.
+            Assert.NotEqual(0, state.PlacementSeed);
+            Assert.Equal(1u, state.StartTick);
+        }
+
+        [Fact]
+        public void 명단에_표시_이름이_실린다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            // 이름은 접속 경로에서 ASCII 로 걸러진 뒤 룸에 들어온다. 룸은 걸러진 값만
+            // 받으며, 코덱은 비ASCII 를 조용히 자르지 않고 예외로 막는다.
+            room.PostCommand(RoomCommand.Join(1, 0, "host-1", true));
+            room.PostCommand(RoomCommand.Join(2, 1, "guest"));
+            room.Advance();
+            room.Broadcast(transport);
+
+            Assert.True(transport.TryLastRoomState(1, out _, out var players));
+            Assert.Equal(2, players.Length);
+            Assert.Equal("host-1", players[0].Name);
+            Assert.Equal("guest", players[1].Name);
+        }
+
+        [Fact]
+        public void 방장이_나가면_가장_작은_PlayerId가_승계한다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            room.PostCommand(RoomCommand.Join(1, 0, "host", true));
+            room.PostCommand(RoomCommand.Join(2, 1));
+            room.PostCommand(RoomCommand.Join(3, 2));
+            room.Advance();
+            room.Broadcast(transport);
+
+            Assert.True(transport.TryLastRoomState(2, out var before, out _));
+            Assert.Equal(0, before.HostPlayerId);
+
+            room.PostCommand(RoomCommand.Leave(1, 0));
+            room.Advance();
+            room.Broadcast(transport);
+
+            Assert.True(transport.TryLastRoomState(2, out var after, out _));
+            Assert.Equal(1, after.HostPlayerId);
+
+            // 승계한 쪽이 시작할 수 있어야 한다. 못 하면 방이 영구히 잠긴다.
+            room.PostCommand(RoomCommand.Start(2));
+            room.Advance();
+
+            Assert.Equal(RoomPhase.Playing, room.Phase);
+        }
+
+        [Fact]
+        public void 매치가_끝나면_결과_단계가_되고_로비로_되돌린다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+
+            room.PostCommand(RoomCommand.EndMatch(1, 2));
+            room.Advance();
+            room.Broadcast(transport);
+
+            Assert.Equal(RoomPhase.Ended, room.Phase);
+            Assert.True(transport.TryLastRoomState(1, out var ended, out _));
+            Assert.Equal(2, ended.Outcome);
+
+            // 결과 단계에서도 스냅샷은 멈춘다.
+            var snapshotsAtEnd = transport.CountOf(1, MessageOpcode.Snapshot);
+            Run(room, transport, 5);
+            Assert.Equal(snapshotsAtEnd, transport.CountOf(1, MessageOpcode.Snapshot));
+
+            room.PostCommand(RoomCommand.ReturnToLobby(1));
+            room.Advance();
+            room.Broadcast(transport);
+
+            Assert.Equal(RoomPhase.Waiting, room.Phase);
+            Assert.True(transport.TryLastRoomState(1, out var lobby, out _));
+            Assert.Equal(RoomStateHeader.NoPlayer, lobby.SeekerPlayerId);
+            Assert.Equal(0, lobby.PlacementSeed);
+        }
+
+        [Fact]
+        public void 모두_나가면_단계가_대기로_돌아간다()
+        {
+            var room = RoomFixture.Create();
+
+            RoomFixture.FillAndStart(room);
+            Assert.Equal(RoomPhase.Playing, room.Phase);
+
+            room.PostCommand(RoomCommand.Leave(1, 0));
+            room.PostCommand(RoomCommand.Leave(2, 1));
+            room.Advance();
+
+            // 진행 중으로 남으면 다음에 들어온 사람이 이미 시작된 매치에 갇힌다.
+            Assert.Equal(RoomPhase.Waiting, room.Phase);
+            Assert.Equal(0, room.PlayerCount);
         }
     }
 }

@@ -109,13 +109,12 @@ namespace NV.Modules.Tests.Realtime
         [Fact]
         public void 인바운드_지연은_입력_적용을_늦춘다()
         {
-            var delayed = new Room("delayed", RoomFixture.Map(), RoomFixture.Conditions(120, 0, 0.0), Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+            var delayed = RoomFixture.Create(RoomFixture.Conditions(120, 0, 0.0), roomId: "delayed");
             var transport = new RecordingTransport();
 
-            delayed.PostCommand(RoomCommand.Join(1, 0));
-            delayed.Advance();
+            RoomFixture.FillAndStart(delayed);
 
-            // 지연 3틱. 보낸 직후 두 틱 안에는 적용되지 않아야 한다.
+            // 지연 4틱. 보낸 직후 두 틱 안에는 적용되지 않아야 한다.
             delayed.PostInput(1, 1u, Forward());
 
             delayed.Advance();
@@ -136,11 +135,10 @@ namespace NV.Modules.Tests.Realtime
         [Fact]
         public void 인바운드_손실은_입력을_사라지게_한다()
         {
-            var lossy = new Room("lossy", RoomFixture.Map(), RoomFixture.Conditions(0, 0, 1.0), Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+            var lossy = RoomFixture.Create(RoomFixture.Conditions(0, 0, 1.0), roomId: "lossy");
             var transport = new RecordingTransport();
 
-            lossy.PostCommand(RoomCommand.Join(1, 0));
-            lossy.Advance();
+            RoomFixture.FillAndStart(lossy);
 
             for (var tick = 1u; tick <= 30u; tick++)
             {

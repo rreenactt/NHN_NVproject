@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using NV.Realtime.Contracts;
 using NV.Realtime.Transport;
 using NV.Shared.Collision;
+using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
 using NV.Shared.Simulation;
@@ -13,10 +14,17 @@ using NV.Shared.Transport;
 
 namespace NV.Realtime.Simulation
 {
-    /// 진행 중인 매치 하나. 상태 소유자는 틱 루프다.
+    /// 룸 하나. 상태 소유자는 틱 루프다.
+    ///
+    /// 단계가 셋이다. `Waiting` 은 명단을 모으는 중이고, `Playing` 만 시뮬레이션하며,
+    /// `Ended` 는 결과 화면이다. 대기 중에 시뮬레이션하지 않는 이유는 절약이 아니라
+    /// 의미다 — 아직 매치가 아닌 시간에 서버가 이동을 판정하면 로비에서 서로를 밀 수 있다.
+    ///
+    /// 틱은 단계와 무관하게 계속 올린다. Welcome 이 이 틱을 싣고 클라이언트가 그것을
+    /// 기준으로 입력 틱을 잡으므로, 대기 중에 시계를 멈추면 시작 순간에 기준이 어긋난다.
     ///
     /// 스레드 경계
-    /// - 틱 루프: _players, Tick, 스냅샷 버퍼, 슬롯 해제, 시뮬레이션
+    /// - 틱 루프: _players, Tick, 단계, 방장, 스냅샷 버퍼, 슬롯 해제, 시뮬레이션
     /// - 다른 스레드: PostCommand, PostInput, TryReserveSlot, Summarize 만 호출
     internal sealed class Room
     {
@@ -30,30 +38,64 @@ namespace NV.Realtime.Simulation
         private readonly EntityState[] _entityBuffer = new EntityState[RealtimeConstants.Rooms.MaxPlayers];
         private readonly byte[] _sendBuffer = new byte[MessageCodec.SnapshotWireSize(RealtimeConstants.Rooms.MaxPlayers)];
 
+        private readonly RoomPlayerEntry[] _rosterBuffer = new RoomPlayerEntry[RealtimeConstants.Rooms.MaxPlayers];
+        private readonly byte[] _stateBuffer = new byte[MessageCodec.RoomStateMaxWireSize(RealtimeConstants.Rooms.MaxPlayers)];
+
         private readonly bool[] _slots = new bool[RealtimeConstants.Rooms.MaxPlayers];
         private readonly object _slotGate = new();
 
         private readonly WorldMap _map;
         private readonly NetworkConditionSimulator _network;
         private readonly ILogger _logger;
+        private readonly bool _requiresHost;
 
         private uint _tick;
         private int _playerCount;
 
-        public Room(string roomId, WorldMap map, NetworkConditionSimulator network, ILogger logger)
+        /// int 로 둔다. 조회 스레드가 Volatile 로 읽으며, 정렬된 int 읽기는 원자적이라
+        /// 찢어진 값을 보지 않는다. `_playerCount` 와 같은 규칙이다.
+        private int _phase = (int)RoomPhase.Waiting;
+        private int _hostPlayerId = RoomStateHeader.NoPlayer;
+
+        private int _hostSessionId;
+        private byte _seekerPlayerId = RoomStateHeader.NoPlayer;
+        private int _placementSeed;
+        private uint _startTick;
+        private byte _outcome;
+
+        /// 상태가 바뀐 틱에는 간격을 무시하고 즉시 보낸다.
+        private bool _stateDirty = true;
+        private uint _lastStateTick;
+
+        public Room(
+            string roomId,
+            WorldMap map,
+            NetworkConditionSimulator network,
+            ILogger logger,
+            bool requiresHost = true)
         {
             RoomId = roomId;
             _map = map;
             _network = network;
             _logger = logger;
+            _requiresHost = requiresHost;
         }
 
         public string RoomId { get; }
 
         public uint MapHash => _map.Hash;
 
+        public string MapName => _map.Name;
+
         /// uint 정렬 읽기는 원자적이라 조회 스레드가 찢어진 값을 보지 않는다.
         public uint Tick => _tick;
+
+        public RoomPhase Phase => (RoomPhase)Volatile.Read(ref _phase);
+
+        public int PlayerCount => Volatile.Read(ref _playerCount);
+
+        /// 방장이 없어도 시작할 수 있는 룸. 설정으로 미리 열어 둔 개발용 룸이 그렇다.
+        public bool RequiresHost => _requiresHost;
 
         /// 정원이 찼으면 false. 슬롯은 접속 스레드가 예약하고 틱 루프가 반납한다.
         /// 반납을 접속 스레드에서 하면 퇴장 커맨드가 적용되기 전에 같은 PlayerId 가
@@ -109,7 +151,15 @@ namespace NV.Realtime.Simulation
 
         public RoomSummary Summarize()
         {
-            return new RoomSummary(RoomId, _tick, Volatile.Read(ref _playerCount), RealtimeConstants.Rooms.MaxPlayers);
+            return new RoomSummary(
+                RoomId,
+                _tick,
+                Volatile.Read(ref _playerCount),
+                RealtimeConstants.Rooms.MaxPlayers,
+                (RoomPhase)Volatile.Read(ref _phase),
+                (byte)Volatile.Read(ref _hostPlayerId),
+                _map.Name,
+                _map.Hash);
         }
 
         /// 틱 루프에서만 호출한다.
@@ -119,18 +169,29 @@ namespace NV.Realtime.Simulation
 
             _tick++;
 
-            DrainInputs();
-
-            foreach (var player in _players.Values)
+            if (Phase == RoomPhase.Playing)
             {
-                StepPlayer(player);
+                DrainInputs();
+
+                foreach (var player in _players.Values)
+                {
+                    StepPlayer(player);
+                }
+            }
+            else
+            {
+                // 대기·종료 단계에서는 입력을 처리하지 않는다. 그렇다고 두면 큐가
+                // 무한히 자란다 — 클라이언트가 보내지 않기로 되어 있어도 서버가 그것에
+                // 기대면 안 된다.
+                DiscardInputs();
             }
 
             Volatile.Write(ref _playerCount, _players.Count);
         }
 
-        /// 틱 루프에서만 호출한다. 매 틱 풀 스냅샷을 보낸다.
-        /// AckedInputTick 이 수신자마다 다르므로 세션별로 인코딩한다.
+        /// 틱 루프에서만 호출한다.
+        ///
+        /// 룸 상태 전문은 모든 단계에서 보내고, 스냅샷은 `Playing` 에서만 보낸다.
         public void Broadcast(IServerTransport transport)
         {
             if (_players.Count == 0)
@@ -138,6 +199,20 @@ namespace NV.Realtime.Simulation
                 return;
             }
 
+            BroadcastRoomState(transport);
+
+            if (Phase != RoomPhase.Playing)
+            {
+                return;
+            }
+
+            BroadcastSnapshot(transport);
+        }
+
+        /// 매 틱 풀 스냅샷을 보낸다.
+        /// AckedInputTick 이 수신자마다 다르므로 세션별로 인코딩한다.
+        private void BroadcastSnapshot(IServerTransport transport)
+        {
             var count = 0;
             foreach (var player in _players.Values)
             {
@@ -157,6 +232,53 @@ namespace NV.Realtime.Simulation
                     player.SessionId,
                     new ReadOnlySpan<byte>(_sendBuffer, 0, length),
                     Reliability.Unreliable);
+            }
+        }
+
+        /// 상태가 바뀌었거나 간격이 지났을 때 명단 전문을 보낸다.
+        ///
+        /// 본문이 수신자와 무관하므로 한 번 인코딩해 전원에게 보낸다.
+        /// 스냅샷과 다른 점이며, 그 차이는 `AckedInputTick` 하나에서 온다.
+        private void BroadcastRoomState(IServerTransport transport)
+        {
+            var due = _stateDirty
+                || _tick - _lastStateTick >= (uint)RealtimeConstants.Rooms.RoomStateIntervalTicks;
+
+            if (!due)
+            {
+                return;
+            }
+
+            _stateDirty = false;
+            _lastStateTick = _tick;
+
+            var count = 0;
+            foreach (var player in _players.Values)
+            {
+                _rosterBuffer[count] = new RoomPlayerEntry(player.PlayerId, player.Name);
+                count++;
+            }
+
+            var header = new RoomStateHeader(
+                Phase,
+                (byte)Volatile.Read(ref _hostPlayerId),
+                _seekerPlayerId,
+                _outcome,
+                _startTick,
+                _placementSeed,
+                (byte)count);
+
+            var length = MessageCodec.WriteRoomState(
+                _stateBuffer,
+                header,
+                new ReadOnlySpan<RoomPlayerEntry>(_rosterBuffer, 0, count));
+
+            foreach (var player in _players.Values)
+            {
+                transport.TrySend(
+                    player.SessionId,
+                    new ReadOnlySpan<byte>(_stateBuffer, 0, length),
+                    Reliability.Reliable);
             }
         }
 
@@ -220,17 +342,29 @@ namespace NV.Realtime.Simulation
                 switch (command.Kind)
                 {
                     case RoomCommandKind.Join:
-                        Join(command.SessionId, command.PlayerId);
+                        Join(command.SessionId, command.PlayerId, command.Name, command.IsHost);
                         break;
 
                     case RoomCommandKind.Leave:
                         Leave(command.SessionId, command.PlayerId);
                         break;
+
+                    case RoomCommandKind.Start:
+                        Start(command.SessionId);
+                        break;
+
+                    case RoomCommandKind.EndMatch:
+                        EndMatch(command.SessionId, command.Value);
+                        break;
+
+                    case RoomCommandKind.ReturnToLobby:
+                        ReturnToLobby(command.SessionId);
+                        break;
                 }
             }
         }
 
-        private void Join(int sessionId, byte playerId)
+        private void Join(int sessionId, byte playerId, string name, bool isHost)
         {
             if (_players.ContainsKey(sessionId) || _players.Count >= RealtimeConstants.Rooms.MaxPlayers)
             {
@@ -242,7 +376,19 @@ namespace NV.Realtime.Simulation
                 sessionId,
                 playerId,
                 _map.SpawnPosition(playerId),
-                _map.SpawnYaw(playerId));
+                _map.SpawnYaw(playerId),
+                name);
+
+            // 방장 자리는 먼저 주장한 세션이 갖는다. 이미 방장이 있으면 무시한다 —
+            // 같은 토큰으로 두 번 붙는 경우이며, 나중 접속에 자리를 넘기면
+            // 먼저 붙은 쪽이 조용히 권한을 잃는다.
+            if (isHost && _hostSessionId == 0)
+            {
+                _hostSessionId = sessionId;
+            }
+
+            RefreshHostPlayerId();
+            _stateDirty = true;
         }
 
         private void Leave(int sessionId, byte playerId)
@@ -257,6 +403,192 @@ namespace NV.Realtime.Simulation
                     _heldInputs.RemoveAt(index);
                 }
             }
+
+            // 방장 승계는 여기서 한다. 접속 스레드에서 하면 퇴장 커맨드가 적용되기 전이라
+            // 이미 나간 세션을 방장으로 만든다.
+            if (sessionId == _hostSessionId)
+            {
+                _hostSessionId = LowestRemainingSessionId();
+
+                if (_hostSessionId != 0)
+                {
+                    _logger.LogInformation(
+                        "룸 {RoomId}: 방장이 나가 세션 {SessionId} 가 승계했다.",
+                        RoomId,
+                        _hostSessionId);
+                }
+            }
+
+            // 아무도 없는 룸이 진행 중으로 남으면, 다음에 들어온 사람이 이미
+            // 시작된 매치에 갇힌다. 룸 회수는 별개이고 여기서는 단계를 되돌린다.
+            if (_players.Count == 0 && Phase != RoomPhase.Waiting)
+            {
+                ResetToWaiting();
+            }
+
+            RefreshHostPlayerId();
+            _stateDirty = true;
+        }
+
+        private void Start(int sessionId)
+        {
+            if (Phase != RoomPhase.Waiting)
+            {
+                return;
+            }
+
+            if (!IsAuthorized(sessionId))
+            {
+                _logger.LogInformation("룸 {RoomId}: 방장이 아닌 세션 {SessionId} 의 시작 요청을 무시했다.", RoomId, sessionId);
+                return;
+            }
+
+            if (_players.Count < RealtimeConstants.Rooms.MinPlayersToStart)
+            {
+                _logger.LogInformation(
+                    "룸 {RoomId}: 인원 {Count} 명으로는 시작할 수 없다. 최소 {Min} 명.",
+                    RoomId,
+                    _players.Count,
+                    RealtimeConstants.Rooms.MinPlayersToStart);
+                return;
+            }
+
+            _seekerPlayerId = PickSeeker();
+            _placementSeed = NextPlacementSeed();
+            _outcome = 0;
+
+            // 커맨드는 틱을 올리기 전에 드레인된다. 그래서 +1 이 실제로 시뮬레이션되는
+            // 첫 틱이며, 이 값과 스냅샷의 틱이 같은 기준이 된다.
+            _startTick = _tick + 1u;
+
+            // 배치는 서버가 한다. 이동이 서버 권위이므로 클라이언트가 자기 몸을
+            // 옮겨 놓아도 다음 스냅샷이 되돌린다.
+            foreach (var player in _players.Values)
+            {
+                player.RespawnAt(_map.SpawnPosition(player.PlayerId), _map.SpawnYaw(player.PlayerId));
+            }
+
+            Volatile.Write(ref _phase, (int)RoomPhase.Playing);
+            _stateDirty = true;
+
+            _logger.LogInformation(
+                "룸 {RoomId} 매치 시작. 틱 {Tick}, 인원 {Count} 명, Seeker {Seeker}, 배치 씨드 {Seed}",
+                RoomId,
+                _tick,
+                _players.Count,
+                _seekerPlayerId,
+                _placementSeed);
+        }
+
+        /// 결과를 판정한 것은 방장 클라이언트다. 매치 규칙이 아직 클라이언트에 있는
+        /// 동안의 한시적 경로이며, 서버는 단계 전이와 중계만 한다.
+        private void EndMatch(int sessionId, byte outcome)
+        {
+            if (Phase != RoomPhase.Playing || !IsAuthorized(sessionId))
+            {
+                return;
+            }
+
+            _outcome = outcome;
+            Volatile.Write(ref _phase, (int)RoomPhase.Ended);
+            _stateDirty = true;
+
+            _logger.LogInformation("룸 {RoomId} 매치 종료. 결과 코드 {Outcome}", RoomId, outcome);
+        }
+
+        private void ReturnToLobby(int sessionId)
+        {
+            if (Phase == RoomPhase.Waiting || !IsAuthorized(sessionId))
+            {
+                return;
+            }
+
+            ResetToWaiting();
+            _stateDirty = true;
+        }
+
+        private void ResetToWaiting()
+        {
+            Volatile.Write(ref _phase, (int)RoomPhase.Waiting);
+            _seekerPlayerId = RoomStateHeader.NoPlayer;
+            _placementSeed = 0;
+            _startTick = 0;
+            _outcome = 0;
+        }
+
+        /// 방장이 필요 없는 룸에서는 누구나 시작할 수 있다. 설정으로 미리 열어 둔
+        /// 개발용 룸이 그 경우다 — 코드를 발급받는 경로가 없으므로 방장도 없다.
+        private bool IsAuthorized(int sessionId)
+        {
+            if (!_requiresHost)
+            {
+                return true;
+            }
+
+            return sessionId != 0 && sessionId == _hostSessionId;
+        }
+
+        private void RefreshHostPlayerId()
+        {
+            var hostPlayerId = (int)RoomStateHeader.NoPlayer;
+
+            if (_hostSessionId != 0 && _players.TryGetValue(_hostSessionId, out var host))
+            {
+                hostPlayerId = host.PlayerId;
+            }
+
+            Volatile.Write(ref _hostPlayerId, hostPlayerId);
+        }
+
+        /// 남은 사람 중 가장 작은 PlayerId 의 세션. 아무도 없으면 0 이다.
+        ///
+        /// 접속 순서가 아니라 PlayerId 순으로 고른다. 슬롯 번호는 룸 안에서 유일하고
+        /// 모든 클라이언트가 같은 값을 보므로, 누가 승계했는지 화면에서 확인할 수 있다.
+        private int LowestRemainingSessionId()
+        {
+            var bestPlayerId = int.MaxValue;
+            var bestSessionId = 0;
+
+            foreach (var player in _players.Values)
+            {
+                if (player.PlayerId < bestPlayerId)
+                {
+                    bestPlayerId = player.PlayerId;
+                    bestSessionId = player.SessionId;
+                }
+            }
+
+            return bestSessionId;
+        }
+
+        private byte PickSeeker()
+        {
+            Span<byte> ids = stackalloc byte[RealtimeConstants.Rooms.MaxPlayers];
+            var count = 0;
+
+            foreach (var player in _players.Values)
+            {
+                ids[count] = player.PlayerId;
+                count++;
+            }
+
+            return ids[Random.Shared.Next(count)];
+        }
+
+        /// 0 이 아닌 씨드를 만든다.
+        ///
+        /// 0 을 피하는 이유가 클라이언트에 있다. 클라이언트의 매치 설정은 씨드가 0 이면
+        /// 자기 시계로 난수를 만드는데, 그러면 플레이어마다 문과 열쇠가 다른 곳에 생긴다.
+        private static int NextPlacementSeed()
+        {
+            int seed;
+            do
+            {
+                seed = Random.Shared.Next(int.MinValue, int.MaxValue);
+            }
+            while (seed == 0);
+
+            return seed;
         }
 
         private void DrainInputs()
@@ -284,6 +616,15 @@ namespace NV.Realtime.Simulation
 
                 Buffer(input);
             }
+        }
+
+        private void DiscardInputs()
+        {
+            while (_inputs.TryDequeue(out _))
+            {
+            }
+
+            _heldInputs.Clear();
         }
 
         private void Buffer(in InboundInput input)

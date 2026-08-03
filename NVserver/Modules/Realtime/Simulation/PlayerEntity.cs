@@ -14,10 +14,11 @@ namespace NV.Realtime.Simulation
         private readonly InboundInput[] _inputs = new InboundInput[RealtimeConstants.Players.InputBufferCapacity];
         private int _inputCount;
 
-        public PlayerEntity(int sessionId, byte playerId, Vector3 spawnPosition, float spawnYaw)
+        public PlayerEntity(int sessionId, byte playerId, Vector3 spawnPosition, float spawnYaw, string name = "")
         {
             SessionId = sessionId;
             PlayerId = playerId;
+            Name = name ?? string.Empty;
             State = PlayerState.Spawn(spawnPosition, spawnYaw, RealtimeConstants.Players.MaxHealth);
             LastInput = new InputFrame(ButtonFlags.None, 0, 0, Quantization.ToFixedYaw(spawnYaw), 0);
             Wire = StateProjection.ToEntityState(playerId, State);
@@ -26,6 +27,9 @@ namespace NV.Realtime.Simulation
         public int SessionId { get; }
 
         public byte PlayerId { get; }
+
+        /// 표시 이름. 명단에만 쓰이며 판정에 관여하지 않는다.
+        public string Name { get; }
 
         /// 필드로 둔다. 프로퍼티면 매 접근마다 구조체가 복사되어 제자리 수정이 안 된다.
         public PlayerState State;
@@ -47,6 +51,28 @@ namespace NV.Realtime.Simulation
         public int RepeatCount { get; set; }
 
         public int BufferedInputCount => _inputCount;
+
+        /// 매치 시작 시 스폰으로 되돌린다.
+        ///
+        /// 배치를 서버가 한다. 이동이 서버 권위이므로 클라이언트가 자기 몸을 옮겨도
+        /// 다음 스냅샷이 되돌리고, 증상은 시작 직후의 순간이동 한 번으로만 보인다.
+        ///
+        /// 입력 기록은 지우지 않는다. 틱 카운터는 접속 내내 이어지므로 여기서 0 으로
+        /// 되돌리면 이미 처리한 틱 번호의 입력이 다시 유효해진다.
+        public void RespawnAt(Vector3 position, float yaw)
+        {
+            State = PlayerState.Spawn(position, yaw, RealtimeConstants.Players.MaxHealth);
+            LastInput = new InputFrame(ButtonFlags.None, 0, 0, Quantization.ToFixedYaw(yaw), 0);
+            RepeatCount = 0;
+            Wire = StateProjection.ToEntityState(PlayerId, State);
+
+            for (var index = 0; index < _inputCount; index++)
+            {
+                _inputs[index] = default;
+            }
+
+            _inputCount = 0;
+        }
 
         /// 버렸으면 false. 버린 이유는 호출자가 로그로 남긴다.
         public bool TryBuffer(in InboundInput input)
