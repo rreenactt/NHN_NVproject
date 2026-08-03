@@ -20,6 +20,31 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(ButtonFlags.All, sanitized.Buttons);
         }
 
+        /// `Interact` 를 `All` 에 넣는 것을 잊으면 서버가 조용히 지운다. 증상은 "E 키가
+        /// 아무것도 하지 않는다" 이고, 판정 쪽을 아무리 봐도 원인이 없다.
+        [Fact]
+        public void Interact_비트는_통과한다()
+        {
+            var frame = new InputFrame(ButtonFlags.Interact, 0, 0, 0, 0);
+
+            var sanitized = InputValidator.Sanitize(frame);
+
+            Assert.Equal(ButtonFlags.Interact, sanitized.Buttons);
+        }
+
+        /// `All` 이 0xFF 로 넓어지면 마스크가 아무것도 걸러내지 않는다. 버튼을 추가할 때
+        /// `All` 을 고치는 대신 마스크를 없애는 쪽으로 미끄러지는 것을 막는다.
+        [Fact]
+        public void 정의되지_않은_상위_비트는_남아_있다()
+        {
+            var undefined = (ButtonFlags)(1 << 5);
+
+            Assert.Equal(ButtonFlags.None, ButtonFlags.All & undefined);
+
+            var sanitized = InputValidator.Sanitize(new InputFrame(undefined, 0, 0, 0, 0));
+            Assert.Equal(ButtonFlags.None, sanitized.Buttons);
+        }
+
         [Fact]
         public void 이동축_최소값은_단위_구간_안으로_잘린다()
         {

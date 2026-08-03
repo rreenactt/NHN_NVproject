@@ -430,6 +430,11 @@ namespace NV.Client.Net
             if (_controller.SprintHeld) buttons |= ButtonFlags.Sprint;
             if (_controller.FireHeld) buttons |= ButtonFlags.Fire;
 
+            // 상호작용도 래치를 소비한다. **대상은 싣지 않는다** — 서버가 자기 좌표로
+            // 무엇에 대한 상호작용인지 고른다. 지금 이 비트를 쓰는 판정은 아직 없고
+            // (열쇠 삽입은 IG-012b2, 장치는 IG-013) 서버는 받아서 버린다.
+            if (_controller.ConsumeInteract()) buttons |= ButtonFlags.Interact;
+
             var move = _controller.MoveInput;
 
             return new InputFrame(

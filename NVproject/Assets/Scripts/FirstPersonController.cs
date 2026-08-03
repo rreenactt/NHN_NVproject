@@ -82,6 +82,7 @@ public class FirstPersonController : MonoBehaviour
 
     private bool _networkGrounded = true;
     private bool _jumpLatched;
+    private bool _interactLatched;
     private bool _inputEnabled = true;
     private bool _phasing;
 
@@ -134,6 +135,21 @@ public class FirstPersonController : MonoBehaviour
     }
 
     /// <summary>
+    /// True once if the interact key (E) was pressed since the last call, then false. Latched for
+    /// the same reason as the jump — the network tick is slower than the render loop.
+    ///
+    /// This is the *networked* path. <see cref="NV.Game.PlayerInteractor"/> reads the raw key for
+    /// the offline one, so both fire on the same press and neither eats the other's signal: only
+    /// the wire path consumes this latch.
+    /// </summary>
+    public bool ConsumeInteract()
+    {
+        bool interacted = _interactLatched;
+        _interactLatched = false;
+        return interacted;
+    }
+
+    /// <summary>
     /// Places the character where the server says it is. Position is the server's *feet*; the
     /// body is lifted by the rig's ground shim so the blocks still sit on the floor rather than
     /// sinking by the CharacterController's skin width.
@@ -172,6 +188,7 @@ public class FirstPersonController : MonoBehaviour
                 SprintHeld = false;
                 FireHeld = false;
                 _jumpLatched = false;
+                _interactLatched = false;
             }
         }
     }
@@ -359,6 +376,12 @@ public class FirstPersonController : MonoBehaviour
         FireHeld = Mouse.current != null && Mouse.current.leftButton.isPressed;
         if (!MovementLocked && keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
             _jumpLatched = true;
+
+        // Interact is gated by MovementLocked like the jump is. Being held by the chain or frozen
+        // by a device is meant to cost the player their turn, and inserting a key from inside that
+        // hold would be the one action the penalty failed to stop.
+        if (!MovementLocked && keyboard != null && keyboard.eKey.wasPressedThisFrame)
+            _interactLatched = true;
 
         // Under server authority the sampling above is the whole job: the position comes back
         // from the server. Moving the controller here as well would fight it, and the two

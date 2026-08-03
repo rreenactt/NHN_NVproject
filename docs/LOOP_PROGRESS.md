@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 17)
-현재 이터레이션: 17
-기준 커밋: `e3b2d69`
+최종 갱신: 2026-08-04 (이터레이션 18)
+현재 이터레이션: 18
+기준 커밋: `d3164a0`
 
 ## 이 루프가 실제로 하는 일
 
@@ -87,6 +87,10 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | 메시지 | 방향 | 페이로드 | 권위 | 정의 위치 |
 |---|---|---|---|---|
 | `Input` `0x01` | C→S | `InputFrame` 7B × 최근 3틱 (buttons, moveX/Z, yaw, pitch) — **위치는 보내지 않는다** | 클라이언트 의도만 | `Shared/Contracts/Messages/InputFrame.cs` |
+
+`buttons` 의 정의된 비트: `Jump`·`Fire`·`Crouch`·`Sprint`·**`Interact`(IG-012b1)**. `ButtonFlags.All`
+밖의 비트는 `InputValidator.Sanitize` 가 지운다 — 버튼을 추가하면 그 마스크도 고친다. `Interact` 는
+**엣지**이고(클라이언트가 래치해 틱마다 소비) **대상을 싣지 않는다** — 서버가 자기 좌표로 고른다.
 | `Control` `0x02` | C→S | `ControlKind` (1 `StartMatch`, 3 `EndMatch`, 4 `ReturnToLobby`) + value | **요청**, 서버가 재판정 | `Shared/Contracts/Enums/ControlKind.cs` |
 | `Snapshot` `0x81` | S→C | `SnapshotHeader` 10B + `EntityState` 13B × N. 8인 = 114B. 매 틱, `Playing` 에서만 | 서버 | `Shared/Contracts/Messages/SnapshotHeader.cs` |
 | `Event` `0x82` + `EventKind.RoomState=1` | S→C | `RoomStateHeader` 15B (phase, host, seeker, outcome, startTick, **placementSeed**, count) + 명단 | 서버 | `Shared/Contracts/Messages/RoomStateMessage.cs` |
@@ -169,7 +173,8 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-011c2 | 클라이언트 목표물 수신·적용 + 클라이언트 배치 제거 | **DONE** | P2 | IG-011c1 | R-6.3, R-7.1 |
 | IG-011c3 | `PlacementSeed` 와이어 제거 | **DONE** | P2 | IG-011c2 | **R-2.3 ✅** |
 | IG-012a | 열쇠 습득 서버 판정 | **DONE** | P2 | IG-011c3 | **R-6.1 ✅** |
-| IG-012b | 열쇠 삽입 + 문 개방 | TODO | P2 | IG-012a | R-6.2, R-6.5 |
+| IG-012b1 | `ButtonFlags.Interact` 입력 경로 | **DONE** | P2 | IG-012a | (기반) |
+| IG-012b2 | 삽입·문 개방 서버 판정 | TODO | P2 | IG-012b1 | R-6.2, R-6.5 |
 | IG-012c | 탈출 판정 | TODO | P2 | IG-012b | R-6.7 |
 | IG-013 | `Interact` 입력 + 장치 사용 판정 | **BLOCKED** | P2 | IG-011 | R-7.2~R-7.7, R-4.3 |
 | IG-014 | 서버 발사체 + 피격 규칙 + 탄약 | TODO | P2 | IG-009 | R-3.1~R-3.6, R-2.1 |
@@ -1100,16 +1105,63 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 - 비고: `CarryLimit` 은 0(무제한)이므로 상한 검사는 실질적으로 통과만 한다. 그래도 남겨 두었다 —
   값이 0 이 아니게 되는 날 판정이 아니라 설정만 바뀌어야 한다.
 
-### IG-012b — 열쇠 삽입 + 문 개방
+### IG-012b — 열쇠 삽입 + 문 개방 (b1/b2 로 쪼갬)
+- 상태: **분할됨** — IG-012b1 DONE, IG-012b2 TODO
+- 조사 결과 전체 범위가 **11파일**이었다(§6.1 초과): 입력 비트·마스크·클라이언트 래치·송신,
+  서버 판정과 삽입 시각, `MatchState.keysInserted`, `ObjectiveState` 의 문 개방,
+  `NetworkClient` 노출, `MatchSync` 적용, `MatchManager`·`EscapeDoor` 의 판정 경로 차단.
+  입력 경로와 판정을 나누면 각각 독립적으로 검증되고, **입력 경로만으로는 기존 동작이 깨지지
+  않는다**(§6.3) — 서버가 비트를 받아서 버리는 상태로 끝나기 때문이다.
+
+### IG-012b1 — `ButtonFlags.Interact` 입력 경로
+- 상태: **DONE** (이터레이션 18)
+- 기획서 근거: §3(삽입), §5(장치 사용) — 둘 다 명시적 입력을 요구하는 행동이다
+- 계획(실행됨): 비트를 추가하고 `All` 마스크에 넣는다. 클라이언트는 E 키를 프레임에서 래치해
+  틱마다 소비한다(`ConsumeInteract`) — 점프와 같은 구조다. **판정은 넣지 않는다**; 서버는
+  비트를 받아 버린다.
+- **대상(무엇에 대한 상호작용인지)을 와이어에 싣지 않았다.** 클라이언트가 대상을 지정하면
+  "나는 저 문을 쓴다" 를 클라이언트가 주장하는 구조가 되고, 사거리 밖의 문도 지목할 수 있다.
+  서버가 자기 좌표로 대상을 고른다. 장치가 추가되는 IG-013 에서도 같은 규칙이 유지된다.
+- **엣지이고 held 가 아니다.** 30Hz 틱 사이에 눌린 키를 그냥 읽으면 절반쯤 사라진다
+  (`_jumpLatched` 가 있는 이유와 같다). `InputEnabled = false` 에서 래치를 비우는 것도 점프와
+  같다 — 남겨 두면 UI 를 닫는 순간 눌리지 않은 키가 한 번 발동한다.
+- **`MovementLocked` 로 막는다.** 체인에 끌려가는 중이거나 정지 장치에 걸린 동안 열쇠를 넣을 수
+  있으면 그 벌칙이 막지 못한 유일한 행동이 된다. `PlayerInteractor`(오프라인 경로)는 이 게이트를
+  거치지 않으므로 IG-012b2 에서 권위를 넘길 때 함께 정리한다.
+- **`PlayerInteractor` 를 건드리지 않았다.** 지금 그쪽의 로컬 `Interact` 호출을 막으면 서버에
+  판정이 없는 상태이므로 네트워크 매치에서 삽입이 아예 불가능해진다 — 기존 동작을 깨는 변경이라
+  판정과 같은 태스크(IG-012b2)에 있어야 한다. 두 경로가 같은 키를 읽지만 **래치를 소비하는 것은
+  와이어 경로뿐**이므로 서로의 신호를 먹지 않는다.
+- 변경 파일(4): `Shared/Contracts/Enums/ButtonFlags.cs`(`Interact = 1 << 4`, `All` 갱신),
+  `FirstPersonController.cs`(`_interactLatched`·`ConsumeInteract`, `InputEnabled` 해제 시 비움),
+  `Net/NetworkBootstrap.cs`(`LocalInputSource.Sample` 에서 소비),
+  `tests/Modules.Tests/Realtime/InputValidatorTests.cs`(+2개)
+- 검증:
+  - `dotnet test` → **347 통과** (Modules 343 + Architecture 4), 실패 0. 이전 345 에서 +2
+  - `dotnet build` → **경고 0, 오류 0**
+  - `dotnet build Assembly-CSharp.csproj` → **오류 0**
+  - 기존 `미정의_버튼_비트는_제거된다`(`0xFF` → `All`)가 그대로 통과한다 — `All` 이 0x1F 로
+    넓어졌을 뿐 마스크는 여전히 걸러낸다. 새 테스트가 비트 5 로 그것을 못질한다.
+- **프로토콜 버전을 올리지 않는다.** 와이어 크기와 배치가 그대로다(`buttons` 는 예전부터 1바이트).
+  구버전 클라이언트는 이 비트를 세우지 않고, 구버전 서버는 마스크로 지운다 — 어느 조합도 오독하지
+  않는다. `ProtocolInfo.Version` 은 IG-008 이 올린 3 그대로다.
+
+### IG-012b2 — 삽입·문 개방 서버 판정
 - 상태: TODO
 - 기획서 근거: §3, §6
-- 계획: `ButtonFlags.Interact` 를 입력에 추가하고(클라이언트 송신 포함), 문 반경
-  `DoorUseRadius` + `KeyInsertInterval` + 소지 확인으로 삽입을 판정한다. 한 곳에서 직렬화되므로
-  "두 Runner 가 동시에 10번째 열쇠를 넣는" 경우가 자동 해결된다. `MatchState.keysInserted` 와
-  `ObjectiveState` 의 문 개방 여부가 이 태스크에서 실제 값을 갖는다.
+- 계획: `Interact` 엣지에 대해 문 반경 `DoorUseRadius` + `KeyInsertInterval` + 소지 확인으로
+  삽입을 판정한다. 한 곳에서 직렬화되므로 "두 Runner 가 동시에 10번째 열쇠를 넣는" 경우가 자동
+  해결된다. `MatchState.keysInserted` 와 `ObjectiveState` 의 문 개방 여부가 실제 값을 갖는다.
+- `PlayerEntity` 에 삽입 가능 시각이 필요하다 — **틱으로 센다**(`NextInsertTick`).
+  `Time.time` 을 쓰는 클라이언트 쪽과 달리 서버는 고정 틱이므로 프레임레이트에 걸리지 않는다.
+- `ObjectiveFlags` 에 `DoorOpen` 을 더한다. 크기는 그대로다(플래그 바이트에 빈 비트가 있다).
+  **Seeker 사본에는 문 블록이 아예 없으므로 이 비트도 꺼진 채로 나가야 한다** — 문이 없는데
+  "열렸다" 가 오면 클라이언트가 없는 문을 열려고 한다.
 - 주의: `keysInserted` 는 **Seeker 사본에서 0 이어야 한다**(코덱이 이미 그렇게 쓴다). 클라이언트가
   이 값을 적용하기 시작하면 `MatchSync.ApplyMatchState` 의 "적용하지 않는다" 표(§메시지 카탈로그)
   도 함께 갱신해야 한다.
+- 여기서 `PlayerInteractor`·`EscapeDoor`·`MatchManager.TryInsertKey` 의 로컬 판정 경로를 막는다.
+  IG-012a 와 같은 형태다 — 오프라인은 그대로 두고 세션이 있을 때만 서버에 맡긴다.
 
 ### IG-012c — 탈출 판정
 - 상태: TODO
@@ -1278,23 +1330,48 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-012b — 열쇠 삽입 + 문 개방** (P2).
+**IG-012b2 — 삽입·문 개방 서버 판정** (P2).
 
-IG-012a 로 열쇠가 서버에서 주워지고 그 수가 전문에 실린다. **그런데 아직 아무도 넣을 수 없다** —
-`MatchManager.TryInsertKey` 가 여전히 클라이언트에서 판정하고, 서버의 `keysInserted` 는 0 이다.
-그래서 지금 상태는 "주울 수는 있지만 이길 수는 없는" 중간 지점이고, IG-012b 가 그것을 잇는다.
+입력 비트가 이제 서버까지 도달한다(IG-012b1). **서버는 그것을 받아서 버린다** — 판정이 없다.
+그래서 지금은 "열쇠를 줍고 E 를 눌러 비트를 보낼 수 있지만, 넣는 것은 여전히 클라이언트가
+판정하는" 상태다. IG-012b2 가 그 마지막 한 칸을 잇고, 그때 `MatchState.keysInserted` 가 처음으로
+실제 값을 갖는다.
 
-여기서 **`ButtonFlags.Interact` 가 필요해진다.** IG-012a 에서 넣지 않은 이유는 습득에 쓸 곳이
-없었기 때문이다(걸어가면 주워진다). 삽입은 되돌릴 수 없으므로 명시적 입력을 받아야 하고,
-클라이언트 송신(`NetworkBootstrap.Sample`)과 `InputValidator.Sanitize` 까지 함께 건드린다.
-
-파일 수가 8을 넘을 것 같으면 **입력 비트 추가**와 **삽입 판정**을 다시 쪼갠다.
+예상 파일: `Room.cs`(판정), `PlayerEntity.cs`(`NextInsertTick`), `Match.cs`(`KeysInserted`·문 개방),
+`ObjectiveStateMessage.cs`(`DoorOpen` 플래그), `MessageCodec.cs`(Seeker 사본에서 그 비트 차단),
+`NetworkClient.cs`, `MatchSync.cs`, `MatchManager.cs`/`EscapeDoor.cs`(로컬 판정 차단) + 테스트.
+**이것도 8을 넘는다** — 서버 판정과 클라이언트 적용으로 다시 쪼갤 준비를 하고 시작한다.
 
 BLOCKED 6건(IG-007, IG-013, IG-016, IG-017, IG-020, IG-021)은 여전히 OQ-1·2·3·4·5·6 을 기다린다.
 **IG-012c 가 끝나면 남은 진행 가능 태스크가 거의 소진되고, OQ 의 답이 없으면 루프가 §10 의
 "남은 태스크가 전부 BLOCKED" 조건에 가까워진다.**
 
 ---
+
+### 이전 판단 기록 (이터레이션 18)
+
+**조사가 태스크를 쪼갰다.** IG-012b 를 열어 보니 11파일이었다 — 입력 비트 하나 추가하는 일로
+보였던 것이 클라이언트 래치·송신·서버 판정·두 전문의 필드·수신 적용·로컬 판정 차단까지 이어진다.
+§6.1 을 넘기기 전에 나눈 것이 이번의 실질적인 산출물이고, **나누는 선을 "기존 동작을 깨는지" 로
+그었다**(§6.3): 입력 경로만 넣으면 서버가 비트를 받아 버리는 상태로 끝나므로 아무것도 깨지지 않고,
+판정을 넣는 순간 로컬 판정을 막아야 하므로 그쪽이 깨는 변경이다.
+
+**대상을 와이어에 싣지 않기로 한 것이 이 태스크의 유일한 설계 결정이다.** "무엇에 상호작용하는가"
+를 클라이언트가 지정하면 사거리 밖의 문도 지목할 수 있고, 그것은 §8 의 "클라이언트가 내가
+맞췄다고 주장하는 구조" 와 같은 형태다. 서버가 자기 좌표로 대상을 고르면 그 주장이 불가능해진다.
+장치가 6종으로 늘어나는 IG-013 에서도 같은 규칙이 유지된다 — 대상이 늘어나는 것은 서버의 후보
+목록이 늘어나는 일이다.
+
+**`PlayerInteractor` 를 일부러 건드리지 않았다.** 그쪽의 로컬 호출을 지금 막으면 서버에 판정이
+없으므로 네트워크 매치에서 삽입이 불가능해진다 — "권위를 옮기는" 변경은 받는 쪽이 준비된 뒤에만
+안전하다. 두 경로가 같은 E 키를 읽지만 래치를 소비하는 것은 와이어 경로뿐이므로 충돌하지 않는다.
+
+`MovementLocked` 게이트를 붙인 것은 규칙 판단이다. 체인 벌칙과 정지 장치가 막지 못하는 행동이
+하나 남으면 그 벌칙의 값이 달라진다. 다만 **오프라인 경로(`PlayerInteractor`)는 아직 이 게이트를
+거치지 않으므로 두 경로의 동작이 미세하게 다르다** — IG-012b2 에서 로컬 판정을 막을 때 사라진다.
+
+프로토콜 버전은 올리지 않았다. `buttons` 는 예전부터 1바이트이고 크기·배치가 그대로다. 구버전
+클라이언트는 비트를 세우지 않고 구버전 서버는 마스크로 지운다 — 어느 조합도 오독하지 않는다.
 
 ### 이전 판단 기록 (이터레이션 17)
 
