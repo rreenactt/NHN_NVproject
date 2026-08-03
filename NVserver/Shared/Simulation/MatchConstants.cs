@@ -56,6 +56,15 @@ namespace NV.Shared.Simulation
         /// 열쇠를 집는 수평 거리(m).
         public const float KeyPickupRadius = 1.4f;
 
+        /// 쓰러진 Runner 가 흘린 열쇠를 사망 지점에서 퍼뜨리는 반경(m).
+        ///
+        /// 기획서에 없다. 클라이언트의 `MatchManager.ScatterKeys` 가 쓰던 값이다.
+        ///
+        /// **`KeyPickupRadius`(1.4m)보다 작은 것이 중요하다.** 그래서 퍼뜨린 열쇠는 전부 사망
+        /// 지점에서 그대로 주울 수 있고, 벽 쪽으로 밀린 열쇠가 회수 불가능해지지 않는다 —
+        /// 격자에 스냅할 필요가 없는 이유이기도 하다(스냅하면 셀 중심으로 모여 다시 한 점이 된다).
+        public const float KeyDropRadius = 0.7f;
+
         /// 열쇠를 집는 수직 허용치(m). **수평보다 크고, 그 비대칭이 의도다.**
         ///
         /// 층 간격이 3.2m 이므로 이 값이 그보다 작아야 위층이 아래층 열쇠를 빨아들이지

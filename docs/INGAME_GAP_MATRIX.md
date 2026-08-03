@@ -104,7 +104,7 @@
 | R-6.4 | §6 플레이어만 볼 수 있음 | **`DONE`** (IG-011b·c3) — R-2.3 과 같은 경로로 닫혔다 | `WriteObjectiveState`, `RoomStateMessage` | 필요 ✅ | 필요 ✅ |
 | R-6.5 | §6 열쇠 10개 삽입 시 개방 | **`DONE`** (IG-012b2·b3) | `Match.DoorOpen`(삽입 수에서 유도), `WriteObjectiveState` 의 `doorOpen` — **문 블록 안에 있어 Seeker 사본에는 실리지 않는다**; 클라이언트는 `NetworkClient.ObjectiveDoorOpen` → `AcceptObjectiveProgress` 로 매 프레임 멱등하게 적용한다 | **서버** ✅ | ✅ `ObjectiveState` 의 문 블록 |
 | R-6.6 | §3 2명 이상 탈출 시 승리 | **탈출 감지 `DONE`** (IG-012c1·c2); **승리 판정은 BLOCKED** (IG-007 ← OQ-2·OQ-6) | `Room.TickEscapes`, `Match.Escapes`·`EscapeHoldTicks`, `EntityFlags.Escaped`; 클라이언트는 `AcceptEscapes`(수, 전문) + `AcceptEscaped`(대상, 스냅샷 플래그)로 받고 로컬 `TickEscapes` 는 거부한다 | **서버** ✅ (세는 것) | ✅ `MatchState.escapes` — **Seeker 도 받는다** |
-| R-6.7 | (룰셋) 사망 시 소지 열쇠 흘리기 | **서버 판정 `DONE`** (IG-014b) — **사망 지점 한 점**에 놓는다(흩뿌리기는 표현이고 반경이 기획서에 없다 → IG-027) | `Room.DownRunner` → `Objectives.AddKey` ×소지 수 | **서버** ✅ | ✅ `ObjectiveState` 열쇠 목록 |
+| R-6.7 | (룰셋) 사망 시 소지 열쇠 흘리기 | **`DONE`** (IG-014b + IG-027) | `Room.DownRunner` → `ScatterKeys` — 사망 지점 0.7m 원 위에 **균등 배분**(시작 각도만 무작위). 겹침이 불가능하고, 습득 반경(1.4m)이 더 크므로 격자 스냅 없이도 전부 회수 가능하다 | **서버** ✅ | ✅ `ObjectiveState` 열쇠 목록 |
 
 ## 7. 맵 이벤트 (장치)
 

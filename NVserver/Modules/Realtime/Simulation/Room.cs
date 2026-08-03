@@ -1109,12 +1109,7 @@ namespace NV.Realtime.Simulation
                 MatchConstants.RunnerHitsToDie);
         }
 
-        /// 쓰러뜨린다. 들고 있던 열쇠는 그 자리에 떨어진다.
-        ///
-        /// **열쇠를 흩뿌리지 않고 한 점에 놓는다.** 클라이언트의 `ScatterKeys` 는 반경을 두고
-        /// 퍼뜨리지만 그것은 표현이고, 흩뿌릴 반경은 기획서에 없다. 한 점에 놓으면 그 무더기를
-        /// 밟은 Runner 가 한 틱에 전부 줍는데 — 사망 지점에 흘린 것을 회수하는 것이 규칙이므로
-        /// 그것이 맞다(IG-027 로 표현을 다시 볼 수 있다).
+        /// 쓰러뜨린다. 들고 있던 열쇠는 사망 지점 주위에 떨어진다.
         private void DownRunner(PlayerEntity victim, byte shooterId)
         {
             victim.Downed = true;
@@ -1123,11 +1118,7 @@ namespace NV.Realtime.Simulation
 
             if (dropped > 0 && _objectives.Placed)
             {
-                for (var index = 0; index < dropped; index++)
-                {
-                    _objectives.AddKey(victim.State.Position);
-                }
-
+                ScatterKeys(dropped, victim.State.Position);
                 _objectiveStateDirty = true;
             }
 
@@ -1139,6 +1130,41 @@ namespace NV.Realtime.Simulation
                 victim.PlayerId,
                 shooterId,
                 dropped);
+        }
+
+        /// 흘린 열쇠를 사망 지점 주위에 퍼뜨린다(룰셋 — 목표가 되돌아온다).
+        ///
+        /// **원 위에 균등 배분하고 시작 각도만 무작위로 뽑는다.** 클라이언트의 `ScatterKeys` 는
+        /// 각 열쇠의 각도를 따로 뽑는데, 그러면 각도가 겹쳐 두 열쇠가 같은 자리에 놓일 수 있다 —
+        /// 흩뿌리는 목적이 "한 무더기가 한 틱에 전부 주워지는 것" 을 피하는 것이므로 겹침이 곧
+        /// 실패다. 균등 배분은 그것을 불가능하게 만들고 난수 draw 도 하나로 줄인다.
+        ///
+        /// **격자에 스냅하지 않는다.** `TryNearestFreeFloor` 는 셀 중심을 돌려주므로(AS-7) 반경
+        /// 0.7m 안의 후보들이 전부 같은 셀 중심으로 모여 다시 한 점이 된다. 스냅이 없어도 안전한
+        /// 이유는 **습득 반경(1.4m)이 이 반경(0.7m)보다 크다는 것**이다 — 벽 쪽으로 밀린 열쇠도
+        /// 사망 지점에 서서 그대로 주울 수 있다.
+        ///
+        /// 난수는 피격 순간이동과 같은 수열을 쓴다. 둘 다 같은 판정(`ApplyHit`)의 결과이고
+        /// 서로 독립적으로 재현되어야 할 이유가 없다.
+        private void ScatterKeys(int count, Vector3 deathPoint)
+        {
+            const float TwoPi = 2f * 3.14159265f;
+
+            // 0~359도. 정수로 뽑는 이유는 `NextUnitFloat` 보다 분포를 읽기 쉽고, 1도 단위면
+            // 시작 각도가 눈에 띄게 반복되지 않기 때문이다.
+            var start = _hitRandom.NextInt(360) * (TwoPi / 360f);
+
+            for (var index = 0; index < count; index++)
+            {
+                var angle = start + (index * TwoPi / count);
+
+                DeterministicMath.SinCos(angle, out var sin, out var cos);
+
+                _objectives.AddKey(deathPoint + new Vector3(
+                    cos * MatchConstants.KeyDropRadius,
+                    0f,
+                    sin * MatchConstants.KeyDropRadius));
+            }
         }
 
         /// 무작위 통행 가능 셀로 옮긴다. 격자가 없으면 아무것도 하지 않는다.

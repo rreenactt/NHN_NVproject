@@ -161,6 +161,53 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(2, world.Room.Objectives.Keys.Count);
         }
 
+        /// 흘린 열쇠는 **서로 다른 자리**에 놓인다(IG-027).
+        ///
+        /// 한 점에 쌓으면 그 무더기를 밟은 Runner 가 한 틱에 전부 줍고 시각적으로도 하나로
+        /// 보인다. 개수만 세는 위 검사로는 그것을 구별할 수 없다.
+        [Fact]
+        public void 흘린_열쇠는_서로_다른_자리에_놓인다()
+        {
+            var world = Duel();
+
+            world.Room.Objectives.Reset();
+            for (var index = 0; index < 3; index++)
+            {
+                world.Room.Objectives.AddKey(world.PositionOf(world.Runner));
+            }
+
+            world.Room.Objectives.MarkPlaced();
+            world.Advance(1);
+            Assert.Empty(world.Room.Objectives.Keys);
+
+            world.FireAtRunner();
+            world.Advance(Match.HitImmunityTicks);
+            world.FireAtRunner();
+
+            var keys = world.Room.Objectives.Keys;
+            Assert.Equal(3, keys.Count);
+
+            for (var a = 0; a < keys.Count; a++)
+            {
+                for (var b = a + 1; b < keys.Count; b++)
+                {
+                    Assert.NotEqual(keys[a], keys[b]);
+                }
+            }
+        }
+
+        /// **퍼뜨린 열쇠는 전부 사망 지점에서 주울 수 있어야 한다.** 그래서 격자에 스냅하지
+        /// 않아도 벽 쪽으로 밀린 열쇠가 회수 불가능해지지 않는다 — 흩뿌림 반경이 습득 반경보다
+        /// 작다는 관계가 그것을 보장하고, 이 검사가 그 관계를 못질한다.
+        [Fact]
+        public void 흩뿌림_반경은_습득_반경보다_작다()
+        {
+            Assert.True(
+                MatchConstants.KeyDropRadius < MatchConstants.KeyPickupRadius,
+                $"흩뿌림 {MatchConstants.KeyDropRadius}m 가 습득 {MatchConstants.KeyPickupRadius}m 보다 크다. "
+                + "사망 지점에서 닿지 않는 열쇠가 생기므로 격자 스냅이 필요해진다.");
+        }
+
         /// 벽 뒤의 사람은 맞지 않는다. 지오메트리와 사람을 따로 검사하면 이것이 깨진다.
         [Fact]
         public void 벽_뒤의_사람은_맞지_않는다()
