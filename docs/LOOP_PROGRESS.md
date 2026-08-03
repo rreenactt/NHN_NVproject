@@ -1,0 +1,412 @@
+# LOOP PROGRESS — NVproject 인게임 구현
+
+최종 갱신: 2026-08-03 (부트스트랩)
+현재 이터레이션: 0 (부트스트랩 — 프로덕션 코드 없음)
+기준 커밋: `1817839`
+
+## 이 루프가 실제로 하는 일
+
+부트스트랩 조사 결과 한 줄 요약: **기획서의 인게임 규칙은 이미 거의 전부 구현되어 있고, 잘못된
+자리에 있다.** `MatchManager.cs` 는 750줄짜리 완성된 심판이지만 **클라이언트 전원에서 각자 한 벌씩
+돈다.** 서버가 아는 것은 넷뿐이다 — 시작 틱, Seeker, 배치 씨드, 종료 중계.
+
+그래서 이 루프의 작업은 "기능 구현" 이 아니라 대부분 **판정 주체 이관**이다. 갭 매트릭스 39개 항목
+중 `NONE` 은 보이스(§7) 3개뿐이고, 31개는 `PARTIAL` = 클라이언트에 있으나 서버가 판정하지 않음.
+
+`NVserver/docs/match-authority-plan.md` 가 이 이관의 Phase 0~6 계획을 이미 코드 인용 기반으로
+담고 있다(untracked 상태였다). 아래 백로그는 그 계획을 LOOP §6 의 작업 단위 규칙(8파일 이내,
+독립 검증 가능)으로 쪼갠 것이다.
+
+---
+
+## 명령 카탈로그
+
+부트스트랩에서 **실제로 실행해 확인한** 명령만 적는다.
+
+| 용도 | 명령 | 확인 결과 |
+|---|---|---|
+| 서버 빌드+테스트 | `cd NVserver && dotnet test` | ✅ 통과 — Architecture 4 + Modules 169 = **173개**, 실패 0 |
+| 서버 단일 테스트 | `cd NVserver && dotnet test --filter "FullyQualifiedName~MovementTests"` | (표기만, `dotnet test` 로 검증됨) |
+| 클라이언트 컴파일 검증 | `cd NVproject && dotnet build Assembly-CSharp.csproj` | ✅ **오류 0개**, 경고 2개 (MSB3277 `System.IO.Compression` 참조 통합 — 무해, 기존부터 있음) |
+| 로컬 서버 실행 | `cd NVserver && dotnet run --project Api` | 미실행 (스모크 테스트 태스크에서) |
+| EditMode 테스트 | **없음** | ❌ `com.unity.test-framework` 1.6.0 은 설치되어 있으나 `Assets/**` 에 **asmdef 가 0개**, 테스트 폴더도 없다. 인프라를 만들어야 한다 → IG-018 |
+
+**주의 — 새 `.cs` 는 `Assembly-CSharp.csproj` 의 `Compile` 목록에 없다.** 추가 후 첫 빌드는
+자기 namespace 에서 `CS0234` 로 실패한다. `<Compile Include="…" />` 를 넣고 다시 돌린다
+(`NVproject/CLAUDE.md`). 이 csproj 는 gitignore 되어 있고 Unity 가 재생성한다.
+
+**주의 — 클라이언트 컴파일 검증은 타입 체크일 뿐이다.** 플레이어를 빌드하지 않고 아무것도
+실행하지 않는다. `Shared` 를 바꿨으면 Unity 에디터가 그것을 컴파일하는지도 확인해야 한다.
+
+### 검증 전략 결정 (D-2)
+
+**순수 게임 로직의 자동 테스트는 `dotnet test` 로 한다.** LOOP §7.2 는 순수 로직에 Unity EditMode
+테스트를 요구하지만, 이 루프의 목적 자체가 그 로직을 **서버로 옮기는 것**이므로 옮긴 뒤의 로직은
+`NVserver/tests/Modules.Tests` 의 대상이 된다. Unity EditMode 테스트는 클라이언트에 남는
+**뷰 로직**(전문 → 이벤트 발화)에만 필요하고, 그 지점이 IG-018 이다. Unity 배치모드 테스트 실행은
+MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법") 컴파일 검증 + 서버 테스트를 주
+게이트로 삼는다.
+
+---
+
+## 메시지 카탈로그 (클라이언트 ↔ 서버)
+
+`ProtocolInfo.Version` = **2**. 업그레이드 전 검사이며 불일치는 426 으로 거절된다.
+
+### 현존 (코드 확인)
+
+| 메시지 | 방향 | 페이로드 | 권위 | 정의 위치 |
+|---|---|---|---|---|
+| `Input` `0x01` | C→S | `InputFrame` 7B × 최근 3틱 (buttons, moveX/Z, yaw, pitch) — **위치는 보내지 않는다** | 클라이언트 의도만 | `Shared/Contracts/Messages/InputFrame.cs` |
+| `Control` `0x02` | C→S | `ControlKind` (1 `StartMatch`, 3 `EndMatch`, 4 `ReturnToLobby`) + value | **요청**, 서버가 재판정 | `Shared/Contracts/Enums/ControlKind.cs` |
+| `Snapshot` `0x81` | S→C | `SnapshotHeader` 10B + `EntityState` 13B × N. 8인 = 114B. 매 틱, `Playing` 에서만 | 서버 | `Shared/Contracts/Messages/SnapshotHeader.cs` |
+| `Event` `0x82` + `EventKind.RoomState=1` | S→C | `RoomStateHeader` 15B (phase, host, seeker, outcome, startTick, **placementSeed**, count) + 명단 | 서버 | `Shared/Contracts/Messages/RoomStateMessage.cs` |
+| `Welcome` `0x83` | S→C | 13B (protocolVersion, playerId, serverTick, mapHash, tickRate) | 서버 | `Shared/Contracts/Messages/WelcomeMessage.cs` |
+
+`RoomState` 는 **알림이 아니라 전문**이다 — 2Hz + 변경 즉시, 멱등, 영구 반복. 한 번짜리 알림은
+세션의 `Bounded(32, DropOldest)` 채널이 버리는 프레임이 될 수 있고, 그 클라이언트는 로비 화면에
+영구히 남는다.
+
+### 신규 예정 (프로토콜 → **3**)
+
+| 메시지 | 방향 | 페이로드 | 권위 | 태스크 |
+|---|---|---|---|---|
+| `EventKind.MatchState=2` | S→C | 매치단계 u8, 남은시간 u16(0.1s), 삽입열쇠 u8, 탈출수 u8, 결과 u8, 인원 u8 + 참가자당 (playerId, 역할, 상태플래그, 피격수, 소지열쇠) | 서버 | IG-008 |
+| `EventKind.ObjectiveState=3` | S→C | 문(위치·yaw·개방) / 열쇠 위치 목록 / 장치(위치·yaw·타입·상태) / 제단 위치. ≈166B | 서버 | IG-011 |
+| `EntityFlags` 확장 | S→C | `Bleeding=1<<3`, `Seeker=1<<4`, `Escaped=1<<5`, `Frozen=1<<6`. `EntityState` 크기 13B 그대로 | 서버 | IG-009 |
+| `ButtonFlags.Interact=1<<4` | C→S | `All` 마스크 함께 수정. **대상 id 는 싣지 않는다** — 서버가 근접+시선을 재계산 | 서버 재판정 | IG-013 |
+| 삭제: `ControlKind.EndMatch=3` | — | 서버가 결과를 정하므로 방장 보고 경로가 사라진다. 값 3 은 비워 두고 주석 | — | IG-008 |
+| 삭제: `RoomStateHeader.PlacementSeed` | — | 와이어에서 뺀다 (술래에게 문 좌표가 새는 경로). `WireSize` 15 → 11 | — | IG-011 |
+
+**두 전문 모두 세션별 인코딩이 필요하다.** 역할별 필터링을 와이어에서 해야 하기 때문이다 —
+술래 사본에서는 열쇠 진행도와 문 좌표를 빼야 하고, 클라이언트에서 숨기면 디컴파일로 되살아난다.
+
+---
+
+## 태스크 백로그
+
+| ID | 제목 | 상태 | 우선순위 | 의존 | 요구사항 ID |
+|---|---|---|---|---|---|
+| IG-001 | 맵 이름·등록·export 정합성 복구 | TODO | P0 | - | R-0.1, R-0.2 |
+| IG-002 | `MapData` 격자 스키마 + 해시 + `DeterministicSequence` | TODO | P0 | IG-001 | R-0.3 |
+| IG-003 | 클라이언트 격자 export (`MapExport`·`INetworkMapSource`) | TODO | P0 | IG-002 | R-0.3 |
+| IG-004 | 서버 `MapGrid` 질의 + 테스트 | TODO | P0 | IG-003 | R-0.3 |
+| IG-005 | `MatchConstants` 분리 (`Shared`) + `GameConfig` 프로퍼티 대체 | TODO | P1 | IG-004 | R-1.x 전반 |
+| IG-006 | 서버 매치 단계·시계 (`Match.cs`) | TODO | P1 | IG-005 | R-1.3, R-1.4, R-1.6 |
+| IG-007 | 승리 조건 판정 | **BLOCKED** | P1 | IG-006 | R-1.5, R-6.6 |
+| IG-008 | `MatchState` 전문 + 역할별 필터 + 프로토콜 3 | TODO | P1 | IG-006 | R-1.3~R-1.5, R-9.x |
+| IG-009 | `EntityFlags` 확장 (Bleeding/Seeker/Escaped/Frozen) | TODO | P1 | IG-008 | R-2.2, R-4.1, R-5.1 |
+| IG-010 | 클라이언트 `MatchManager` → 뷰 전환 | TODO | P1 | IG-008 | R-1.3~R-1.5, R-9.x |
+| IG-011 | 목표물 배치 서버 이관 + `ObjectiveState` 전문 | TODO | P2 | IG-010 | R-2.3, R-6.3, R-6.4, R-7.1 |
+| IG-012 | 열쇠 습득·삽입·문 개방·탈출 판정 | TODO | P2 | IG-011 | R-6.1, R-6.2, R-6.5, R-6.7 |
+| IG-013 | `Interact` 입력 + 장치 사용 판정 | **BLOCKED** | P2 | IG-011 | R-7.2~R-7.7, R-4.3 |
+| IG-014 | 서버 발사체 + 피격 규칙 + 탄약 | TODO | P2 | IG-009 | R-3.1~R-3.6, R-2.1 |
+| IG-015 | 장치 파괴 (4발) | TODO | P3 | IG-013, IG-014 | R-7.8 |
+| IG-016 | 체인 드래그 서버 판정 | **BLOCKED** | P3 | IG-014 | R-3.7 |
+| IG-017 | 근접 보이스 시스템 | **BLOCKED** | P3 | - | R-8.1~R-8.3 |
+| IG-018 | Unity EditMode 테스트 인프라 (asmdef) | TODO | P2 | IG-010 | (검증 수단) |
+| IG-019 | 상수 정리·문서 갱신·죽은 경로 제거 | TODO | P4 | 전부 | (정리) |
+
+**배포 단위 주의:** IG-008 이 `ProtocolInfo.Version` 을 3 으로 올린다. 그 이후 IG-014 까지는
+**서버와 클라이언트를 같은 커밋에 배포**해야 한다 — 구버전 클라이언트는 426 으로 전부 거절되고
+WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
+
+---
+
+## 태스크 상세
+
+### IG-001 — 맵 이름·등록·export 정합성 복구
+- 상태: TODO
+- 기획서 근거: (선행 차단 요소, R-0.1·R-0.2) — 기획서 항목은 아니지만 인게임 전체를 막는다
+- 문제: `BackroomsMapGenerator.cs:113` 의 `MapName` 이 `"backrooms2f"`, `SessionSceneRouter` 는
+  `"backrooms"` → `SampleScene`, `appsettings.json` 에 `backrooms2f` 미등록,
+  `MapData/backrooms.json` 은 레거시 export(1367박스·±89.6m) — 현재 씬 지형은 735박스·±43.5m.
+  **로비로 방을 만들면 접속마다 맵 해시 불일치가 확정된다.**
+- 계획:
+  1. `BackroomsMapGenerator.MapName` 을 `"backrooms"` 로 바꾼다 (고칠 곳이 가장 적다 — 라우터
+     표와 `Game:Maps` 기본 항목이 이미 그 이름이다).
+  2. **Tools ▸ NV ▸ Map ▸ Export Map Collision** 을 `SampleScene` 에서 실행해
+     `MapData/backrooms.json` 을 현재 지형으로 덮는다.
+  3. 서버 기동 로그의 `맵 backrooms: … 박스 N개` 가 새 값인지 확인.
+  4. **레거시 삭제는 이 태스크에서 하지 않는다** → OQ-5 (확인 대기). `BackroomsMap.cs`,
+     `backrooms2f.json`, `arena.json`.
+- 변경 예정 파일: `NVproject/Assets/Scripts/BackroomsMapGenerator.cs`,
+  `NVserver/MapData/backrooms.json` (생성물)
+- 검증: `dotnet test --filter "FullyQualifiedName~ExportedMapTests"` + `dotnet build Assembly-CSharp.csproj`
+  + 두 클라이언트가 `SampleScene` 에서 맵 해시 `일치` 로그
+- 비고: 프로토콜 변경 없음. ADR 0001 이 허용하는 유일한 `SampleScene` 계열 변경이다.
+
+### IG-002 — `MapData` 격자 스키마 + 해시 + `DeterministicSequence`
+- 상태: TODO
+- 기획서 근거: R-0.3 — 서버가 "여기 설 수 있는가" 를 답해야 R-3.4·R-6.x·R-7.1 이 가능해진다
+- 계획: `Shared/Collision/MapData.cs` 에 `Grid { Floors, Width, Depth, CellSize, FloorHeight,
+  OriginX, OriginZ, Cells[] }` 추가. 셀당 1바이트 플래그 — `Standable`(격자 통행 가능),
+  `FreeFloor`(플레이어 캡슐이 실제로 들어감 = 계단·기물 제외), `StairLink`(위층 수직 연결).
+  세 개를 나누는 이유는 쓰임이 다르다: 열쇠는 `Standable`, 제단·순간이동 착지점은 `FreeFloor`,
+  `StairLink` 는 경로 탐색용. `ComputeHash` 에 격자를 포함시킨다 — 포함하지 않으면 격자가
+  어긋난 채 해시가 일치해 증상이 "가끔 열쇠가 벽 안에 생김" 으로만 나타난다.
+  `Shared/Simulation/DeterministicSequence.cs` 추가 (xorshift, 상태 명시) — 기존
+  `DeterministicRandom` 은 (틱,엔티티,salt)→값 무상태 해시라 *순서* 있는 난수를 못 만든다.
+- 변경 예정 파일: `Shared/Collision/MapData.cs`, `Shared/Simulation/DeterministicSequence.cs`,
+  `tests/Modules.Tests/Simulation/DeterministicSequenceTests.cs`
+- 검증: `dotnet test`
+- 비고: 해시가 바뀌므로 IG-003 과 **같은 배포 단위**. `DeterministicSequence` 를 초대 코드·방장
+  토큰에 쓰면 안 된다 — 그쪽은 `RandomNumberGenerator` (`conventions.md`).
+
+### IG-003 — 클라이언트 격자 export
+- 상태: TODO
+- 계획: `MapExport.BuildMapData` 가 `INetworkMapSource` 의 새 격자 질의를 호출. `FreeFloor` 는
+  `MatchManager.IsFreeFloor`(`MatchManager.cs:628-636`)와 **같은 캡슐**로 계산해야 한다 —
+  `feet + up*0.35` ~ `feet + up*1.5`, 반지름 0.32. 그 상수를 한 곳으로 모아 두 번 적지 않는다.
+  `TestRoomMap` 은 방 하나이므로 전부 `FreeFloor`.
+- 변경 예정 파일: `Net/MapExport.cs`, `Net/INetworkMapSource.cs`, `BackroomsMapGenerator.cs`,
+  `TestRoomMap.cs`, `MapData/*.json` (재생성)
+- 검증: `dotnet build Assembly-CSharp.csproj` + export 실행 + `ExportedMapTests`
+- 비고: Unity 물리가 필요한 판정을 **export 시점에 구워 넣는다.** 서버가 생성기 로직을 다시
+  구현하면 `structure.md` 가 금지하는 중복이 되고 씨드를 바꿀 때마다 두 곳이 갈린다.
+
+### IG-004 — 서버 `MapGrid` 질의 + 테스트
+- 상태: TODO
+- 계획: `Shared/Collision/MapGrid.cs` — `TryRandomPoint(ref seq, …)`,
+  `TryNearestFreeFloor(pos, …)`, `CellToWorld`, `FloorIndexAt`. `structure.md` 8문 표 1번
+  (클라이언트도 같은 계산을 하는가) → `Shared`.
+- 변경 예정 파일: `Shared/Collision/MapGrid.cs`,
+  `tests/Modules.Tests/Simulation/MapGridTests.cs`, `tests/Modules.Tests/Realtime/ExportedMapTests.cs`
+- 검증: `dotnet test` — 무작위 점이 항상 `FreeFloor`, 최근접 탐색이 벽을 반환하지 않음
+- 비고: 프로토콜 변경 없음. 여기까지는 클라이언트 동작 변화가 없어 되돌리기 쉽다.
+
+### IG-005 — `MatchConstants` 분리
+- 상태: TODO
+- 계획: 상수를 세 갈래로 나눈다. `GameConfig` 의 공유 필드는 **삭제하고** `MatchConstants` 를
+  읽는 프로퍼티로 대체한다 — 두 벌을 남기면 서버가 480초로, 클라이언트 HUD 가 에셋의 옛 값으로
+  세는 상태가 된다.
+
+  | 값 | 어디로 | 왜 |
+  |---|---|---|
+  | `matchDuration`, `roleRevealDuration`, `keysRequired`, `escapesToWin`, `runnerHitsToDie`, `seekerMagazine`, `doorUseRadius`, `escapeHoldTime`, `keyPickupRadius`, `keyInsertInterval`, `deviceUseRadius`, 쿨다운 전부 | `Shared/Simulation/MatchConstants.cs` | 클라이언트가 HUD·프롬프트·쿨다운을 예측해야 한다. 디컴파일되어도 무해 |
+  | `hitImmunity`, `deviceDestroyHits`, 배치 간격(4m·5m), 장치 조합표, 사망 시 열쇠 처리 | `RealtimeConstants.Match` | 판정이지 표시가 아니다 |
+  | `bloodSpacing`, `bloodLifetime`, `xrayWallAlpha`, `showDoorCompass`, `practiceRunners`, `localRole` | `GameConfig.asset` 유지 | 순수 표현 또는 오프라인 연습 전용 |
+- 변경 예정 파일: `Shared/Simulation/MatchConstants.cs`, `Modules/Realtime/RealtimeConstants.cs`,
+  `NVproject/Assets/Scripts/Game/GameConfig.cs`
+- 검증: `dotnet test` + `dotnet build Assembly-CSharp.csproj`
+
+### IG-006 — 서버 매치 단계·시계
+- 상태: TODO
+- 기획서 근거: §3, §8 (R-1.3, R-1.4, R-1.6)
+- 계획: `Modules/Realtime/Simulation/Match.cs`(상태·전이), `MatchRules.cs`(판정).
+  `RoomPhase` 는 건드리지 않는다 — 룸 생애(Waiting/Playing/Ended)와 매치 진행
+  (RoleReveal/Playing/Ended)은 다른 축이고 `Room.Advance` 가 이미 `Playing` 에서만 시뮬레이션한다.
+  매치 단계는 `RoomPhase.Playing` 안의 상태로 둔다. **리빌 중 정지는 단계 전이가 아니라 입력
+  무력화**로 구현한다 — `InputValidator.Neutral` 과 같은 방식으로 이동 성분만 0 으로 만들고
+  시선은 남긴다(`MatchManager.ApplyMovementLocks` 의 의도).
+- 변경 예정 파일: `Modules/Realtime/Simulation/Match.cs`, `MatchRules.cs`, `Room.cs`,
+  `tests/Modules.Tests/Realtime/MatchTests.cs`
+- 검증: `dotnet test` — 리빌이 끝나면 Playing 으로 간다 / 시계가 고정 틱으로 감소한다
+- 비고: **승리 조건은 IG-007 로 분리**했다. OQ-2·OQ-6 에 걸려 있어 이 태스크를 막지 않게 한다.
+
+### IG-007 — 승리 조건 판정
+- 상태: **BLOCKED** (OQ-2, OQ-6)
+- 기획서 근거: §3, §8
+- 차단 사유: 기획서 §8 은 술래 승리를 "2명 미만 탈출 / 시간 종료" 로만 정하고 **Runner 전멸
+  승리를 언급하지 않는다.** 구현에는 `MatchOutcome.SeekerWipedRunners` 와
+  `GameConfig.seekerWinsOnWipe: 1` 이 있다(`MatchManager.cs:339-347`). 또한 `escapesToWin` 이 2
+  인데 서버의 `MinPlayersToStart` 는 2 라, **2인 매치(Seeker 1 + Runner 1)에서는 Runner 승리가
+  구조적으로 불가능**하다. 둘 다 승패 규칙이므로 LOOP §6.4 에 따라 추측하지 않는다.
+- 비고: IG-006(단계·시계)은 이것 없이 진행 가능하다. 시간 종료 시 단계만 `Ended` 로 보내고
+  결과 코드는 이 태스크에서 채운다.
+
+### IG-008 — `MatchState` 전문 + 역할별 필터 + 프로토콜 3
+- 상태: TODO
+- 계획: `EventKind.MatchState=2`. `RoomState` 와 같은 성격 — **전문**, 2Hz + 변경 즉시, 멱등.
+  고정부: 단계 u8, 남은시간 u16(0.1초 단위 = 6553초까지), 삽입열쇠 u8, 탈출수 u8, 결과 u8,
+  인원 u8. 참가자당: playerId u8, 역할 u8, 상태플래그 u8, 피격수 u8, 소지열쇠 u8.
+  **세션별 인코딩** — 술래 사본에서는 삽입열쇠와 남의 소지열쇠를 0 으로 채운다(룰셋은 술래에게
+  열쇠 진행도를 알리지 않는다). `ControlKind.EndMatch=3` 을 제거하고 값을 비워 둔다.
+  `ProtocolInfo.Version` → 3.
+- 변경 예정 파일: `Shared/Contracts/Enums/EventKind.cs`, `ControlKind.cs`,
+  `Shared/Contracts/Messages/MatchStateMessage.cs`, `Shared/Serialization/MessageCodec.cs`,
+  `Shared/Contracts/Messages/ProtocolInfo.cs`, `Modules/Realtime/Simulation/Room.cs`,
+  `tests/Modules.Tests/Serialization/CodecRoundTripTests.cs`
+- 검증: `dotnet test` — 라운드트립 + **술래 사본에 열쇠 진행도가 실리지 않는다(인코딩 결과
+  바이트를 직접 본다)**
+- 비고: 여기서 프로토콜이 3 이 된다. IG-010 과 같은 배포 단위로 묶는다.
+
+### IG-009 — `EntityFlags` 확장
+- 상태: TODO
+- 계획: `Bleeding=1<<3`, `Seeker=1<<4`, `Escaped=1<<5`, `Frozen=1<<6`. 지금 3비트만 쓰고 5비트가
+  남는다. `EntityState` 크기 13B 그대로이고 스냅샷 대역폭도 그대로다. 출혈·역할은 원격 몸의
+  표현(피 흔적, 무기 유무)에 **매 틱** 필요하므로 2Hz 전문이 아니라 스냅샷에 있어야 한다.
+- 변경 예정 파일: `Shared/Contracts/Enums/EntityFlags.cs`,
+  `Shared/Simulation/StateProjection.cs`, `Modules/Realtime/Simulation/PlayerEntity.cs`,
+  `Net/RemotePlayerPuppet.cs`, `tests/Modules.Tests/Serialization/WireSizeTests.cs`
+- 검증: `dotnet test` — `EntityState.WireSize` 가 13 그대로
+
+### IG-010 — 클라이언트 `MatchManager` → 뷰 전환
+- 상태: TODO
+- 계획: `MatchManager` 가 심판에서 **뷰**로 바뀐다. `AcceptMatchState(in MatchStateMessage)`
+  하나가 단계·시계·역할·카운터를 받아 **기존 이벤트를 그대로 발화**한다 —
+  `PhaseChanged`, `KeysChanged`, `EscapesChanged`, `RolesAssigned`, `MatchEnded`. HUD·
+  `PlayerRoleLoadout`·`GameHudController` 는 그 이벤트를 구독하고 있으므로 **손대지 않는다.**
+  `EvaluateWinConditions`·`ResolvesOutcome`·`MatchSync.OnLocalMatchEnded`·
+  `NetSession.ReportMatchEnd` 제거. `_phaseTimer`/`TimeRemaining` 의 로컬 감소는 **남긴다** —
+  전문이 2Hz 라 그 사이를 메워야 HUD 시계가 튀지 않는다. 전문이 올 때마다 서버 값으로 덮는다.
+- 변경 예정 파일: `Game/MatchManager.cs`, `Net/Session/MatchSync.cs`, `Net/Session/NetSession.cs`,
+  `Net/NetworkClient.cs`
+- 검증: `dotnet build Assembly-CSharp.csproj` + **동기화 스모크 테스트** (로컬 서버 + 2 클라이언트,
+  두 화면의 단계·시계·탈출 수 일치를 관측해 기록)
+- 비고: `MatchManager.cs:350-361` 의 `AcceptOutcome` 주석이 *"규칙이 서버로 오면 이것이 매치가
+  끝나는 유일한 경로가 되고 `EvaluateWinConditions` 는 사라진다"* 고 이미 적어 두었다.
+
+### IG-011 — 목표물 배치 서버 이관 + `ObjectiveState` 전문
+- 상태: TODO
+- 기획서 근거: §6 (문 랜덤 위치·플레이어만 볼 수 있음), §5 (장치 8~9개)
+- 계획: `MatchRules` 가 `MapGrid` + `DeterministicSequence` 로 **제단 → 문 → 열쇠 → 장치** 순서로
+  배치한다. 순서와 간격(열쇠 4m·장치 5m 이격)은 `MatchManager.PlaceObjectives`(`:535-566`)의
+  것을 그대로 옮긴다 — 제단이 먼저인 이유("유일한 고정물이므로 나머지가 피해 간다")가 유효하다.
+  `EventKind.ObjectiveState=3`, 세션별 인코딩. **술래 사본에서는 문 블록을 아예 뺀다.** 열쇠는
+  전원 공통(룰셋상 술래가 열쇠를 보는 것이 지키는 전술을 만든다). `RoomStateHeader.PlacementSeed`
+  를 와이어에서 제거 → `WireSize` 15 → 11.
+- 변경 예정 파일: `Modules/Realtime/Simulation/MatchRules.cs`,
+  `Shared/Contracts/Messages/ObjectiveStateMessage.cs`, `MessageCodec.cs`, `RoomStateMessage.cs`,
+  `Game/MatchManager.cs`, `Game/KeyPickup.cs`, `Game/EscapeDoor.cs`
+- 검증: `dotnet test` + 스모크 — **술래 클라이언트에 문 좌표가 도달하지 않음**을 수신 바이트로 확인
+- 비고: **이 태스크가 R-2.3 의 정보 누출을 닫는다.** 전문 크기 ≈166B 이고 클라이언트 수신 버퍼가
+  512B(`NetworkClient.ReceiveBytes`)라 여유가 3배뿐 — 열쇠·장치 수를 늘리는 변경에서 가장 먼저
+  넘칠 자리다. 주기는 OQ-7(2Hz vs 5초+변경즉시) 확인 후 결정하되, 기본값 "변경 즉시 + 5초" 로
+  진행한다(AS-4).
+
+### IG-012 — 열쇠 습득·삽입·문 개방·탈출 판정
+- 상태: TODO
+- 기획서 근거: §3, §6
+- 계획: 열쇠 습득은 매 틱 거리 폴링 — 수평 `keyPickupRadius`, **수직 1.6m** (`KeyPickup.Update`
+  의 비대칭 허용치를 그대로 옮긴다. 위층이 아래층 열쇠를 빨아들이지 않게 하는 값이다).
+  삽입은 `Interact` + 반경 + `keyInsertInterval` + 소지 확인 — 한 곳에서 직렬화되므로 "두 Runner
+  가 동시에 10번째 열쇠를 넣는" 경우가 자동 해결된다. 탈출은 개방된 문간에서 `escapeHoldTime`
+  유지, 층 차이 2m 초과면 리셋. 클라이언트의 `KeyPickup.Update` 거리 폴링과
+  `MatchManager.TryPickUpKey` 호출을 삭제하고 회전·상하 진동만 남긴다.
+- 변경 예정 파일: `Modules/Realtime/Simulation/MatchRules.cs`, `Match.cs`,
+  `Game/KeyPickup.cs`, `Game/MatchManager.cs`, `tests/Modules.Tests/Realtime/MatchTests.cs`
+- 검증: `dotnet test` + 스모크 (두 클라이언트가 같은 삽입 수를 본다)
+- 비고: `Interact` 비트 자체는 IG-013 에 있으나 그 태스크가 BLOCKED 이므로, 이 태스크에서
+  `ButtonFlags.Interact` 만 먼저 추가한다(장치 사용 판정은 넣지 않는다).
+
+### IG-013 — `Interact` 입력 + 장치 사용 판정
+- 상태: **BLOCKED** (OQ-1)
+- 기획서 근거: §5.1, §5.2, §5.3
+- 차단 사유: 기획서 §5.2 는 1:1 순간이동을 **"술래 전용 장치"**(다회, 쿨타임 12초)로 명시한다.
+  룰셋(`ruleset.md:70,76`)은 같은 장치를 **"shared across all Runners"** 로 서술하고, 구현은
+  `GameConfig.seekerCanActivateDevices: 0` 으로 **술래의 장치 사용을 아예 금지**한다. 기획서가
+  SSOT 1순위이므로 기획서가 이기지만, 기획서를 따르면 장치 시스템의 접근 제어가 뒤집힌다
+  (술래가 장치를 쓸 수 있어야 하고, 12초 쿨다운의 공유 범위가 달라진다). 게임플레이 영향이
+  크므로 §6.4 에 따라 추측하지 않는다.
+
+### IG-014 — 서버 발사체 + 피격 규칙 + 탄약
+- 상태: TODO
+- 기획서 근거: §4.1, §4.3, §2.1
+- 계획: **클라이언트는 이미 발사를 보내고 있다** — `NetworkBootstrap.Sample` 이
+  `_controller.FireHeld` 를 `ButtonFlags.Fire` 로 싣고 `InputValidator.Sanitize` 가 통과시키고
+  서버는 **그것을 무시한다.** 이 태스크는 그 비트를 소비하는 일이다.
+  룸이 발사체 목록을 들고 매 틱 진행시킨다. 판정은 `Shared/Collision/Raycaster` 의 **스윕** —
+  120m/s 면 한 틱에 4m 를 가므로 위치 검사는 0.25m 벽을 즉시 통과한다. 발사체가 실체이므로
+  **비행에는 되감기가 필요 없다**; 되감기는 발사 순간의 사수 위치에만 필요하고 200ms 상한
+  (플레이어당 6틱 이력)이 걸린다. 방향은 눈 위치 + yaw/pitch — 그 둘은 이미 `InputFrame` 에 있다.
+  피격 규칙은 `MatchManager.ReportHit`(`:392-423`)을 그대로 옮긴다: Runner 만 대상,
+  `hitImmunity` 0.75초, 1방 → 출혈 + 무작위 순간이동, 2방 → 사망 + 사망 지점에 열쇠 흘리기.
+  탄약(매거진 3·발사 간격·재장전)은 `MatchConstants`(공유)에 둬야 HUD 가 예측된다.
+  클라이언트: `Bullet` 은 순수 표현이 되고 `SendMessageUpwards("OnHit")`·`PlayerAgent.OnHit` 제거.
+- 변경 예정 파일: `Modules/Realtime/Simulation/MatchRules.cs`, `Projectile.cs`, `Room.cs`,
+  `Game/PlayerAgent.cs`, `Bullet.cs`, `WeaponController.cs`, `tests/…/MatchRulesTests.cs`
+- 검증: `dotnet test` — 무적 창 안의 2발이 죽이지 않는다 / 2방이 죽인다 / 사망 시 열쇠가
+  흘려진다 / **빠른 탄이 벽을 통과하지 않는다(클라이언트가 100,000m/s 로 검증한 것과 같은 테스트)**
+  / 발사율 위반 거절. + 스모크로 **부정 클라이언트가 피격을 거부할 수 없음**
+- 비고: **이 태스크가 R-3.1 의 구멍을 닫는다.** 히트마커가 "벽에도 뜬다" 는 기존 미결 항목이
+  여기서 자연히 해결된다 — 서버가 명중을 알린 시점에 뜨게 된다.
+
+### IG-015 — 장치 파괴 (4발)
+- 상태: TODO
+- 기획서 근거: §5.3
+- 계획: 발사체가 장치 AABB 에 맞으면 `deviceDestroyHits` 4 를 센다. 장치는 클라이언트에서 유일하게
+  콜라이더를 가진 목표물이므로 서버도 장치를 충돌체로 등록한다. **문과 열쇠는 콜라이더가 없다 —
+  서버도 그렇게 둔다** (문에 콜라이더를 주면 술래가 허공에 부딪혀 문을 찾는다).
+- 검증: `dotnet test`
+
+### IG-016 — 체인 드래그 서버 판정
+- 상태: **BLOCKED** (OQ-4)
+- 기획서 근거: §4.3
+- 차단 사유: 규칙(3발 소진 → 제단으로 끌려가 3초 정지 후 재장전)은 서버 판정이 맞지만, 현재
+  구현은 `NavMesh.CalculatePath` 로 최단 보행 경로를 구하고 그 **경로 길이로 견인을 페이싱**한다.
+  서버에는 navmesh 가 없다. 선택지가 (1) 직선 견인 — 측정된 연출("31개 코너·399m 경로 대 55m
+  직선")이 사라진다, (2) 격자 A\* — `Shared` 에 A\* 가 들어온다, `StairLink` 가 층 연결을 답한다,
+  (3) 위치만 클라이언트 권위 — 이동 권위에 예외를 만들어 권하지 않는다. 되돌리기 어려운
+  두 갈래이므로 §5.4 에 따라 확인 후 진행한다. 서버 인터페이스(잠금 + 목표 지점 + 소요 시간)는
+  1·2 가 같으므로 1 로 시작해 2 로 올릴 수 있다.
+
+### IG-017 — 근접 보이스 시스템
+- 상태: **BLOCKED** (OQ-3)
+- 기획서 근거: §7 전체
+- 차단 사유: 갭 매트릭스에서 유일하게 `NONE` 인 영역이다 (`microphone`/`webrtc`/`opus` 전체
+  grep 0건). 기획서 §7.1~§7.3 은 거리 기반 음성을 요구하고 §7.4 는 옵션으로 표시한다.
+  현재 아키텍처는 `System.Net.WebSockets` 원시 사용 + **NuGet 금지** + 모듈 추가 시 확인
+  필요이고, WebGL 클라이언트에서 마이크 캡처와 실시간 음성 릴레이는 새 전송 계층을 요구한다
+  (WebRTC/SFU 또는 오디오 프레임 릴레이). 아키텍처 결정이므로 확인 없이 진행하지 않는다.
+- 비고: 범위 축소(§7.4 옵션 제외) 또는 `DEFERRED` 가 현실적 결론일 수 있다.
+
+### IG-018 — Unity EditMode 테스트 인프라
+- 상태: TODO
+- 계획: `Assets/**` 에 asmdef 가 0개다. 런타임 asmdef 하나 + EditMode 테스트 asmdef 하나를 만들고
+  `Packages/manifest.json` 에 `testables` 를 추가한다. 대상은 클라이언트에 **남는** 뷰 로직 —
+  전문 → 이벤트 발화(IG-010 의 `AcceptMatchState`)가 첫 테스트다.
+- 검증: 테스트가 실제로 실행되고 통과하는 명령줄을 확정해 명령 카탈로그에 기록
+- 비고: asmdef 추가는 `Assembly-CSharp` 의 구성을 바꾸므로 컴파일 검증 명령이 함께 바뀔 수 있다.
+  D-2 에 따라 순수 로직은 `dotnet test` 가 담당하므로 이 태스크의 범위는 좁다.
+
+### IG-019 — 상수 정리·문서 갱신·죽은 경로 제거
+- 상태: TODO
+- 계획: `architecture.md` 기본값 대체표에 "클라이언트가 규칙을 판정 → 서버가 판정하고 전문으로
+  내려보낸다", 와이어 포맷 표에 `MatchState`·`ObjectiveState`, 프로토콜 3. `conventions.md` 에
+  이번에 확정한 규칙(역할별 필터링은 와이어에서 한다 / 씨드 공유 배치는 정보가 새므로 좌표를
+  내려보낸다 / Unity 물리가 필요한 판정은 export 시점에 구워 넣는다). `NVproject/CLAUDE.md` 의
+  "히트·열쇠·탈출은 여전히 각 클라이언트가 판정한다" 가 거짓이 되므로 함께 고친다.
+  루트 `CLAUDE.md` 의 **"137 tests"** 도 실제 173개로 고친다.
+- 검증: `dotnet build` 경고 0 + 전체 테스트
+
+---
+
+## 결정 로그 (DECISIONS)
+
+| 날짜 | 결정 | 사유 | ADR |
+|---|---|---|---|
+| 2026-08-03 | `SampleScene` 을 복제하지 않고 제자리에서 쓴다 | 씬이 이미 프로덕션 진입점이고(라우터가 라우팅), 오브젝트 9개짜리 런타임 생성 포인터라 옮길 로직이 없다. 복제하면 정합성 사고를 한 벌 더 만든다 | [0001](adr/0001-scene-strategy.md) |
+| 2026-08-03 | 순수 게임 로직 검증은 `dotnet test`, Unity EditMode 는 뷰 로직만 | 루프의 목적이 그 로직을 서버로 옮기는 것이므로, 옮긴 뒤 로직은 `Modules.Tests` 대상이다. Unity 배치모드 테스트는 MCP 환경에서 취약하다 | — (D-2, 위 명령 카탈로그) |
+| 2026-08-03 | 승리 조건(IG-007)을 매치 단계·시계(IG-006)에서 분리 | 승리 조건이 OQ-2·OQ-6 에 걸려 있어, 묶어 두면 상태 머신 전체가 차단된다 | — |
+| 2026-08-03 | `match-authority-plan.md` 를 이 루프의 구현 계획 근거로 채택 | 이미 코드 인용 기반으로 Phase 0~6 을 정리해 두었다. 백로그는 그것을 LOOP §6 단위로 쪼갠 것이다 | — |
+
+## 가정 (ASSUMPTIONS)
+
+| ID | 가정한 내용 | 근거 | 영향 범위 | 확인 필요 |
+|---|---|---|---|---|
+| AS-1 | 룰셋 `NVproject/.claude/skills/game-rules/references/ruleset.md` 를 기획서의 **수치 보충 소스**로 쓴다 | LOOP §2 의 SSOT 표에 없지만, 기획서가 비워 둔 값(매치 시간·무적 창·삽입 간격 등)을 이 문서와 `GameConfig.asset` 이 이미 정해 두었다. 여기서 가져오는 것은 §9 가 금지하는 "창작" 이 아니다. **기획서와 충돌하면 기획서가 이긴다**(OQ-1 이 그 경우) | 전체 | 예 — SSOT 순위 확인 |
+| AS-2 | 매치 시간 480초(8분) | 룰셋 "Match duration 8:00 (tune)", `GameConfig.asset:matchDuration 480`. 기획서 §8 은 "시간 종료" 만 말하고 값을 주지 않는다 | IG-005, IG-006 | 아니오 (AS-1 로 커버) |
+| AS-3 | 역할 리빌 4초, 각종 연출 시간은 `GameConfig.asset` 의 현재 값 | 기획서에 없고 게임플레이 영향이 작은 연출 값 → §6.4 의 "합리적 기본값" | IG-005, IG-006 | 아니오 |
+| AS-4 | `ObjectiveState` 전문 주기 = 변경 즉시 + 5초 | 2Hz 면 8인 룸에서 166B×2×8 ≈ 2.6KB/s 가 더 붙는다. 변경이 드문 블록이므로 낮추는 편이 낫다 | IG-011 | 예 → OQ-7 |
+| AS-5 | 장치 조합표(`AddTime`,`FullMapView`,`StopBleeding`,`FreezeAndXray`,`SeekerCameraView`,`Teleport`×2,`FullMapView`,`StopBleeding`)를 그대로 서버로 옮긴다 | 룰셋이 "the mix of effects is a level-design choice" 로 위임하고 `MatchManager.PlaceDevices`(`:644-668`)가 이미 정해 두었다 | IG-011 | 아니오 |
+
+## 미해결 질문 (OPEN_QUESTIONS)
+
+| ID | 질문 | 차단 중인 태스크 | 제안 옵션 |
+|---|---|---|---|
+| OQ-1 | **1:1 순간이동 장치는 술래 전용인가?** 기획서 §5.2 는 "술래 전용 장치"(다회, 쿨타임 12초)로 명시하는데, 룰셋 #6 은 "shared across all Runners" 라 하고 구현은 `seekerCanActivateDevices: 0` 으로 술래의 장치 사용을 금지한다 | IG-013 | (a) 기획서대로 — 술래 전용, 12초는 술래의 개인 쿨다운 (b) 룰셋대로 — Runner 공용, 12초 전역 락아웃 (c) 둘 다 — 술래는 §5.2 텔레포트, Runner 는 §5.1 5종 |
+| OQ-2 | **Runner 전멸이 술래의 즉시 승리인가?** 기획서 §8 은 "2명 미만 탈출 / 시간 종료" 만 말하고 전멸 승리가 없다. 구현에는 `MatchOutcome.SeekerWipedRunners` + `seekerWinsOnWipe: 1` 이 있다 | IG-007 | (a) 즉시 승리 유지 (현재 구현) (b) 기획서대로 제거 — 전멸 후에도 시간 종료를 기다린다 (탈출이 불가능하므로 결과는 같고 대기만 남는다) |
+| OQ-3 | **근접 보이스(§7)의 범위와 기술을 어떻게 정하는가?** 유일한 `NONE` 영역이고 NuGet 금지·모듈 추가 확인 필요 제약에 걸린다 | IG-017 | (a) `DEFERRED` — 인게임 규칙 이관을 먼저 끝낸다 (b) WebRTC(브라우저 기본) + 서버는 시그널링만 (c) 오디오 프레임을 기존 WebSocket 으로 릴레이 |
+| OQ-4 | **체인 드래그의 경로 방식?** 서버에 navmesh 가 없다 | IG-016 | (a) 직선 견인 — 가장 가볍고 연출이 사라진다 (b) **격자 A\*** — `StairLink` 가 층 연결을 답한다, 연출이 거의 같다 (권장) (c) 1 로 시작해 2 로 올린다 |
+| OQ-5 | **레거시 파일을 삭제해도 되는가?** `BackroomsMap.cs`(+`.meta`) — 어느 씬도 참조하지 않음, `MapData/backrooms2f.json`, `MapData/arena.json` — 등록도 참조도 없음 | IG-001 (삭제 부분만) | (a) 삭제 (b) 남긴다 — 이름 통일만 하고 파일은 둔다 |
+| OQ-6 | **2인 매치에서 Runner 승리가 불가능한 것이 의도인가?** `escapesToWin` 2, `MinPlayersToStart` 2 → Seeker 1 + Runner 1 이면 탈출 2명을 만들 수 없다 | IG-007 | (a) 최소 인원을 3 으로 올린다 (b) `escapesToWin` 을 인원에 따라 정한다 (c) 의도된 것 — 2인은 개발용 조합일 뿐 |
+| OQ-7 | `ObjectiveState` 전문 주기 — 2Hz 인가 "변경 즉시 + 5초" 인가 | (차단 아님, AS-4 로 진행) | (a) 변경 즉시 + 5초 (권장, AS-4) (b) 2Hz — 대역폭 +2.6KB/s |
+
+---
+
+## 다음 이터레이션
+
+**IG-001 — 맵 이름·등록·export 정합성 복구** (P0, 의존 없음).
+BLOCKED 4건(IG-007, IG-013, IG-016, IG-017)은 OQ-1·2·3·4·6 의 답을 기다린다. 나머지 15개는
+의존 순서대로 진행 가능하다.
