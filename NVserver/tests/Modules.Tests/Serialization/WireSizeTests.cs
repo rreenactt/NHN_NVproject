@@ -37,5 +37,24 @@ namespace NV.Modules.Tests.Serialization
         {
             Assert.Equal(27, MessageCodec.InputWireSize(3));
         }
+
+        [Fact]
+        public void 룸_상태_고정부는_15바이트다()
+        {
+            Assert.Equal(15, RoomStateHeader.WireSize);
+        }
+
+        [Fact]
+        public void 제어는_3바이트다()
+        {
+            Assert.Equal(3, ControlMessage.WireSize);
+        }
+
+        /// 세션 수신·송신 버퍼가 이 값보다 커야 한다. 넘으면 접속이 끊긴다.
+        [Fact]
+        public void 여덟명_룸_상태_최대는_127바이트다()
+        {
+            Assert.Equal(127, MessageCodec.RoomStateMaxWireSize(8));
+        }
     }
 }

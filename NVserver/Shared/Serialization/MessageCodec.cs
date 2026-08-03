@@ -20,6 +20,13 @@ namespace NV.Shared.Serialization
             return 6 + (InputFrame.WireSize * frameCount);
         }
 
+        /// 이름이 전부 상한까지 찬 최악의 경우. 송신 버퍼는 이 크기로 잡는다.
+        public static int RoomStateMaxWireSize(int maxPlayers)
+        {
+            return RoomStateHeader.WireSize
+                + ((RoomPlayerEntry.FixedWireSize + ProtocolInfo.MaxDisplayNameBytes) * maxPlayers);
+        }
+
         public static MessageOpcode ReadOpcode(ReadOnlySpan<byte> source)
         {
             if (source.Length < 1)
@@ -193,6 +200,162 @@ namespace NV.Shared.Serialization
             }
 
             return frameCount;
+        }
+
+        public static int WriteRoomState(
+            Span<byte> destination,
+            RoomStateHeader header,
+            ReadOnlySpan<RoomPlayerEntry> players)
+        {
+            if (players.Length != header.PlayerCount)
+            {
+                throw new ArgumentException("헤더의 PlayerCount 와 명단 길이가 다르다.", nameof(players));
+            }
+
+            var writer = new BitWriter(destination);
+            writer.WriteByte((byte)MessageOpcode.Event);
+            writer.WriteByte((byte)EventKind.RoomState);
+            writer.WriteByte((byte)header.Phase);
+            writer.WriteByte(header.HostPlayerId);
+            writer.WriteByte(header.SeekerPlayerId);
+            writer.WriteByte(header.Outcome);
+            writer.WriteUInt32(header.StartTick);
+            writer.WriteUInt32(unchecked((uint)header.PlacementSeed));
+            writer.WriteByte(header.PlayerCount);
+
+            for (var index = 0; index < players.Length; index++)
+            {
+                var player = players[index];
+                var name = player.Name ?? string.Empty;
+
+                if (name.Length > ProtocolInfo.MaxDisplayNameBytes)
+                {
+                    throw new ArgumentException(
+                        $"표시 이름이 {ProtocolInfo.MaxDisplayNameBytes} 바이트를 넘는다: {name.Length}",
+                        nameof(players));
+                }
+
+                writer.WriteByte(player.PlayerId);
+                writer.WriteByte((byte)name.Length);
+
+                for (var position = 0; position < name.Length; position++)
+                {
+                    var character = name[position];
+
+                    // 이름은 서버가 ASCII 로 걸러 저장한다. 여기까지 온 비ASCII 는
+                    // 그 필터가 빠진 경로가 있다는 뜻이므로 조용히 잘라 보내지 않는다.
+                    if (character > 0x7F)
+                    {
+                        throw new ArgumentException("표시 이름에 ASCII 가 아닌 문자가 있다.", nameof(players));
+                    }
+
+                    writer.WriteByte((byte)character);
+                }
+            }
+
+            return writer.BytesWritten;
+        }
+
+        /// 읽은 명단 길이를 반환한다.
+        public static int ReadRoomState(
+            ReadOnlySpan<byte> source,
+            out RoomStateHeader header,
+            Span<RoomPlayerEntry> players)
+        {
+            var reader = new BitReader(source);
+            var opcode = (MessageOpcode)reader.ReadByte();
+            if (opcode != MessageOpcode.Event)
+            {
+                throw new InvalidOperationException($"Event 가 아니다: 0x{(byte)opcode:X2}");
+            }
+
+            var kind = (EventKind)reader.ReadByte();
+            if (kind != EventKind.RoomState)
+            {
+                throw new InvalidOperationException($"RoomState 가 아니다: {kind}");
+            }
+
+            var phase = (RoomPhase)reader.ReadByte();
+            var hostPlayerId = reader.ReadByte();
+            var seekerPlayerId = reader.ReadByte();
+            var outcome = reader.ReadByte();
+            var startTick = reader.ReadUInt32();
+            var placementSeed = unchecked((int)reader.ReadUInt32());
+            var playerCount = reader.ReadByte();
+
+            if (players.Length < playerCount)
+            {
+                throw new ArgumentException($"명단 {playerCount} 줄을 담을 공간이 없다.", nameof(players));
+            }
+
+            Span<char> scratch = stackalloc char[ProtocolInfo.MaxDisplayNameBytes];
+
+            for (var index = 0; index < playerCount; index++)
+            {
+                var playerId = reader.ReadByte();
+                var nameLength = reader.ReadByte();
+
+                if (nameLength > ProtocolInfo.MaxDisplayNameBytes)
+                {
+                    throw new InvalidOperationException($"표시 이름 길이가 범위를 벗어났다: {nameLength}");
+                }
+
+                for (var position = 0; position < nameLength; position++)
+                {
+                    scratch[position] = (char)reader.ReadByte();
+                }
+
+                var name = nameLength == 0
+                    ? string.Empty
+                    : new string(scratch.Slice(0, nameLength));
+
+                players[index] = new RoomPlayerEntry(playerId, name);
+            }
+
+            header = new RoomStateHeader(
+                phase,
+                hostPlayerId,
+                seekerPlayerId,
+                outcome,
+                startTick,
+                placementSeed,
+                playerCount);
+
+            return playerCount;
+        }
+
+        public static int WriteControl(Span<byte> destination, ControlMessage message)
+        {
+            var writer = new BitWriter(destination);
+            writer.WriteByte((byte)MessageOpcode.Control);
+            writer.WriteByte((byte)message.Kind);
+            writer.WriteByte(message.Value);
+            return writer.BytesWritten;
+        }
+
+        /// 신뢰할 수 없는 입력이다. 정의되지 않은 종류는 여기서 거른다 —
+        /// 룸이 알 수 없는 요청을 받아 분기 밖으로 떨어지는 경로를 만들지 않는다.
+        public static ControlMessage ReadControl(ReadOnlySpan<byte> source)
+        {
+            var reader = new BitReader(source);
+            var opcode = (MessageOpcode)reader.ReadByte();
+            if (opcode != MessageOpcode.Control)
+            {
+                throw new InvalidOperationException($"Control 이 아니다: 0x{(byte)opcode:X2}");
+            }
+
+            var kind = (ControlKind)reader.ReadByte();
+            var value = reader.ReadByte();
+
+            if (kind != ControlKind.StartMatch
+                && kind != ControlKind.Leave
+                && kind != ControlKind.EndMatch
+                && kind != ControlKind.ReturnToLobby)
+            {
+                throw new InvalidOperationException($"정의되지 않은 제어 종류다: {(byte)kind}");
+            }
+
+            return new ControlMessage(kind, value);
         }
     }
 }

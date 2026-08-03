@@ -132,6 +132,112 @@ namespace NV.Modules.Tests.Serialization
         }
 
         [Fact]
+        public void 룸_상태는_라운드트립한다()
+        {
+            // 이름 없음·짧은 이름·상한까지 찬 이름을 한 전문에 섞는다.
+            var players = new[]
+            {
+                new RoomPlayerEntry(0, "host"),
+                new RoomPlayerEntry(3, string.Empty),
+                new RoomPlayerEntry(7, new string('W', ProtocolInfo.MaxDisplayNameBytes)),
+            };
+
+            var header = new RoomStateHeader(
+                RoomPhase.Playing,
+                hostPlayerId: 0,
+                seekerPlayerId: 7,
+                outcome: 0,
+                startTick: 4_000_000_000u,
+                placementSeed: int.MinValue,
+                playerCount: (byte)players.Length);
+
+            var buffer = new byte[MessageCodec.RoomStateMaxWireSize(8)];
+            var written = MessageCodec.WriteRoomState(buffer, header, players);
+
+            var decodedPlayers = new RoomPlayerEntry[8];
+            var count = MessageCodec.ReadRoomState(buffer, out var decodedHeader, decodedPlayers);
+
+            // 고정부 + (2+4) + (2+0) + (2+12) = 37B
+            Assert.Equal(RoomStateHeader.WireSize + 22, written);
+            Assert.Equal(players.Length, count);
+            Assert.Equal(header.Phase, decodedHeader.Phase);
+            Assert.Equal(header.HostPlayerId, decodedHeader.HostPlayerId);
+            Assert.Equal(header.SeekerPlayerId, decodedHeader.SeekerPlayerId);
+            Assert.Equal(header.StartTick, decodedHeader.StartTick);
+
+            // 씨드가 라운드트립하지 않으면 클라이언트마다 문이 다른 곳에 생긴다.
+            Assert.Equal(header.PlacementSeed, decodedHeader.PlacementSeed);
+
+            for (var index = 0; index < players.Length; index++)
+            {
+                Assert.Equal(players[index].PlayerId, decodedPlayers[index].PlayerId);
+                Assert.Equal(players[index].Name, decodedPlayers[index].Name);
+            }
+        }
+
+        [Fact]
+        public void 빈_룸_상태도_라운드트립한다()
+        {
+            var header = new RoomStateHeader(
+                RoomPhase.Waiting,
+                RoomStateHeader.NoPlayer,
+                RoomStateHeader.NoPlayer,
+                outcome: 0,
+                startTick: 0u,
+                placementSeed: 0,
+                playerCount: 0);
+
+            var buffer = new byte[MessageCodec.RoomStateMaxWireSize(8)];
+            var written = MessageCodec.WriteRoomState(buffer, header, Array.Empty<RoomPlayerEntry>());
+            var count = MessageCodec.ReadRoomState(buffer, out var decoded, new RoomPlayerEntry[8]);
+
+            Assert.Equal(RoomStateHeader.WireSize, written);
+            Assert.Equal(0, count);
+            Assert.Equal(RoomPhase.Waiting, decoded.Phase);
+            Assert.Equal(RoomStateHeader.NoPlayer, decoded.HostPlayerId);
+        }
+
+        [Fact]
+        public void 이름_길이_상한을_넘는_룸상태는_거부한다()
+        {
+            // 손상된 길이를 그대로 신뢰하면 버퍼를 넘겨 읽는다.
+            var buffer = new byte[MessageCodec.RoomStateMaxWireSize(8)];
+            MessageCodec.WriteRoomState(
+                buffer,
+                new RoomStateHeader(RoomPhase.Waiting, 0, RoomStateHeader.NoPlayer, 0, 0u, 0, 1),
+                new[] { new RoomPlayerEntry(0, "ab") });
+
+            // 고정부 15B 다음이 playerId, 그 다음이 nameLength 다.
+            buffer[RoomStateHeader.WireSize + 1] = 200;
+
+            Assert.Throws<InvalidOperationException>(
+                () => MessageCodec.ReadRoomState(buffer, out _, new RoomPlayerEntry[8]));
+        }
+
+        [Fact]
+        public void 제어는_라운드트립한다()
+        {
+            var buffer = new byte[ControlMessage.WireSize];
+            var written = MessageCodec.WriteControl(buffer, new ControlMessage(ControlKind.EndMatch, 3));
+
+            var decoded = MessageCodec.ReadControl(buffer);
+
+            Assert.Equal(ControlMessage.WireSize, written);
+            Assert.Equal(ControlKind.EndMatch, decoded.Kind);
+            Assert.Equal(3, decoded.Value);
+        }
+
+        [Fact]
+        public void 정의되지_않은_제어는_거부한다()
+        {
+            var buffer = new byte[ControlMessage.WireSize];
+            MessageCodec.WriteControl(buffer, new ControlMessage(ControlKind.StartMatch, 0));
+            buffer[1] = 99;
+
+            Assert.Throws<InvalidOperationException>(() => MessageCodec.ReadControl(buffer));
+        }
+
+        [Fact]
         public void 바이트정렬된_16비트_기록은_리틀엔디언이다()
         {
             var buffer = new byte[2];
