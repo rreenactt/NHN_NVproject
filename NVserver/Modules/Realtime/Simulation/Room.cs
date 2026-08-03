@@ -161,11 +161,12 @@ namespace NV.Realtime.Simulation
 
         public float RevealSecondsRemaining => _match.RevealSecondsRemaining;
 
-        /// 문에 들어간 열쇠 수. **전문과 달리 걸러지지 않은 실제 값이다** — 진단과 테스트용이고,
-        /// 세션으로 나가는 값은 `BroadcastMatchState` 가 역할별로 인코딩한다.
-        public int MatchKeysInserted => _match.KeysInserted;
-
-        public bool MatchDoorOpen => _match.DoorOpen;
+        /// 진행 중인 매치. **걸러지지 않은 실제 값을 들고 있다** — 세션으로 나가는 값은
+        /// `BroadcastMatchState` 가 역할별로 인코딩한다.
+        ///
+        /// `Objectives` 와 같은 이유로 `internal` 이다. 모듈 밖으로는 나가지 않고, 테스트가
+        /// 룸을 돌려 놓고 판정 결과를 확인하는 창구다.
+        internal Match Match => _match;
 
         /// 이 매치의 목표물 배치. 틱 루프에서만 조회한다.
         ///
@@ -262,6 +263,15 @@ namespace NV.Realtime.Simulation
                 // 플레이어가 다음 틱까지 줍지 못한다.
                 PickUpKeys();
                 InsertKeys();
+                TickEscapes();
+
+                // **와이어 상태는 판정 뒤에 만든다.** 이동 안에서 만들면 이 틱의 판정이 세운
+                // 플래그가 다음 틱 스냅샷에나 나간다 — 탈출은 33ms 늦게 사라지고, 출혈
+                // (IG-014)도 같은 만큼 늦는다. 틱 N 의 스냅샷은 틱 N 이 끝난 상태여야 한다.
+                foreach (var player in _players.Values)
+                {
+                    ProjectWire(player);
+                }
 
                 // 매치 시계는 이동을 처리한 뒤에 올린다. 먼저 올리면 시간이 0 이 된 틱의
                 // 입력이 버려지고, 그 한 틱이 마지막 탈출을 판정하는 틱일 수 있다.
@@ -442,8 +452,9 @@ namespace NV.Realtime.Simulation
                 // 다른 곳이 남는다.
                 (byte)_match.KeysInserted,
 
-                // 탈출 수는 아직 서버가 세지 않는다 → IG-012c.
-                0,
+                // 탈출 수는 **Seeker 도 받는다.** 자기가 막아야 하는 수이므로 코덱이 거르지
+                // 않는다 — 숨기는 것은 목표의 위치와 진행도다(기획서 §2.1).
+                (byte)_match.Escapes,
                 _outcome,
                 (byte)count);
 
@@ -638,6 +649,14 @@ namespace NV.Realtime.Simulation
                 }
             }
 
+        }
+
+        /// 이 몸의 와이어 표현을 다시 만든다. **틱의 마지막 단계다.**
+        ///
+        /// 이동과 나누어 둔 이유는 순서다 — 목표물 판정(`TickEscapes` 등)이 세우는 플래그가
+        /// 같은 틱의 스냅샷에 실려야 한다.
+        private void ProjectWire(PlayerEntity player)
+        {
             player.MatchFlags = MatchFlagsFor(player);
             player.Wire = StateProjection.ToEntityState(player.PlayerId, player.State, player.MatchFlags);
         }
@@ -661,6 +680,11 @@ namespace NV.Realtime.Simulation
             if (_match.MovementLocked)
             {
                 flags |= EntityFlags.Frozen;
+            }
+
+            if (player.Escaped)
+            {
+                flags |= EntityFlags.Escaped;
             }
 
             return flags;
@@ -698,7 +722,9 @@ namespace NV.Realtime.Simulation
 
                 foreach (var player in _players.Values)
                 {
-                    if (RoleOf(player.PlayerId) != MatchRole.Runner)
+                    // 빠져나간 사람은 판정에서 빠진다. 몸은 남아 있으므로(승리 조건이 명단을
+                    // 세어야 한다) 좌표만으로는 걸러지지 않는다.
+                    if (RoleOf(player.PlayerId) != MatchRole.Runner || player.Escaped)
                     {
                         continue;
                     }
@@ -766,7 +792,7 @@ namespace NV.Realtime.Simulation
                     continue;
                 }
 
-                if (RoleOf(player.PlayerId) != MatchRole.Runner)
+                if (RoleOf(player.PlayerId) != MatchRole.Runner || player.Escaped)
                 {
                     continue;
                 }
@@ -814,6 +840,63 @@ namespace NV.Realtime.Simulation
                         _match.KeysInserted,
                         MatchConstants.KeysRequired);
                 }
+            }
+        }
+
+        /// 탈출을 판정한다. 기획서 §3 — 열린 문간에 `EscapeHoldTime` 동안 머물면 빠져나간다.
+        ///
+        /// **문을 만지는 것이 아니라 서 있는 것이다.** 유지 시간이 목표의 마지막 한 걸음을
+        /// Seeker 가 끊을 수 있는 순간으로 만든다 — 즉시 탈출이면 문이 열리는 순간 매치가 끝난다.
+        ///
+        /// **거리 판정을 삽입과 같은 함수로 한다**(`IsWithinDoorRange`). 클라이언트는 두 값을
+        /// 달리 썼는데(삽입 프롬프트 2.5m, 탈출 판정 2.0m) 그것은 **"서 있으라고 표시된 자리에
+        /// 서 있는데 아무 일도 안 일어나는" 구간**을 0.5m 만들어 둔 것이었다. 같은 질문에는
+        /// 같은 답을 쓴다(AS-11).
+        private void TickEscapes()
+        {
+            // 문이 닫혀 있으면 아무도 나갈 수 없다. 열려 있어야 문간이 존재한다.
+            if (_match.Phase != MatchPhase.Playing || !_objectives.Placed || !_match.DoorOpen)
+            {
+                return;
+            }
+
+            foreach (var player in _players.Values)
+            {
+                if (player.Escaped)
+                {
+                    continue;
+                }
+
+                if (RoleOf(player.PlayerId) != MatchRole.Runner
+                    || !IsWithinDoorRange(player.State.Position))
+                {
+                    // 벗어나면 처음부터다. 누적이면 문 앞을 스쳐 지나가는 것만으로 탈출한다.
+                    player.EscapeHoldTicks = 0;
+                    continue;
+                }
+
+                player.EscapeHoldTicks++;
+
+                if (player.EscapeHoldTicks < Match.EscapeHoldTicks)
+                {
+                    continue;
+                }
+
+                player.Escaped = true;
+
+                // 들고 있던 열쇠는 함께 나간다. 맵에 되돌리지 않는다 — 되돌리면 문이 이미
+                // 열린 뒤이므로 아무도 쓸 수 없는 열쇠가 복도에 생긴다.
+                player.CarriedKeys = 0;
+
+                _match.RegisterEscape();
+                _matchStateDirty = true;
+
+                _logger.LogInformation(
+                    "룸 {RoomId} 플레이어 {PlayerId}: 탈출했다. {Escapes}/{Needed}.",
+                    RoomId,
+                    player.PlayerId,
+                    _match.Escapes,
+                    MatchConstants.EscapesToWin);
             }
         }
 
@@ -1032,6 +1115,10 @@ namespace NV.Realtime.Simulation
                 // 로비에서 누른 E 가 매치 첫 틱에 발동하지 않게 한다. `NextInsertTick` 은
                 // 되돌리지 않는다 — 틱 카운터가 이어지므로 지난 매치의 값은 항상 과거다.
                 player.InteractRequested = false;
+
+                // 지난 매치에 빠져나간 사람이 이번 매치를 탈출한 상태로 시작하지 않게 한다.
+                player.Escaped = false;
+                player.EscapeHoldTicks = 0;
             }
 
             Volatile.Write(ref _phase, (int)RoomPhase.Playing);

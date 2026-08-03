@@ -53,6 +53,20 @@ namespace NV.Realtime.Simulation
         /// 죽으면 떨어뜨려 다시 맵으로 돌아간다(IG-014).
         public int CarriedKeys { get; set; }
 
+        /// 열린 문간을 빠져나갔는가. 기획서 §3 의 탈출이다.
+        ///
+        /// 몸을 지우지 않는다. 스냅샷에 `EntityFlags.Escaped` 로 실려 클라이언트가 감추고
+        /// (`PlayerAgent.SetPresent(false)`), 승리 조건이 아직 명단을 세어야 한다 —
+        /// 서버에서 빼면 전멸 판정이 탈출을 사망으로 셀 수 있다.
+        public bool Escaped { get; set; }
+
+        /// 문간에 연달아 머문 틱 수. 문에서 벗어나면 0 으로 돌아간다.
+        ///
+        /// **누적이 아니라 연속이어야 한다.** 누적이면 문 앞을 여러 번 스쳐 지나가는 것으로도
+        /// 탈출이 성립하고, Seeker 가 끊을 수 있는 순간을 만들려던 `EscapeHoldTime` 의 의미가
+        /// 사라진다.
+        public int EscapeHoldTicks { get; set; }
+
         /// 이번 틱에 상호작용(E)을 요청했는가.
         ///
         /// **엣지다. 한 틱만 산다** — 목표물 판정이 읽고 즉시 지운다. 눌린 상태로 들고 있으면

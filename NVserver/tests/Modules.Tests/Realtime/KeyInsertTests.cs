@@ -125,21 +125,29 @@ namespace NV.Modules.Tests.Realtime
             world.InsertAll();
 
             Assert.Equal(MatchConstants.KeysRequired, world.KeysInserted());
-            Assert.True(world.Room.MatchDoorOpen);
+            Assert.True(world.Room.Match.DoorOpen);
         }
 
         /// 문턱을 넘은 뒤에는 세지 않는다. 더 세면 HUD 가 "13/10" 을 그린다.
+        ///
+        /// **소지 수는 삽입이 끝난 직후에 본다.** 이 플레이어는 열린 문간에 서 있으므로
+        /// `EscapeHoldTicks`(24틱) 를 채우면 탈출하고 그때 소지 열쇠가 0 이 된다(IG-012c) —
+        /// 뒤에서 확인하면 "넣지 못했다" 와 "들고 나갔다" 를 구별할 수 없다.
         [Fact]
         public void 열린_문에는_더_넣지_않는다()
         {
             var world = Insertable(keys: MatchConstants.KeysRequired + 3);
 
             world.InsertAll();
+
+            Assert.Equal(MatchConstants.KeysRequired, world.KeysInserted());
+            Assert.Equal(3, world.CarriedKeys());
+
+            // 열린 문에 한 번 더 요청한다. 삽입 수가 늘지 않아야 한다.
             world.Advance(Match.InsertIntervalTicks);
             world.Interact();
 
             Assert.Equal(MatchConstants.KeysRequired, world.KeysInserted());
-            Assert.Equal(3, world.CarriedKeys());
         }
 
         /// 문이 열린 틱에 목표물 전문이 나가야 한다. 5초 주기만 기다리면 그동안 Runner 가
@@ -290,7 +298,7 @@ namespace NV.Modules.Tests.Realtime
                 }
             }
 
-            public int KeysInserted() => Room.MatchKeysInserted;
+            public int KeysInserted() => Room.Match.KeysInserted;
 
             public int CarriedKeys()
             {

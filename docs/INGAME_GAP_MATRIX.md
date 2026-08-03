@@ -93,7 +93,7 @@
 | R-6.3 | §6 문은 랜덤 위치 생성 | **`DONE`** (IG-011a·b·c2) — 서버가 배치하고 좌표를 역할별로 걸러 내려보내며 클라이언트가 그것을 받아 그린다 | `ObjectivePlacement`, `WriteObjectiveState`, `MatchManager.AcceptObjectiveState` | 필요 ✅ | 필요 ✅ |
 | R-6.4 | §6 플레이어만 볼 수 있음 | **`DONE`** (IG-011b·c3) — R-2.3 과 같은 경로로 닫혔다 | `WriteObjectiveState`, `RoomStateMessage` | 필요 ✅ | 필요 ✅ |
 | R-6.5 | §6 열쇠 10개 삽입 시 개방 | **`DONE`** (IG-012b2·b3) | `Match.DoorOpen`(삽입 수에서 유도), `WriteObjectiveState` 의 `doorOpen` — **문 블록 안에 있어 Seeker 사본에는 실리지 않는다**; 클라이언트는 `NetworkClient.ObjectiveDoorOpen` → `AcceptObjectiveProgress` 로 매 프레임 멱등하게 적용한다 | **서버** ✅ | ✅ `ObjectiveState` 의 문 블록 |
-| R-6.6 | §3 2명 이상 탈출 시 승리 | `PARTIAL` | `MatchManager.cs:296-328` (문간 0.8초 유지) | 필요 | 필요 |
+| R-6.6 | §3 2명 이상 탈출 시 승리 | **탈출 감지 서버 판정 `DONE`** (IG-012c1); **승리 판정은 BLOCKED** (IG-007 ← OQ-2·OQ-6) | `Room.TickEscapes`, `Match.Escapes`·`EscapeHoldTicks`, `EntityFlags.Escaped`; 클라이언트 적용은 IG-012c2 | **서버** ✅ (세는 것) | ✅ `MatchState.escapes` — **Seeker 도 받는다** |
 | R-6.7 | (룰셋) 사망 시 소지 열쇠 흘리기 | `PARTIAL` | `MatchManager.cs:703-722` | 필요 | 필요 |
 
 ## 7. 맵 이벤트 (장치)

@@ -33,6 +33,12 @@ namespace NV.Realtime.Simulation
         /// 재적용에서 같은 결과를 주지 않는다.
         public const int InsertIntervalTicks = (int)(MatchConstants.KeyInsertInterval * SimConstants.TickRate);
 
+        /// 열린 문간에 머물러야 탈출로 인정되는 시간(틱). 0.8초 × 30Hz = 24.
+        ///
+        /// 즉시 탈출이 아닌 이유는 목표의 마지막 한 걸음을 Seeker 가 끊을 수 있는 순간으로
+        /// 만들기 위해서다(`MatchConstants.EscapeHoldTime`).
+        public const int EscapeHoldTicks = (int)(MatchConstants.EscapeHoldTime * SimConstants.TickRate);
+
         private MatchPhase _phase = MatchPhase.Lobby;
         private int _revealTicksRemaining;
         private int _matchTicksRemaining;
@@ -51,6 +57,14 @@ namespace NV.Realtime.Simulation
         /// 따로 필드를 두면 "열쇠는 10개인데 문은 닫혀 있다" 가 표현 가능한 상태가 되고,
         /// 그 상태에 빠지는 경로를 찾는 일이 남는다.
         public bool DoorOpen => KeysInserted >= MatchConstants.KeysRequired;
+
+        /// 탈출한 Runner 수.
+        ///
+        /// **이것은 Seeker 도 안다** — 자기가 막아야 하는 수이고, 코덱이 거르지 않는다
+        /// (`MatchParticipant.Escapes` 아니라 `MatchStateHeader.Escapes`). 열쇠 진행도와 다른
+        /// 취급인 이유는 기획서 §2.1 이 숨기는 것이 **목표의 위치와 진행도**이고, 몇 명이
+        /// 빠져나갔는지는 술래가 세고 있어야 하는 값이기 때문이다.
+        public int Escapes { get; private set; }
 
         /// 매치 시계의 남은 틱. `Playing` 이전에는 전체 길이이고, `Ended` 에서는 0 이다.
         public int MatchTicksRemaining => _matchTicksRemaining;
@@ -85,6 +99,7 @@ namespace NV.Realtime.Simulation
             _revealTicksRemaining = RevealTicks;
             _matchTicksRemaining = MatchTicks;
             KeysInserted = 0;
+            Escapes = 0;
         }
 
         /// 열쇠 하나가 문에 들어갔다. **이 삽입으로 문이 열렸으면 true.**
@@ -102,6 +117,16 @@ namespace NV.Realtime.Simulation
 
             KeysInserted++;
             return DoorOpen;
+        }
+
+        /// Runner 한 명이 빠져나갔다.
+        ///
+        /// **승리 판정은 하지 않는다.** 기획서 §3 은 `EscapesToWin` 명이 탈출하면 Runner 승리라고
+        /// 하지만, 2인 매치에서는 그 수를 만들 수 없고(OQ-6) 전멸 승리의 유무도 정해지지
+        /// 않았다(OQ-2). 세는 것과 이기는 것을 나눠 두면 그 답이 왔을 때 IG-007 이 이 값을 읽는다.
+        public void RegisterEscape()
+        {
+            Escapes++;
         }
 
         /// 한 틱 진행한다. 이 틱에 매치가 끝났으면 `true` 다.
@@ -158,6 +183,7 @@ namespace NV.Realtime.Simulation
             _revealTicksRemaining = 0;
             _matchTicksRemaining = 0;
             KeysInserted = 0;
+            Escapes = 0;
         }
     }
 }
