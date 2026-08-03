@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using NV.Realtime.Simulation;
+using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
 using NV.Shared.Simulation;
@@ -43,11 +44,31 @@ namespace NV.Realtime.Transport
                 return;
             }
 
-            var roomId = ReadRoomId(context.Request.Query);
-            var room = rooms.GetOrCreate(roomId);
-            if (room is null)
+            var roomId = context.Request.Query[ProtocolInfo.RoomQueryKey].ToString();
+
+            if (!RoomRegistry.IsValidRoomId(roomId))
             {
+                // 형식이 어긋난 코드는 없는 방과 구분해서 알려 준다. 오타와 만료를
+                // 같은 응답으로 묶으면 화면에서 다시 갈라낼 방법이 없다.
                 context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                return;
+            }
+
+            // 없는 코드로는 방이 생기지 않는다. 예전에는 이 자리에서 룸이 만들어졌고,
+            // 그것이 초대 코드 모델과 정면으로 어긋나는 지점이었다.
+            if (!rooms.TryGet(roomId, out var room))
+            {
+                logger.LogInformation("없는 룸 {RoomId} 으로의 접속을 거부했다.", roomId);
+                context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                return;
+            }
+
+            // 진행 중 합류는 거부한다. 비대칭 매치 중간에 들어오면 역할도 목표물 배치도
+            // 이미 정해져 있어 규칙이 성립하지 않는다.
+            if (room.Phase != RoomPhase.Waiting)
+            {
+                logger.LogInformation("룸 {RoomId} 이 {Phase} 단계라 접속을 거부했다.", roomId, room.Phase);
+                context.Response.StatusCode = (int)HttpStatusCode.Conflict;
                 return;
             }
 
@@ -57,6 +78,12 @@ namespace NV.Realtime.Transport
                 context.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
                 return;
             }
+
+            // 방장 자격은 업그레이드 전에 확인한다. 이 뒤로는 토큰을 다시 보지 않으며,
+            // 시작 권한은 "그 세션이 방장 세션인가" 로만 판정한다 — 매 요청에 토큰을
+            // 요구하면 방장이 나갔을 때 남은 사람에게 줄 토큰이 없어 승계가 막힌다.
+            var isHost = rooms.IsHostToken(roomId, context.Request.Query[ProtocolInfo.TokenQueryKey].ToString());
+            var displayName = DisplayName.Sanitize(context.Request.Query[ProtocolInfo.NameQueryKey].ToString());
 
             System.Net.WebSockets.WebSocket socket;
             try
@@ -74,12 +101,17 @@ namespace NV.Realtime.Transport
             var session = new GameSession(sessionId, playerId, roomId, socket);
             sessions.Add(session);
 
-            logger.LogInformation("세션 {SessionId} 입장. 룸 {RoomId}, 플레이어 {PlayerId}", sessionId, roomId, playerId);
+            logger.LogInformation(
+                "세션 {SessionId} 입장. 룸 {RoomId}, 플레이어 {PlayerId}, 방장 {IsHost}",
+                sessionId,
+                roomId,
+                playerId,
+                isHost);
 
             try
             {
                 SendWelcome(session, room);
-                room.PostCommand(RoomCommand.Join(session.SessionId, session.PlayerId));
+                room.PostCommand(RoomCommand.Join(session.SessionId, session.PlayerId, displayName, isHost));
 
                 var send = session.RunSendPumpAsync(context.RequestAborted);
                 var receive = session.RunReceivePumpAsync(room, logger, context.RequestAborted);
@@ -121,12 +153,6 @@ namespace NV.Realtime.Transport
             version = 0;
             var raw = query[ProtocolInfo.VersionQueryKey].ToString();
             return ushort.TryParse(raw, out version);
-        }
-
-        private static string ReadRoomId(IQueryCollection query)
-        {
-            var raw = query[ProtocolInfo.RoomQueryKey].ToString();
-            return string.IsNullOrEmpty(raw) ? RealtimeConstants.Rooms.DefaultRoomId : raw;
         }
     }
 }

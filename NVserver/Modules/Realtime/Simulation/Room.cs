@@ -47,7 +47,7 @@ namespace NV.Realtime.Simulation
         private readonly WorldMap _map;
         private readonly NetworkConditionSimulator _network;
         private readonly ILogger _logger;
-        private readonly bool _requiresHost;
+        private readonly bool _isStatic;
 
         private uint _tick;
         private int _playerCount;
@@ -72,13 +72,13 @@ namespace NV.Realtime.Simulation
             WorldMap map,
             NetworkConditionSimulator network,
             ILogger logger,
-            bool requiresHost = true)
+            bool isStatic = false)
         {
             RoomId = roomId;
             _map = map;
             _network = network;
             _logger = logger;
-            _requiresHost = requiresHost;
+            _isStatic = isStatic;
         }
 
         public string RoomId { get; }
@@ -94,8 +94,8 @@ namespace NV.Realtime.Simulation
 
         public int PlayerCount => Volatile.Read(ref _playerCount);
 
-        /// 방장이 없어도 시작할 수 있는 룸. 설정으로 미리 열어 둔 개발용 룸이 그렇다.
-        public bool RequiresHost => _requiresHost;
+        /// 설정으로 미리 열어 둔 룸. 방장이 없고 비어도 회수되지 않는다.
+        public bool IsStatic => _isStatic;
 
         /// 정원이 찼으면 false. 슬롯은 접속 스레드가 예약하고 틱 루프가 반납한다.
         /// 반납을 접속 스레드에서 하면 퇴장 커맨드가 적용되기 전에 같은 PlayerId 가
@@ -520,7 +520,7 @@ namespace NV.Realtime.Simulation
         /// 개발용 룸이 그 경우다 — 코드를 발급받는 경로가 없으므로 방장도 없다.
         private bool IsAuthorized(int sessionId)
         {
-            if (!_requiresHost)
+            if (_isStatic)
             {
                 return true;
             }

@@ -53,10 +53,10 @@ namespace NV.Modules.Tests.Realtime
 
         public static Room Create(
             NetworkConditionSimulator? network = null,
-            bool requiresHost = true,
+            bool isStatic = false,
             string roomId = "test")
         {
-            return new Room(roomId, Map(), network ?? NoConditions(), NullLogger.Instance, requiresHost);
+            return new Room(roomId, Map(), network ?? NoConditions(), NullLogger.Instance, isStatic);
         }
 
         /// 세션 1..count 를 playerId 0..count-1 로 넣고 방장(세션 1)이 매치를 시작한다.

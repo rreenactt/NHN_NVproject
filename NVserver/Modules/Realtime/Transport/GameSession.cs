@@ -126,12 +126,65 @@ namespace NV.Realtime.Transport
         {
             var payload = new ReadOnlySpan<byte>(buffer, 0, length);
 
-            if (MessageCodec.ReadOpcode(payload) != MessageOpcode.Input)
+            switch (MessageCodec.ReadOpcode(payload))
             {
-                // 서버 발신 opcode 나 미정의 값. 조작된 프레임일 수 있으므로 조용히 버린다.
+                case MessageOpcode.Input:
+                    DispatchInput(payload, room, logger);
+                    break;
+
+                case MessageOpcode.Control:
+                    DispatchControl(payload, room, logger);
+                    break;
+
+                default:
+                    // 서버 발신 opcode 나 미정의 값. 조작된 프레임일 수 있으므로 조용히 버린다.
+                    break;
+            }
+        }
+
+        /// 제어 요청을 룸 커맨드로 옮긴다.
+        ///
+        /// 자격은 여기서 보지 않는다. 방장인지, 지금 단계에서 가능한 전이인지는
+        /// 룸이 틱 경계에서 판단한다 — 그 판단에 필요한 상태를 틱 루프만 소유하므로
+        /// 여기서 미리 걸러 봐야 한 틱 뒤의 진실과 어긋날 수 있다.
+        private void DispatchControl(ReadOnlySpan<byte> payload, Room room, ILogger logger)
+        {
+            ControlMessage message;
+
+            try
+            {
+                message = MessageCodec.ReadControl(payload);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+            {
+                logger.LogDebug(exception, "세션 {SessionId}: 손상된 제어 메시지.", SessionId);
                 return;
             }
 
+            switch (message.Kind)
+            {
+                case ControlKind.StartMatch:
+                    room.PostCommand(RoomCommand.Start(SessionId));
+                    break;
+
+                case ControlKind.EndMatch:
+                    room.PostCommand(RoomCommand.EndMatch(SessionId, message.Value));
+                    break;
+
+                case ControlKind.ReturnToLobby:
+                    room.PostCommand(RoomCommand.ReturnToLobby(SessionId));
+                    break;
+
+                case ControlKind.Leave:
+                    // 퇴장 커맨드는 접속이 끝날 때 한 곳에서 나간다. 여기서 또 보내면
+                    // 같은 세션의 퇴장이 두 번 처리되어 남의 슬롯을 반납할 수 있다.
+                    RequestDisconnect("클라이언트 퇴장 요청");
+                    break;
+            }
+        }
+
+        private void DispatchInput(ReadOnlySpan<byte> payload, Room room, ILogger logger)
+        {
             Span<InputFrame> frames = stackalloc InputFrame[ProtocolInfo.MaxInputFramesPerMessage];
             uint tick;
             int count;

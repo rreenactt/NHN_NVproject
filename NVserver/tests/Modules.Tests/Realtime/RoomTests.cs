@@ -305,9 +305,9 @@ namespace NV.Modules.Tests.Realtime
         }
 
         [Fact]
-        public void 방장이_필요없는_룸은_아무나_시작한다()
+        public void 정적_룸은_방장_없이_아무나_시작한다()
         {
-            var room = RoomFixture.Create(requiresHost: false);
+            var room = RoomFixture.Create(isStatic: true);
 
             room.PostCommand(RoomCommand.Join(1, 0));
             room.PostCommand(RoomCommand.Join(2, 1));

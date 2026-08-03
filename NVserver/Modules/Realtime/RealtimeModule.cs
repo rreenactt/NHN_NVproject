@@ -11,8 +11,9 @@ namespace NV.Realtime
     /// 모듈의 유일한 공개 조립 지점. Api 는 이 둘만 호출한다.
     /// 서비스로 추출할 때 새 진입점에서 같은 호출을 그대로 쓴다.
     ///
-    /// WorldMap 은 Api 가 등록한다. 파일 IO 는 컴포지션 루트의 일이고
-    /// 클라이언트도 같은 맵을 로드하므로 타입은 Shared 에 있다.
+    /// `RoomMaps` 와 `StaticRooms` 는 Api 가 등록한다. 둘 다 설정과 파일 IO 에서
+    /// 나오며 그것은 컴포지션 루트의 일이다. 맵 타입이 `Shared` 에 있는 이유는
+    /// 클라이언트도 같은 맵을 로드하기 때문이다.
     public static class RealtimeModule
     {
         public static IServiceCollection AddRealtime(

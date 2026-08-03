@@ -45,10 +45,9 @@ namespace NV.Realtime.Simulation
 
             // 로드된 맵을 전부 남긴다. 클라이언트가 보고할 해시와 대조할 대상이며,
             // 룸별로 다른 맵을 쓰므로 하나만 찍으면 어느 쪽과 비교해야 할지 알 수 없다.
-            LogMap("기본", _maps.Fallback);
-            foreach (var pair in _maps.ByRoom)
+            foreach (var pair in _maps.ByMap)
             {
-                LogMap("룸 " + pair.Key, pair.Value);
+                LogMap(pair.Key, pair.Value);
             }
 
             if (_network.Enabled)
@@ -85,11 +84,11 @@ namespace NV.Realtime.Simulation
             _logger.LogInformation("틱 루프 종료.");
         }
 
-        private void LogMap(string label, WorldMap map)
+        private void LogMap(string mapId, WorldMap map)
         {
             _logger.LogInformation(
-                "맵 {Label}: {MapName} 해시 {MapHash:X8} 박스 {BoxCount}개 스폰 {SpawnCount}개",
-                label,
+                "맵 {MapId}: {MapName} 해시 {MapHash:X8} 박스 {BoxCount}개 스폰 {SpawnCount}개",
+                mapId,
                 map.Name,
                 map.Hash,
                 map.Collision.BoxCount,
@@ -104,6 +103,10 @@ namespace NV.Realtime.Simulation
         {
             _serverTick++;
             _transport.BeginTick(_serverTick);
+
+            // 회수를 먼저 한다. 이 틱에 사라질 룸을 진행시킬 이유가 없고,
+            // 순회 중에 목록이 바뀌는 것도 피한다.
+            _rooms.Sweep(_serverTick);
 
             foreach (var room in _rooms.All)
             {
