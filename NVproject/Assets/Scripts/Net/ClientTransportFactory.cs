@@ -1,5 +1,7 @@
+using System.Text;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Transport;
+using UnityEngine.Networking;
 
 namespace NV.Client.Net
 {
@@ -21,16 +23,36 @@ namespace NV.Client.Net
 
         /// scheme 은 배포 환경에서 반드시 wss 다. HTTPS 페이지의 ws:// 는
         /// mixed content 로 차단되고, 증상은 접속 실패 로그 하나로만 나타난다.
-        public static string BuildUrl(string host, string room, bool secure)
+        ///
+        /// 방장 토큰은 접속할 때 한 번만 실린다. 서버는 이 토큰으로 방장 세션을
+        /// 표시하고 그 뒤로는 다시 보지 않는다 — 매 요청에 토큰을 요구하면 방장이
+        /// 나갔을 때 남은 사람에게 줄 토큰이 없어 승계가 막힌다.
+        public static string BuildUrl(string host, string room, bool secure, string hostToken, string displayName)
         {
-            var scheme = secure ? "wss" : "ws";
-            var roomPart = string.IsNullOrEmpty(room)
-                ? string.Empty
-                : "&" + ProtocolInfo.RoomQueryKey + "=" + room;
+            var url = new StringBuilder(128);
 
-            return scheme + "://" + host + "/ws?"
-                + ProtocolInfo.VersionQueryKey + "=" + ProtocolInfo.Version
-                + roomPart;
+            url.Append(secure ? "wss" : "ws").Append("://").Append(host).Append("/ws?");
+            url.Append(ProtocolInfo.VersionQueryKey).Append('=').Append(ProtocolInfo.Version);
+
+            if (!string.IsNullOrEmpty(room))
+            {
+                url.Append('&').Append(ProtocolInfo.RoomQueryKey).Append('=').Append(room);
+            }
+
+            if (!string.IsNullOrEmpty(hostToken))
+            {
+                url.Append('&').Append(ProtocolInfo.TokenQueryKey).Append('=').Append(hostToken);
+            }
+
+            if (!string.IsNullOrEmpty(displayName))
+            {
+                // 이름은 사용자 입력이다. 인코딩하지 않으면 공백이나 & 가 쿼리를 쪼갠다.
+                // 서버도 다시 걸러내지만, 여기서 깨지면 걸러낼 값 자체가 달라진다.
+                url.Append('&').Append(ProtocolInfo.NameQueryKey).Append('=')
+                    .Append(UnityWebRequest.EscapeURL(displayName));
+            }
+
+            return url.ToString();
         }
 
         public static void Connect(IClientTransport transport, string url)

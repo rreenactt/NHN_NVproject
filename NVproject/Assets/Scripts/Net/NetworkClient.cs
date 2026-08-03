@@ -48,7 +48,13 @@ namespace NV.Client.Net
 
         private readonly byte[] _receive = new byte[ReceiveBytes];
         private readonly byte[] _send = new byte[MessageCodec.InputWireSize(ProtocolInfo.MaxInputFramesPerMessage)];
+        private readonly byte[] _control = new byte[ControlMessage.WireSize];
         private readonly EntityState[] _entities = new EntityState[SnapshotBuffer.MaxEntities];
+
+        /// 룸 명단. 서버가 2Hz 로 보내는 전문을 그대로 담는다.
+        private readonly RoomPlayerEntry[] _roster = new RoomPlayerEntry[SnapshotBuffer.MaxEntities];
+        private readonly RoomPlayerEntry[] _rosterIncoming = new RoomPlayerEntry[SnapshotBuffer.MaxEntities];
+        private int _rosterCount;
 
         /// 최근 입력 프레임. 손실 대비로 매 메시지에 여러 틱치를 함께 싣는다.
         private readonly InputFrame[] _history = new InputFrame[ProtocolInfo.MaxInputFramesPerMessage];
@@ -101,13 +107,55 @@ namespace NV.Client.Net
 
         public IInputSource InputSource { get; set; }
 
+        /// <summary>마지막 스냅샷을 받은 시각(unscaled). 0 이면 아직 하나도 받지 않았다.</summary>
+        public float LastSnapshotAt { get; private set; }
+
+        /// <summary>스냅샷 도착 간격의 이동 평균(초). 30Hz 면 0.033 근처여야 한다.</summary>
+        public float SnapshotInterval { get; private set; }
+
+        /// <summary>관측된 최대 간격(초). 손실과 지터가 여기에 남는다.</summary>
+        public float SnapshotIntervalMax { get; private set; }
+
+        /// <summary>마지막 수신 이후 지난 시간(초). 끊김을 눈으로 보는 값이다.</summary>
+        public float SinceLastSnapshot =>
+            LastSnapshotAt <= 0f ? 0f : Time.unscaledTime - LastSnapshotAt;
+
+        /// <summary>서버가 보낸 마지막 룸 상태 전문. 로비 화면과 매치 시작이 이것만 본다.</summary>
+        public RoomStateHeader RoomState { get; private set; }
+
+        public bool HasRoomState { get; private set; }
+
+        /// <summary>명단 길이. 항목은 <see cref="RosterEntry"/> 로 꺼낸다.</summary>
+        public int RosterCount => _rosterCount;
+
+        /// <summary>룸의 단계. 전문을 받기 전에는 대기로 본다 — 아직 매치가 아니다.</summary>
+        public RoomPhase Phase => HasRoomState ? RoomState.Phase : RoomPhase.Waiting;
+
+        /// <summary>내가 방장인가. 서버는 "너는 방장이다" 를 따로 보내지 않는다.</summary>
+        public bool IsLocalHost => HasRoomState && HasWelcome && RoomState.HostPlayerId == LocalPlayerId;
+
+        public RoomPlayerEntry RosterEntry(int index)
+        {
+            return _roster[index];
+        }
+
         public event Action WelcomeReceived;
+
+        /// 룸 상태가 실제로 바뀌었을 때만 부른다. 전문은 2Hz 로 계속 오지만
+        /// 그때마다 UI 를 다시 만들면 로비에서 초당 두 번 트리를 새로 짓는다.
+        public event Action RoomStateChanged;
 
         /// 접속이 끊기거나 실패했을 때. 씬은 이 신호로 원격 몸을 지운다.
         public event Action Ended;
 
         /// 접속을 시작한다. 핸드셰이크 완료를 기다리지 않는다 — WebGL 은 블로킹할 수 없다.
-        public void Connect(string host, string room, bool secure, float interpolationDelay)
+        public void Connect(
+            string host,
+            string room,
+            bool secure,
+            float interpolationDelay,
+            string hostToken = null,
+            string displayName = null)
         {
             if (_transport != null)
             {
@@ -117,7 +165,7 @@ namespace NV.Client.Net
             Snapshots = new SnapshotBuffer(interpolationDelay);
             _transport = ClientTransportFactory.Create();
 
-            var url = ClientTransportFactory.BuildUrl(host, room, secure);
+            var url = ClientTransportFactory.BuildUrl(host, room, secure, hostToken, displayName);
             Endpoint = url;
             LastError = null;
             State = ConnectionState.Connecting;
@@ -139,9 +187,14 @@ namespace NV.Client.Net
 
             _transport = null;
             HasWelcome = false;
+            HasRoomState = false;
+            _rosterCount = 0;
             _historyCount = 0;
             _tickAccumulator = 0f;
             _stateElapsed = 0f;
+            LastSnapshotAt = 0f;
+            SnapshotInterval = 0f;
+            SnapshotIntervalMax = 0f;
             State = ConnectionState.Disconnected;
 
             if (wasActive)
@@ -162,10 +215,25 @@ namespace NV.Client.Net
             Receive();
             Advance();
 
-            if (State == ConnectionState.Playing)
+            // 룸이 진행 단계일 때만 입력을 보낸다. 대기 중에 보내면 서버가 버리므로
+            // 동작은 같지만, 로비 화면에서 30Hz 로 프레임을 밀어 넣을 이유가 없다.
+            if (State == ConnectionState.Playing && Phase == RoomPhase.Playing)
             {
                 SendInput();
             }
+        }
+
+        /// 룸에 요청을 보낸다. 자격 판정은 서버가 한다 — 방장이 아닌 클라이언트가
+        /// 시작을 눌러도 조용히 무시되며, 그 판단을 여기서 미리 하지 않는다.
+        public bool SendControl(ControlKind kind, byte value = 0)
+        {
+            if (_transport == null || !_transport.IsConnected)
+            {
+                return false;
+            }
+
+            var length = MessageCodec.WriteControl(_control, new ControlMessage(kind, value));
+            return _transport.TrySend(new ReadOnlySpan<byte>(_control, 0, length), Reliability.Reliable);
         }
 
         /// 단계 전이와 실패 판정. 여기 한 곳에서만 State 를 바꾼다 —
@@ -273,10 +341,79 @@ namespace NV.Client.Net
                     ReadSnapshot(payload);
                     break;
 
+                case MessageOpcode.Event:
+                    ReadRoomState(payload);
+                    break;
+
                 default:
-                    // Event(0x82) 는 아직 코덱이 없고, 그 밖의 값은 손상된 프레임이다.
+                    // 정의되지 않은 값. 손상되었거나 조작된 프레임이다.
                     break;
             }
+        }
+
+        /// 룸 상태 전문을 받는다.
+        ///
+        /// 서버는 이것을 2Hz 로 계속 보낸다. 한 번짜리 "시작했다" 알림이 아니라
+        /// 멱등한 전문이므로, 프레임 하나를 놓쳐도 다음 것으로 따라잡는다.
+        private void ReadRoomState(ReadOnlySpan<byte> payload)
+        {
+            RoomStateHeader header;
+            int count;
+
+            // 들어오는 전문을 별도 버퍼로 읽는다. 바로 _roster 에 읽으면 비교할 이전
+            // 명단이 사라지고, 그러면 한 명이 나가고 다른 한 명이 들어온 전문을
+            // "바뀐 것 없음" 으로 판단해 화면에 나간 사람의 이름이 남는다.
+            try
+            {
+                count = MessageCodec.ReadRoomState(payload, out header, _rosterIncoming);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException || exception is ArgumentException)
+            {
+                LastError = exception.Message;
+                return;
+            }
+
+            var changed = !HasRoomState || Differs(header, count);
+
+            RoomState = header;
+            for (var index = 0; index < count; index++)
+            {
+                _roster[index] = _rosterIncoming[index];
+            }
+
+            _rosterCount = count;
+            HasRoomState = true;
+
+            if (changed)
+            {
+                RoomStateChanged?.Invoke();
+            }
+        }
+
+        /// 새 전문이 지금 들고 있는 것과 다른가.
+        private bool Differs(in RoomStateHeader header, int count)
+        {
+            if (RoomState.Phase != header.Phase
+                || RoomState.HostPlayerId != header.HostPlayerId
+                || RoomState.SeekerPlayerId != header.SeekerPlayerId
+                || RoomState.Outcome != header.Outcome
+                || RoomState.StartTick != header.StartTick
+                || RoomState.PlacementSeed != header.PlacementSeed
+                || _rosterCount != count)
+            {
+                return true;
+            }
+
+            for (var index = 0; index < count; index++)
+            {
+                if (_roster[index].PlayerId != _rosterIncoming[index].PlayerId
+                    || !string.Equals(_roster[index].Name, _rosterIncoming[index].Name, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void ReadWelcome(ReadOnlySpan<byte> payload)
@@ -337,7 +474,27 @@ namespace NV.Client.Net
                 AckedInputTick = header.AckedInputTick;
             }
 
-            Snapshots.Add(header.Tick, _entities, count, Time.unscaledTime);
+            var now = Time.unscaledTime;
+
+            // 도착 간격을 재 둔다. "안 되는데요" 를 수치로 갈라내는 첫 값이며,
+            // 평균이 33ms 근처인데 최대가 크면 지터, 평균 자체가 크면 손실이다.
+            if (LastSnapshotAt > 0f)
+            {
+                var gap = now - LastSnapshotAt;
+
+                SnapshotInterval = SnapshotInterval <= 0f
+                    ? gap
+                    : (SnapshotInterval * 0.9f) + (gap * 0.1f);
+
+                if (gap > SnapshotIntervalMax)
+                {
+                    SnapshotIntervalMax = gap;
+                }
+            }
+
+            LastSnapshotAt = now;
+
+            Snapshots.Add(header.Tick, _entities, count, now);
         }
 
         /// 서버와 같은 고정 델타로 입력을 만든다. 렌더 프레임레이트에 묶으면

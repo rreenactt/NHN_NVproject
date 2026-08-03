@@ -95,17 +95,38 @@ namespace NV.Client.Net
 
             _disposed = true;
             _connected = false;
-            _cancellation.Cancel();
 
+            // 정상 종료 프레임을 먼저 보낸다. 곧바로 Dispose 하면 프레임이 나가지
+            // 못하고, 서버 로그에서 자발적 퇴장과 회선 절단이 같은 모습이 된다.
+            // 그 구분이 없으면 "왜 갑자기 튕기지" 를 로그로 추적할 수 없다.
+            //
+            // 기다리지 않는다 — Dispose 는 게임 루프 안에서 불린다. 대신 소켓 정리를
+            // 그 작업 뒤로 미룬다. 여기서 바로 Dispose 하면 보내는 중인 프레임이 끊긴다.
+            var socket = _socket;
+            if (socket != null && socket.State == WebSocketState.Open)
+            {
+                socket
+                    .CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "클라이언트 퇴장", CancellationToken.None)
+                    .ContinueWith(_ => DisposeSocket(socket), TaskScheduler.Default);
+            }
+            else
+            {
+                DisposeSocket(socket);
+            }
+
+            _cancellation.Cancel();
+            _cancellation.Dispose();
+        }
+
+        private static void DisposeSocket(WebSocket socket)
+        {
             try
             {
-                _socket?.Dispose();
+                socket?.Dispose();
             }
             catch (ObjectDisposedException)
             {
             }
-
-            _cancellation.Dispose();
         }
 
         private async Task RunAsync(string url, CancellationToken cancellationToken)

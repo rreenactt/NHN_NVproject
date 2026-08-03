@@ -33,7 +33,8 @@ namespace NV.Client.EditorTools
             Selection.activeGameObject = go;
             EditorUtility.SetDirty(go);
 
-            Debug.Log("[NV] Network 오브젝트를 만들었다. host 를 확인하고 씬을 저장한다.");
+            Debug.Log("[NV] Network 오브젝트를 만들었다. 서버 주소와 룸은 세션이 들고 있으므로 "
+                + "여기서는 설정할 것이 없다. 씬을 저장한다.");
         }
 
         [MenuItem("Tools/NV Network/Remove Networking")]

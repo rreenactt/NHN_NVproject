@@ -95,14 +95,9 @@ namespace NV.Client.EditorTools
 
             // 새로 붙인 컴포넌트는 이 시점의 기본값을 씬에 직렬화한다. 값을 여기서
             // 명시해 두지 않으면 .cs 의 기본값을 나중에 바꿔도 이 씬은 옛 값을 유지한다.
-            bootstrap.host = "localhost:5202";
-            bootstrap.room = "test";
-            bootstrap.secure = false;
-
-            // 접속은 UI 가 시작한다. 자동 접속과 UI 가 동시에 걸면 두 번째 호출이
-            // 조용히 무시되고, 주소를 고쳐도 왜 안 먹는지 알 수 없게 된다.
-            bootstrap.connectOnStart = false;
-            bootstrap.interpolationDelay = 0.1f;
+            //
+            // 서버 주소와 룸은 여기 없다. 접속은 세션(NetSession)이 소유하며 씬보다
+            // 오래 살고, 이 컴포넌트는 스냅샷을 몸에 적용하는 일만 한다.
             bootstrap.localSmoothing = 0.05f;
             bootstrap.localSnapDistance = 2f;
             bootstrap.showOverlay = false;
@@ -110,8 +105,8 @@ namespace NV.Client.EditorTools
             var ui = go.AddComponent<NetworkTestUi>();
             ui.openOnStart = true;
             ui.togglePanelKey = UnityEngine.InputSystem.Key.Escape;
-            ui.panelWidth = 380;
-            ui.hudWidth = 300;
+            ui.panelWidth = 400;
+            ui.hudWidth = 320;
         }
 
         /// BlockPlayerSetup 이 이미 방향광을 하나 만들어 두므로 그것을 다시 쓴다.

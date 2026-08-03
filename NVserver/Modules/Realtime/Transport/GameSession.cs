@@ -174,12 +174,6 @@ namespace NV.Realtime.Transport
                 case ControlKind.ReturnToLobby:
                     room.PostCommand(RoomCommand.ReturnToLobby(SessionId));
                     break;
-
-                case ControlKind.Leave:
-                    // 퇴장 커맨드는 접속이 끝날 때 한 곳에서 나간다. 여기서 또 보내면
-                    // 같은 세션의 퇴장이 두 번 처리되어 남의 슬롯을 반납할 수 있다.
-                    RequestDisconnect("클라이언트 퇴장 요청");
-                    break;
             }
         }
 

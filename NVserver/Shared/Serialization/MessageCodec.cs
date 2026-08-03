@@ -348,7 +348,6 @@ namespace NV.Shared.Serialization
             var value = reader.ReadByte();
 
             if (kind != ControlKind.StartMatch
-                && kind != ControlKind.Leave
                 && kind != ControlKind.EndMatch
                 && kind != ControlKind.ReturnToLobby)
             {
