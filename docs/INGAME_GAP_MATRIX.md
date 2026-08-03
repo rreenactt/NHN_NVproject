@@ -57,10 +57,10 @@
 | ID | 기획서 근거 | 현재 상태 | 근거 파일:라인 | 서버 권위 | 동기화 |
 |---|---|---|---|---|---|
 | R-3.1 | §4.1 피격 판정 | `PARTIAL` — **총알은 서버에서 날아간다**(IG-014a) 그런데 **맞는 판정은 아직 쏜 클라이언트가 한다** | 서버: `Room.StepProjectiles`·`FireWeapons`, `Projectile`. 클라이언트: `Bullet.cs` → `SendMessageUpwards("OnHit")` → `PlayerAgent.OnHit` (→ IG-014b·c 가 닫는다) | 필요 | 필요 |
-| R-3.2 | §4.1 1회 피격 = 출혈 | `PARTIAL` | `MatchManager.cs:415-422` | 필요 | 필요 |
-| R-3.3 | §4.1 2회 피격 = 사망 | `PARTIAL` | `MatchManager.cs:399-413` | 필요 | 필요 |
-| R-3.4 | §4.1 피격 시 랜덤 위치 순간이동 | `PARTIAL` | `MatchManager.cs:436-447` | 필요 | 필요 |
-| R-3.5 | (룰셋) 무적 창 0.75초 | `PARTIAL` | `MatchManager.cs:396`, `GameConfig.asset:hitImmunity 0.75` | 필요 | 불필요 (서버 내부) |
+| R-3.2 | §4.1 1회 피격 = 출혈 | **서버 판정 `DONE`** (IG-014b) | `Room.ApplyHit`, `PlayerEntity.Bleeding`(피격 수에서 유도), `EntityFlags.Bleeding`; 클라이언트 적용은 IG-014c | **서버** ✅ | ✅ 스냅샷 플래그(매 틱 — 흔적이 끊기면 안 된다) |
+| R-3.3 | §4.1 2회 피격 = 사망 | **서버 판정 `DONE`** (IG-014b) | `Room.DownRunner`, `MatchConstants.RunnerHitsToDie`, **`EntityFlags.Downed`** — `Alive` 를 내리지 않는다(`StateHash` 오염) | **서버** ✅ | ✅ 스냅샷 플래그 + `MatchParticipant.Hits` |
+| R-3.4 | §4.1 피격 시 랜덤 위치 순간이동 | **서버 판정 `DONE`** (IG-014b) | `Room.TeleportToRandomFreeFloor` → `MapGrid.TryRandomFreeFloor`; 난수는 배치와 분리된 수열 | **서버** ✅ | ✅ 스냅샷 위치 |
+| R-3.5 | (룰셋) 무적 창 0.75초 | **서버 판정 `DONE`** (IG-014b) | `MatchConstants.HitImmunity`, `Match.HitImmunityTicks`(22.5 → **23, 올림**), `PlayerEntity.ImmuneUntilTick` | **서버** ✅ | 불필요 (서버 내부) |
 | R-3.6 | §4.3 탄창 3발 | **서버 판정 `DONE`** (IG-014a) — 발사마다 차감하고 비면 거부한다. **재장전은 없다**(체인 경로가 OQ-4 에 막혀 있다 → IG-016) | `PlayerEntity.Ammo`, `Room.FireWeapons`, `MatchConstants.SeekerMagazine`·`FireInterval`, `Match.FireIntervalTicks` | **서버** ✅ | HUD 적용은 IG-014c |
 | R-3.7 | §4.3 소진 시 체인 강제이동·3초 행동불가·자동 재장전 | `PARTIAL` | `ChainDrag.cs:1-371`, `ChainAltar.cs` — `NavMesh.CalculatePath` 사용 | 필요 | 필요 |
 
@@ -94,7 +94,7 @@
 | R-6.4 | §6 플레이어만 볼 수 있음 | **`DONE`** (IG-011b·c3) — R-2.3 과 같은 경로로 닫혔다 | `WriteObjectiveState`, `RoomStateMessage` | 필요 ✅ | 필요 ✅ |
 | R-6.5 | §6 열쇠 10개 삽입 시 개방 | **`DONE`** (IG-012b2·b3) | `Match.DoorOpen`(삽입 수에서 유도), `WriteObjectiveState` 의 `doorOpen` — **문 블록 안에 있어 Seeker 사본에는 실리지 않는다**; 클라이언트는 `NetworkClient.ObjectiveDoorOpen` → `AcceptObjectiveProgress` 로 매 프레임 멱등하게 적용한다 | **서버** ✅ | ✅ `ObjectiveState` 의 문 블록 |
 | R-6.6 | §3 2명 이상 탈출 시 승리 | **탈출 감지 `DONE`** (IG-012c1·c2); **승리 판정은 BLOCKED** (IG-007 ← OQ-2·OQ-6) | `Room.TickEscapes`, `Match.Escapes`·`EscapeHoldTicks`, `EntityFlags.Escaped`; 클라이언트는 `AcceptEscapes`(수, 전문) + `AcceptEscaped`(대상, 스냅샷 플래그)로 받고 로컬 `TickEscapes` 는 거부한다 | **서버** ✅ (세는 것) | ✅ `MatchState.escapes` — **Seeker 도 받는다** |
-| R-6.7 | (룰셋) 사망 시 소지 열쇠 흘리기 | `PARTIAL` | `MatchManager.cs:703-722` | 필요 | 필요 |
+| R-6.7 | (룰셋) 사망 시 소지 열쇠 흘리기 | **서버 판정 `DONE`** (IG-014b) — **사망 지점 한 점**에 놓는다(흩뿌리기는 표현이고 반경이 기획서에 없다 → IG-027) | `Room.DownRunner` → `Objectives.AddKey` ×소지 수 | **서버** ✅ | ✅ `ObjectiveState` 열쇠 목록 |
 
 ## 7. 맵 이벤트 (장치)
 

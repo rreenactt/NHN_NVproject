@@ -53,6 +53,25 @@ namespace NV.Realtime.Simulation
         /// 죽으면 떨어뜨려 다시 맵으로 돌아간다(IG-014).
         public int CarriedKeys { get; set; }
 
+        /// 받은 피격 수. 기획서 §4.1 — `RunnerHitsToDie` 회면 쓰러진다.
+        public int Hits { get; set; }
+
+        /// 쓰러졌는가. 기획서 §4.1 의 2회 피격이다.
+        ///
+        /// 탈출과 같이 몸을 지우지 않는다 — 전멸 판정이 명단을 세어야 하고(IG-007), 스냅샷의
+        /// `EntityFlags.Downed` 가 클라이언트에게 감추라고 말한다.
+        public bool Downed { get; set; }
+
+        /// 출혈 중인가. **피격 수에서 유도한다.**
+        ///
+        /// 따로 필드를 두면 "1방 맞았는데 피가 안 난다" 가 표현 가능한 상태가 된다.
+        /// 쓰러진 뒤에는 출혈이 의미가 없으므로 함께 내린다(기획서 §4.2 의 흔적은 도망치는
+        /// Runner 를 쫓는 장치다).
+        public bool Bleeding => Hits > 0 && !Downed;
+
+        /// 이 틱까지는 피격이 무시된다. 3연사가 순간이동을 관통해 죽이는 것을 막는다.
+        public uint ImmuneUntilTick { get; set; }
+
         /// 탄창에 남은 탄. 기획서 §4.3 — Seeker 만 쓴다.
         ///
         /// 재장전은 아직 없다. 기획서 §4.3 의 재장전은 **체인이 놓아준 뒤** 일어나고, 그 체인

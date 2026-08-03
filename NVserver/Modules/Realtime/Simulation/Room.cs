@@ -79,6 +79,10 @@ namespace NV.Realtime.Simulation
         /// 수는 3 이고, 재장전(IG-016)이 들어와도 수명 90틱 / 간격 5틱 = 18 이 한 사람의 최대다.
         private readonly Projectile[] _projectiles = new Projectile[32];
 
+        /// 피격 순간이동의 착지점을 뽑는 난수. **배치와 같은 씨드를 쓰지 않는다** — 같은
+        /// 수열을 두 용도가 나눠 쓰면 배치가 한 번 더 뽑는 변경이 순간이동 착지점을 바꾼다.
+        private DeterministicSequence _hitRandom;
+
         private readonly WorldMap _map;
         private readonly NetworkConditionSimulator _network;
         private readonly ILogger _logger;
@@ -176,6 +180,11 @@ namespace NV.Realtime.Simulation
 
         /// 날아가는 총알. 슬롯 배열이므로 `Active` 를 보고 걸러야 한다.
         internal Projectile[] Projectiles => _projectiles;
+
+        /// 룸 안의 몸들. `Objectives`·`Match` 와 같은 이유로 `internal` 이다 — 판정을 검사하려면
+        /// 몸을 특정 자리에 세울 수 있어야 하고, 그것을 위해 프로덕션에 테스트 전용 메서드를
+        /// 만드는 것보다 소유한 객체를 모듈 안에서 여는 편이 표면이 작다.
+        internal IEnumerable<PlayerEntity> Players => _players.Values;
 
         /// 이 매치의 목표물 배치. 틱 루프에서만 조회한다.
         ///
@@ -442,17 +451,18 @@ namespace NV.Realtime.Simulation
             var count = 0;
             foreach (var player in _players.Values)
             {
-                // 피격 수와 상태 플래그는 아직 서버가 세지 않는다. 자리를 잡아 두었으므로
-                // 그 판정이 올 때(IG-014) 와이어 포맷은 바뀌지 않는다.
+                // 상태 플래그(`flags`)는 여전히 0 이다. 출혈·탈출·쓰러짐은 **스냅샷의
+                // `EntityFlags`** 로 매 틱 나가므로 2Hz 전문에 같은 정보를 두 번 실을 이유가
+                // 없다 — 실으면 두 경로가 어긋날 자리만 생긴다.
                 //
-                // 소지 열쇠는 여기서 바이트로 좁힌다. 상한을 두는 이유는 형식이지 규칙이
-                // 아니다 — 무제한 소지(`CarryLimit` 0)에서도 맵의 열쇠 수가 10 이므로
+                // 소지 열쇠와 피격 수는 여기서 바이트로 좁힌다. 상한을 두는 이유는 형식이지
+                // 규칙이 아니다 — 무제한 소지(`CarryLimit` 0)에서도 맵의 열쇠 수가 10 이므로
                 // 넘을 수 없고, 넘었다면 습득 판정이 같은 열쇠를 두 번 센 것이다.
                 _participantBuffer[count] = new MatchParticipant(
                     player.PlayerId,
                     RoleOf(player.PlayerId),
                     0,
-                    0,
+                    (byte)Math.Min(player.Hits, byte.MaxValue),
                     (byte)Math.Min(player.CarriedKeys, byte.MaxValue));
 
                 count++;
@@ -702,6 +712,16 @@ namespace NV.Realtime.Simulation
                 flags |= EntityFlags.Escaped;
             }
 
+            if (player.Bleeding)
+            {
+                flags |= EntityFlags.Bleeding;
+            }
+
+            if (player.Downed)
+            {
+                flags |= EntityFlags.Downed;
+            }
+
             return flags;
         }
 
@@ -739,7 +759,7 @@ namespace NV.Realtime.Simulation
                 {
                     // 빠져나간 사람은 판정에서 빠진다. 몸은 남아 있으므로(승리 조건이 명단을
                     // 세어야 한다) 좌표만으로는 걸러지지 않는다.
-                    if (RoleOf(player.PlayerId) != MatchRole.Runner || player.Escaped)
+                    if (RoleOf(player.PlayerId) != MatchRole.Runner || player.Escaped || player.Downed)
                     {
                         continue;
                     }
@@ -807,7 +827,7 @@ namespace NV.Realtime.Simulation
                     continue;
                 }
 
-                if (RoleOf(player.PlayerId) != MatchRole.Runner || player.Escaped)
+                if (RoleOf(player.PlayerId) != MatchRole.Runner || player.Escaped || player.Downed)
                 {
                     continue;
                 }
@@ -965,14 +985,20 @@ namespace NV.Realtime.Simulation
 
                 ref var projectile = ref _projectiles[index];
 
-                if (_map.Collision.Raycast(projectile.Position, projectile.Direction, step, out var hit))
-                {
-                    _logger.LogDebug(
-                        "룸 {RoomId}: 플레이어 {OwnerId} 의 총알이 지오메트리에 맞았다. 거리 {Distance}.",
-                        RoomId,
-                        projectile.OwnerId,
-                        hit.Distance);
+                // **지오메트리와 사람을 같은 선분에서 함께 본다.** 따로 검사하면 벽 뒤의
+                // 사람이 맞는다 — 벽이 더 가까우면 벽이 이겨야 한다.
+                var blocked = _map.Collision.Raycast(projectile.Position, projectile.Direction, step, out var mapHit);
+                var reach = blocked ? mapHit.Distance : step;
 
+                if (TryFindVictim(projectile, reach, out var victim))
+                {
+                    ApplyHit(victim, projectile.OwnerId);
+                    projectile.Active = false;
+                    continue;
+                }
+
+                if (blocked)
+                {
                     projectile.Active = false;
                     continue;
                 }
@@ -986,6 +1012,159 @@ namespace NV.Realtime.Simulation
                     projectile.Active = false;
                 }
             }
+        }
+
+        /// 이 선분에서 맞는 사람을 찾는다. 여럿이면 **가장 가까운 사람**이다.
+        ///
+        /// 쏜 사람은 제외한다. 총구가 자기 몸 안에서 시작하므로 그러지 않으면 발사한 틱에
+        /// 자기가 맞는다 — 클라이언트도 `hitMask` 로 자기 레이어를 뺀다.
+        ///
+        /// 기획서 §4 — 맞는 쪽은 Runner 뿐이다. 술래는 총을 맞지 않고 다른 누구도 무장하지 않는다.
+        private bool TryFindVictim(in Projectile projectile, float reach, out PlayerEntity victim)
+        {
+            victim = null!;
+            var closest = reach;
+
+            foreach (var player in _players.Values)
+            {
+                if (player.PlayerId == projectile.OwnerId)
+                {
+                    continue;
+                }
+
+                if (RoleOf(player.PlayerId) != MatchRole.Runner || player.Escaped || player.Downed)
+                {
+                    continue;
+                }
+
+                if (!Raycaster.RayAabb(
+                        projectile.Position,
+                        projectile.Direction,
+                        BodyOf(player),
+                        out var enter,
+                        out var exit,
+                        out _))
+                {
+                    continue;
+                }
+
+                // 시작점이 몸 안이면 거리 0 이다(`Raycaster.Raycast` 와 같은 규칙).
+                var distance = enter < 0f ? 0f : enter;
+
+                if (exit < 0f || distance > closest)
+                {
+                    continue;
+                }
+
+                closest = distance;
+                victim = player;
+            }
+
+            return victim != null;
+        }
+
+        /// 몸의 판정 박스. 이동이 쓰는 것과 같은 치수여야 한다 — 다르면 눈에 보이는 몸과
+        /// 맞는 몸이 어긋난다.
+        private static Aabb BodyOf(PlayerEntity player)
+        {
+            var height = (player.State.Flags & EntityFlags.Crouching) != 0
+                ? SimConstants.PlayerCrouchHeight
+                : SimConstants.PlayerHeight;
+
+            var half = new Vector3(SimConstants.PlayerRadius, height * 0.5f, SimConstants.PlayerRadius);
+
+            return Aabb.FromCenter(player.State.Position + new Vector3(0f, half.Y, 0f), half);
+        }
+
+        /// 피격 하나를 적용한다. 기획서 §4.1 — 1방은 출혈과 순간이동, 2방은 쓰러짐.
+        ///
+        /// 무적 창이 여기 있는 이유는 `PlayerEntity.ImmuneUntilTick` 에 적혀 있다 — 3연사가
+        /// 순간이동을 관통해 죽이는 것을 막는다.
+        private void ApplyHit(PlayerEntity victim, byte shooterId)
+        {
+            if (_tick < victim.ImmuneUntilTick)
+            {
+                return;
+            }
+
+            victim.Hits++;
+            victim.ImmuneUntilTick = _tick + (uint)Match.HitImmunityTicks;
+            _matchStateDirty = true;
+
+            if (victim.Hits >= MatchConstants.RunnerHitsToDie)
+            {
+                DownRunner(victim, shooterId);
+                return;
+            }
+
+            // 살아남은 피격: 출혈이 시작되고(유도값) 다른 곳으로 던져진다. **순간이동이 벌칙의
+            // 무게다** — 하던 일이 끝나고, 자기가 어디 있는지 모르게 된다.
+            TeleportToRandomFreeFloor(victim);
+
+            _logger.LogDebug(
+                "룸 {RoomId} 플레이어 {PlayerId}: 피격 {Hits}/{Fatal}. 출혈 시작.",
+                RoomId,
+                victim.PlayerId,
+                victim.Hits,
+                MatchConstants.RunnerHitsToDie);
+        }
+
+        /// 쓰러뜨린다. 들고 있던 열쇠는 그 자리에 떨어진다.
+        ///
+        /// **열쇠를 흩뿌리지 않고 한 점에 놓는다.** 클라이언트의 `ScatterKeys` 는 반경을 두고
+        /// 퍼뜨리지만 그것은 표현이고, 흩뿌릴 반경은 기획서에 없다. 한 점에 놓으면 그 무더기를
+        /// 밟은 Runner 가 한 틱에 전부 줍는데 — 사망 지점에 흘린 것을 회수하는 것이 규칙이므로
+        /// 그것이 맞다(IG-027 로 표현을 다시 볼 수 있다).
+        private void DownRunner(PlayerEntity victim, byte shooterId)
+        {
+            victim.Downed = true;
+
+            var dropped = victim.CarriedKeys;
+
+            if (dropped > 0 && _objectives.Placed)
+            {
+                for (var index = 0; index < dropped; index++)
+                {
+                    _objectives.AddKey(victim.State.Position);
+                }
+
+                _objectiveStateDirty = true;
+            }
+
+            victim.CarriedKeys = 0;
+
+            _logger.LogInformation(
+                "룸 {RoomId}: 플레이어 {PlayerId} 가 플레이어 {ShooterId} 에게 쓰러졌다. 열쇠 {Dropped} 개를 흘렸다.",
+                RoomId,
+                victim.PlayerId,
+                shooterId,
+                dropped);
+        }
+
+        /// 무작위 통행 가능 셀로 옮긴다. 격자가 없으면 아무것도 하지 않는다.
+        ///
+        /// **속도를 0 으로 만든다.** 남겨 두면 옮겨진 자리에서 원래 달리던 방향으로 계속 미끄러지고,
+        /// 그 방향은 이제 벽일 수 있다.
+        ///
+        /// 입력은 비우지 않는다 — 키를 누르고 있으면 새 자리에서 계속 달리는 것이 맞다.
+        private void TeleportToRandomFreeFloor(PlayerEntity victim)
+        {
+            if (!_map.HasGrid)
+            {
+                _logger.LogWarning(
+                    "룸 {RoomId}: 맵 {MapName} 에 격자가 없어 피격 순간이동을 건너뛴다.",
+                    RoomId,
+                    _map.Name);
+                return;
+            }
+
+            if (!_map.Grid.TryRandomFreeFloor(ref _hitRandom, out var point))
+            {
+                return;
+            }
+
+            victim.State.Position = point;
+            victim.State.Velocity = Vector3.Zero;
         }
 
         /// 탈출을 판정한다. 기획서 §3 — 열린 문간에 `EscapeHoldTime` 동안 머물면 빠져나간다.
@@ -1007,7 +1186,9 @@ namespace NV.Realtime.Simulation
 
             foreach (var player in _players.Values)
             {
-                if (player.Escaped)
+                // 이미 나간 사람과 쓰러진 사람은 세지 않는다. 쓰러진 몸이 문간에 있으면
+                // 유지 시간이 계속 쌓여 시체가 탈출한다.
+                if (player.Escaped || player.Downed)
                 {
                     continue;
                 }
@@ -1236,6 +1417,10 @@ namespace NV.Realtime.Simulation
             var placement = new DeterministicSequence(_placementSeed);
             ObjectivePlacement.PlaceObjectives(_objectives, _map.Grid, ref placement);
 
+            // 피격 순간이동은 배치와 다른 수열을 쓴다. 골든 비율 상수로 씨드를 흩어 두 용도가
+            // 같은 값에서 출발하지 않게 한다 — 그러면 첫 순간이동이 제단 자리가 된다.
+            _hitRandom = new DeterministicSequence(_placementSeed ^ unchecked((int)0x9E3779B9));
+
             _objectiveStateDirty = true;
 
             if (!_objectives.Placed)
@@ -1275,6 +1460,10 @@ namespace NV.Realtime.Simulation
                 // 탄창은 역할과 무관하게 채운다. 역할은 발사 판정에서 본다 — 여기서 Seeker 만
                 // 채우면 매치 중 역할이 바뀌는 경로가 생길 때 빈 탄창을 든 Seeker 가 나온다.
                 player.Ammo = MatchConstants.SeekerMagazine;
+
+                // 지난 매치의 피격을 지운다. `ImmuneUntilTick` 은 절대 틱이라 언제나 과거다.
+                player.Hits = 0;
+                player.Downed = false;
             }
 
             Volatile.Write(ref _phase, (int)RoomPhase.Playing);

@@ -52,6 +52,14 @@ namespace NV.Realtime.Simulation
         /// 총알 수명(틱). 3초 × 30Hz = 90.
         public const int BulletLifetimeTicks = (int)(MatchConstants.BulletLifetime * SimConstants.TickRate);
 
+        /// 무적 창(틱). **0.75초 × 30Hz = 22.5 이므로 올려서 23 이다(0.767초).**
+        ///
+        /// `FireIntervalTicks` 와 같은 올림이지만 이유가 다르다. 그쪽은 서버가 관대해지지 않게
+        /// 하려는 것이고, 이쪽은 **무적 창이 짧아지는 것이 곧 규칙이 깨지는 것**이기 때문이다 —
+        /// 이 창의 존재 이유가 3연사가 순간이동을 관통해 죽이는 것을 막는 것이므로, 반올림으로
+        /// 한 틱을 잃으면 막으려던 경우가 다시 열린다.
+        public const int HitImmunityTicks = 23;
+
         private MatchPhase _phase = MatchPhase.Lobby;
         private int _revealTicksRemaining;
         private int _matchTicksRemaining;
