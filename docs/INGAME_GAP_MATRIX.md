@@ -28,8 +28,9 @@
 |---|---|---|---|---|---|
 | R-1.1 | §2·§3 (매치 성립) 룸 단계 Waiting/Playing/Ended | `DONE` | `Room.cs:188-206`, `RoomPhase.cs` | 필요 | 필요 (`RoomState` 2Hz) |
 | R-1.2 | §2 역할 배정 (술래 1명) | `DONE` | `Room.cs:580-592` (`PickSeeker`) | 필요 | 필요 |
-| R-1.3 | §3·§8 매치 내부 단계 (RoleReveal→Playing→Ended) | `PARTIAL` | `MatchManager.cs:260-290`, `MatchEnums.cs:17-23` | 필요 | 필요 (신규 전문) |
-| R-1.4 | §8 매치 시계 (시간 종료가 술래 승) | `PARTIAL` | `MatchManager.cs:270-285` — `Time.deltaTime`, 클라이언트 전원 | 필요 | 필요 |
+| R-1.3 | §3·§8 매치 내부 단계 (RoleReveal→Playing→Ended) | **`DONE`** (IG-006·008·010) | 서버 `Match.cs`, `EventKind.MatchState`, `MatchManager.AcceptMatchState` | 필요 ✅ | 필요 ✅ |
+| R-1.4 | §8 매치 시계 | **`DONE`** (IG-006·008·010) | 서버가 고정 틱으로 세고 2Hz 전문으로 내려보낸다. 클라이언트는 전문 사이만 로컬로 메운다 | 필요 ✅ | 필요 ✅ |
+| R-1.6 | §4.3·§5.1 이동 잠금 (리빌·프리즈·체인·종료) | `PARTIAL` → 리빌 잠금은 서버 판정(IG-006), `EntityFlags.Frozen` 송신(IG-009). **클라이언트 예측 반영이 남았다** → IG-022 | `Room.StepPlayer`, `Match.MovementLocked` | 필요 ✅ | 필요 ✅ |
 | R-1.5 | §3·§8 승패 결정 | `PARTIAL` | `MatchManager.cs:330-348` — 방장만(`ResolvesOutcome`), `ControlKind.EndMatch` 로 중계 | 필요 | 필요 |
 | R-1.6 | §4.3·§5.1 이동 잠금 (리빌·프리즈·체인·종료) | `PARTIAL` | `MatchManager.cs:526-531` | 필요 | 필요 |
 

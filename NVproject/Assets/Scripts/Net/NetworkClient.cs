@@ -56,6 +56,9 @@ namespace NV.Client.Net
         private readonly RoomPlayerEntry[] _rosterIncoming = new RoomPlayerEntry[SnapshotBuffer.MaxEntities];
         private int _rosterCount;
 
+        private readonly MatchParticipant[] _participants = new MatchParticipant[SnapshotBuffer.MaxEntities];
+        private int _participantCount;
+
         /// 최근 입력 프레임. 손실 대비로 매 메시지에 여러 틱치를 함께 싣는다.
         private readonly InputFrame[] _history = new InputFrame[ProtocolInfo.MaxInputFramesPerMessage];
         private int _historyCount;
@@ -139,6 +142,25 @@ namespace NV.Client.Net
             return _roster[index];
         }
 
+        /// <summary>
+        /// 서버가 보낸 마지막 매치 상태 전문 — 단계·시계·열쇠·탈출·결과.
+        ///
+        /// **본문이 이 클라이언트의 역할에 맞게 걸러져 온다.** Seeker 라면 삽입된 열쇠와
+        /// 남의 소지 열쇠가 0 이다. 서버가 그렇게 인코딩하므로 여기서 다시 숨길 필요가
+        /// 없고, 숨길 수도 없다 — 없는 값을 복원할 방법은 없다.
+        /// </summary>
+        public MatchStateHeader MatchState { get; private set; }
+
+        public bool HasMatchState { get; private set; }
+
+        /// <summary>참가자 수. 항목은 <see cref="MatchParticipantAt"/> 로 꺼낸다.</summary>
+        public int ParticipantCount => _participantCount;
+
+        public MatchParticipant MatchParticipantAt(int index)
+        {
+            return _participants[index];
+        }
+
         public event Action WelcomeReceived;
 
         /// 룸 상태가 실제로 바뀌었을 때만 부른다. 전문은 2Hz 로 계속 오지만
@@ -189,6 +211,8 @@ namespace NV.Client.Net
             HasWelcome = false;
             HasRoomState = false;
             _rosterCount = 0;
+            HasMatchState = false;
+            _participantCount = 0;
             _historyCount = 0;
             _tickAccumulator = 0f;
             _stateElapsed = 0f;
@@ -366,9 +390,7 @@ namespace NV.Client.Net
                     break;
 
                 case EventKind.MatchState:
-                    // 서버는 이미 매치 단계와 시계를 보내고 있다. 이 클라이언트는 아직
-                    // 자기 시계로 매치를 돌리므로 지금은 받아만 두고 버린다 — 적용은
-                    // MatchManager 가 심판에서 뷰로 바뀔 때(IG-010) 붙는다.
+                    ReadMatchState(payload);
                     break;
 
                 default:
@@ -414,6 +436,34 @@ namespace NV.Client.Net
             {
                 RoomStateChanged?.Invoke();
             }
+        }
+
+        /// 매치 상태 전문을 받는다.
+        ///
+        /// 룸 상태와 달리 **변경 이벤트를 두지 않는다.** 이 전문은 시계를 싣고 있어 2Hz
+        /// 마다 반드시 달라지므로 "바뀌었다" 는 신호에 정보가 없다. 읽는 쪽이 매 프레임
+        /// 폴링한다(`MatchSync.Update`).
+        ///
+        /// 실패해도 들고 있던 값을 버리지 않는다. 프레임 하나가 손상되었을 때 시계를
+        /// 0 으로 되돌리면 HUD 가 "시간 종료" 를 그린다 — 다음 전문이 0.5초 안에 온다.
+        private void ReadMatchState(ReadOnlySpan<byte> payload)
+        {
+            MatchStateHeader header;
+            int count;
+
+            try
+            {
+                count = MessageCodec.ReadMatchState(payload, out header, _participants);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException || exception is ArgumentException)
+            {
+                LastError = exception.Message;
+                return;
+            }
+
+            MatchState = header;
+            _participantCount = count;
+            HasMatchState = true;
         }
 
         /// 새 전문이 지금 들고 있는 것과 다른가.

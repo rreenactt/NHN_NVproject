@@ -55,6 +55,35 @@ namespace NV.Game
             // UI Toolkit, from Assets/Resources/UI. The document builds its tree when the roles are
             // handed out, because which half of the HUD exists depends on which side you are on.
             Create<UI.GameHudController>("Match HUD");
+
+            EnsureMatchSync();
+        }
+
+        /// <summary>
+        /// The bridge from the server's bulletins into this match layer.
+        ///
+        /// **It has to be built here, and it was not being built at all.** Only the editor menu
+        /// (Tools ▸ Backrooms ▸ Set Up Match) ever added it, and no scene carries it — so a match
+        /// opened through the lobby received the server's start signal, phase and clock through a
+        /// component that did not exist. Creating it at runtime follows the same rule as everything
+        /// else here: the scene holds almost nothing, and nothing depends on a menu having been run.
+        ///
+        /// **Awake, not Start.** <c>AddComponent</c> runs the new component's Awake immediately, and
+        /// <c>MatchSync.Awake</c> is what switches <see cref="autoStart"/> and <see cref="debugKeys"/>
+        /// off when a session exists. Built in Start, that decision would land after this object had
+        /// already begun a local match with its own placement seed.
+        ///
+        /// Skipped when one is already present, so a scene that was set up through the menu does not
+        /// end up with two — each would apply the same bulletin and fight over the phase.
+        ///
+        /// This is the one place the match layer reaches toward the network layer. <c>MatchManager</c>
+        /// itself stays ignorant of it; the sync component is the only thing that knows both sides.
+        /// </summary>
+        private void EnsureMatchSync()
+        {
+            if (FindFirstObjectByType<NV.Client.Net.Session.MatchSync>() != null) return;
+
+            Create<NV.Client.Net.Session.MatchSync>("Match Sync");
         }
 
         private void Start()

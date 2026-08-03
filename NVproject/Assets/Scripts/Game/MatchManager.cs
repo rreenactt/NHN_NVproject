@@ -348,6 +348,46 @@ namespace NV.Game
         }
 
         /// <summary>
+        /// Takes the match phase and clock from the server's bulletin.
+        ///
+        /// **This is the seam the rules move across, and right now only two things have crossed it.**
+        /// The server owns the phase transitions and the clock (it counts in fixed ticks, so two
+        /// clients no longer disagree about when the reveal ends); everything else below is still
+        /// resolved locally. Called every frame from <c>MatchSync</c> — the bulletin arrives at 2 Hz
+        /// and carries the clock, so there is no "changed" signal worth subscribing to.
+        ///
+        /// **Keys, escapes and the outcome are deliberately not applied.** The server carries fields
+        /// for them but does not count them yet, so it sends zeros — writing those in would reset a
+        /// HUD that this client had correctly counted to 7, and the symptom would read as the
+        /// objective resetting itself. They start being applied when the server actually judges them.
+        ///
+        /// **<c>Ended</c> is not applied here either.** Ending a match means publishing an outcome,
+        /// and that path already exists (<see cref="AcceptOutcome"/>, driven by the room bulletin).
+        /// Taking the phase alone would move the HUD to a result screen with no result in it.
+        /// </summary>
+        public void AcceptMatchState(NV.Shared.Contracts.Enums.MatchPhase serverPhase, float secondsRemaining)
+        {
+            if (Phase == MatchPhase.Lobby || Phase == MatchPhase.Ended) return;
+
+            // The clock is the server's. The local countdown in Update still runs between
+            // bulletins — at 2 Hz the HUD would tick visibly otherwise — but every bulletin
+            // overwrites whatever it drifted to.
+            TimeRemaining = Mathf.Max(0f, secondsRemaining);
+
+            switch (serverPhase)
+            {
+                case NV.Shared.Contracts.Enums.MatchPhase.RoleReveal:
+                    SetPhase(MatchPhase.RoleReveal);
+                    break;
+
+                case NV.Shared.Contracts.Enums.MatchPhase.Playing:
+                    // The reveal ends on the server's tick, not on this machine's frame rate.
+                    SetPhase(MatchPhase.Playing);
+                    break;
+            }
+        }
+
+        /// <summary>
         /// Ends the match on a result decided elsewhere — the room's host, relayed by the server.
         ///
         /// This exists because the rules are still resolved client-side. When they move onto the

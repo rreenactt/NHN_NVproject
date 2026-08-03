@@ -74,6 +74,29 @@ namespace NV.Client.Net.Session
             {
                 TryBeginMatch();
             }
+
+            ApplyMatchState();
+        }
+
+        /// 서버의 매치 전문을 매치 레이어에 옮긴다.
+        ///
+        /// 폴링이다. 전문은 2Hz 로 오면서 시계를 싣고 있으므로 "바뀌었다" 는 신호에 정보가
+        /// 없고, `NetworkClient` 도 그래서 변경 이벤트를 두지 않았다.
+        ///
+        /// 매치가 시작되기 전에는 적용할 것이 없다. 서버는 로비 단계에서 이 전문을 아예
+        /// 보내지 않으므로 `HasMatchState` 가 false 다.
+        private void ApplyMatchState()
+        {
+            if (_client == null || !_client.HasMatchState)
+            {
+                return;
+            }
+
+            var state = _client.MatchState;
+
+            MatchManager.Instance.AcceptMatchState(
+                state.Phase,
+                MatchStateHeader.FromTenths(state.TimeRemainingTenths));
         }
 
         /// 세션·클라이언트·매치가 모두 준비됐는가.
