@@ -4,6 +4,13 @@ namespace NV.Realtime.Transport
     internal sealed class CreateRoomRequest
     {
         public string? Map { get; set; }
+
+        /// 이 방을 `GET /rooms` 목록에 실을 것인가.
+        ///
+        /// `bool?` 이다. **보내지 않으면 비공개**로 만든다 — 필드를 모르는 옛 클라이언트가
+        /// 만든 방이 본인도 모르게 목록에 뜨는 일이 없어야 한다. 노출은 기본값이 아니라
+        /// 선택이어야 하고, 그 선택을 하지 않은 요청은 노출하지 않는 쪽으로 해석한다.
+        public bool? IsPublic { get; set; }
     }
 
     /// 방 만들기 응답. `hostToken` 은 이 응답에만 실린다.
@@ -28,6 +35,10 @@ namespace NV.Realtime.Transport
         public int Capacity { get; set; }
 
         public int MinPlayers { get; set; }
+
+        /// 서버가 실제로 적용한 공개 여부. 요청한 값을 그대로 돌려주는 것이 아니라
+        /// 방에 적힌 값이다 — 요청이 무시되었는지 화면이 알 수 있어야 한다.
+        public bool IsPublic { get; set; }
     }
 
     /// 참가 전 조회 응답.
@@ -55,6 +66,12 @@ namespace NV.Realtime.Transport
         public byte HostPlayerId { get; set; }
 
         public int MinPlayers { get; set; }
+
+        /// 목록에 실리는 방인가.
+        ///
+        /// 조회 응답에도 싣는다. 코드로 들어온 사람이 자기가 지금 비공개 방에 있다는
+        /// 것을 알아야 코드를 함부로 흘리지 않는다.
+        public bool IsPublic { get; set; }
     }
 
     /// 실패 응답. 상태코드로도 갈리지만, 로그와 `curl` 에서 사유가 바로 보이는 편이

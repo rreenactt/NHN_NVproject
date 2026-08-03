@@ -17,7 +17,8 @@ namespace NV.Realtime.Contracts
             RoomPhase phase,
             byte hostPlayerId,
             string mapName,
-            uint mapHash)
+            uint mapHash,
+            bool isPublic)
         {
             RoomId = roomId;
             Tick = tick;
@@ -27,6 +28,7 @@ namespace NV.Realtime.Contracts
             HostPlayerId = hostPlayerId;
             MapName = mapName;
             MapHash = mapHash;
+            IsPublic = isPublic;
         }
 
         public string RoomId { get; }
@@ -47,6 +49,12 @@ namespace NV.Realtime.Contracts
 
         /// 서버가 로드한 지형의 해시. 클라이언트 계산값과 다르면 다른 지형에서 시뮬레이션한다.
         public uint MapHash { get; }
+
+        /// 방을 만든 사람이 목록 공개를 선택했는가.
+        ///
+        /// 목록에 실릴지만 정한다. 비공개 방도 코드를 아는 사람은 그대로 들어온다 —
+        /// 참가 전 조회와 접속은 이 값을 보지 않는다.
+        public bool IsPublic { get; }
 
         public bool IsFull => PlayerCount >= Capacity;
     }

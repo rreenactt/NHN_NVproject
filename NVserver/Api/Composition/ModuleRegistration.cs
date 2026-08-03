@@ -30,7 +30,7 @@ namespace NV.Api.Composition
         private const string LegacyMapPathKey = "Game:MapPath";
 
         /// 클라이언트가 실제로 그리는 레벨이다. Unity 의
-        /// Tools ▸ NV Network ▸ Export Map Collision 이 이 파일을 만든다.
+        /// Tools ▸ NV ▸ Map ▸ Export Map Collision 이 이 파일을 만든다.
         private const string DefaultMapPath = "../MapData/backrooms.json";
 
         /// 브라우저에서 방 만들기·조회를 호출할 수 있게 하는 정책 이름.
@@ -41,6 +41,7 @@ namespace NV.Api.Composition
 
         private const string CreatePerMinuteKey = "RateLimit:CreatePerMinute";
         private const string CodeAttemptsPerMinuteKey = "RateLimit:CodeAttemptsPerMinute";
+        private const string ListPerMinuteKey = "RateLimit:ListPerMinute";
 
         /// 한 IP 가 분당 만들 수 있는 방. 빈 방이 60초 뒤 회수되므로 이 값이 곧
         /// 한 클라이언트가 동시에 잡아 둘 수 있는 방 수에 가깝다.
@@ -52,6 +53,13 @@ namespace NV.Api.Composition
         /// 한 IP 뒤에 여러 클라이언트가 있는 경우(같은 기계의 에디터 + 빌드, 한 NAT
         /// 안의 8명)를 감안해야 한다. 초당 한 번이면 그 경우도 넉넉하다.
         private const int DefaultCodeAttemptsPerMinute = 60;
+
+        /// 한 IP 가 분당 조회할 수 있는 공개 방 목록.
+        ///
+        /// 로비는 자동 폴링을 하지 않는다 — 화면에 들어올 때 한 번, 그 뒤로는 사람이
+        /// 새로고침을 누를 때만이고 클라이언트가 3초 쿨다운을 건다. 그러면 분당 20회가
+        /// 상한이므로 30 이면 정상 사용에는 걸리지 않고, 스크립트로 긁는 것은 막힌다.
+        private const int DefaultListPerMinute = 30;
 
         public static IServiceCollection AddModules(this IServiceCollection services, IConfiguration configuration)
         {
@@ -102,6 +110,7 @@ namespace NV.Api.Composition
             var codeAttemptsPerMinute = configuration.GetValue(
                 CodeAttemptsPerMinuteKey,
                 DefaultCodeAttemptsPerMinute);
+            var listPerMinute = configuration.GetValue(ListPerMinuteKey, DefaultListPerMinute);
 
             services.AddRateLimiter(limiter =>
             {
@@ -114,6 +123,10 @@ namespace NV.Api.Composition
                 limiter.AddPolicy(
                     RateLimitPolicies.CodeAttempt,
                     context => FixedWindowFor(context, codeAttemptsPerMinute));
+
+                limiter.AddPolicy(
+                    RateLimitPolicies.RoomList,
+                    context => FixedWindowFor(context, listPerMinute));
             });
 
             return services;

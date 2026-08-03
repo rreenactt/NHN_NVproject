@@ -155,24 +155,32 @@ Unity 클라이언트는 형제 폴더 `../NVproject`다. 배치와 파일 위�
 
 이 조회가 있는 이유는 브라우저다. WebSocket 핸드셰이크가 거부되면 브라우저는 닫힘 코드 `1006` 하나만 JS 에 주므로, 서버 미기동·주소 오타·버전 불일치·없는 방·정원 초과가 화면에서 전부 같은 모습이 된다. 판정은 아니다 — `/ws` 가 같은 검사를 다시 하며, 조회와 실제 접속 사이에 정원이 찰 수 있다.
 
-`GET /rooms` 목록은 `Realtime:AllowRoomListing` 뒤에 있고 기본값은 꺼짐이다. 초대 코드 모델에서 공개 목록은 기능이 아니라 결함이다.
+`GET /rooms` 는 **공개로 만들어진 방만** 돌려준다. 방 만들기(`POST /rooms`)의 `isPublic` 이 그것을 정하고, 만든 뒤에는 바꿀 수 없다 — 비공개인 줄 알고 코드를 나눈 방이 나중에 목록에 뜨면 안 되기 때문이다. **필드를 보내지 않으면 비공개다.**
+
+비공개는 목록에서 빠질 뿐 접근이 막히는 것이 아니다. `GET /rooms/{code}` 와 `/ws` 는 공개 여부를 보지 않는다 — 그쪽을 막으면 초대 코드 자체가 동작하지 않는다.
+
+예전에는 목록 전체가 `Realtime:AllowRoomListing` 뒤에 있었다. 그 플래그는 목록이 **모든** 방을 내주던 시절의 방어선이고, 방마다 공개 여부를 정하게 되면서 근거가 사라져 제거했다. 상시 열린 경로가 된 자리는 `RateLimit:ListPerMinute`(기본 30)이 대신한다.
 
 ### 멀티플레이를 확인하는 순서
 
 로비를 거치는 길과 개발 계기판으로 바로 붙는 길이 있다.
 
-**로비 (제품 흐름)**
+**메인 로비 (제품 흐름)**
 
 1. `dotnet run --project Api`
-2. Unity 에서 `Assets/Scenes/Lobby.unity` 를 열고 Play (없으면 **Tools ▸ NV Network ▸ Create Lobby Scene**)
-3. **방 만들기** → 코드가 뜬다 → 두 번째 클라이언트에서 그 코드로 **참가**
+2. Unity 에서 `Assets/Scenes/MainLobby.unity` 를 열고 Play (없으면 **Tools ▸ NV ▸ Scene ▸ Create Main Lobby Scene**)
+3. **방 만들기** → 코드가 뜬다 → 두 번째 클라이언트에서 **코드로 참가**
 4. 방장이 **게임 시작** → 룸의 맵에 맞는 씬으로 자동 전환
+
+로비의 **활성 방 목록·빠른 참가·온라인 인원**은 전부 `GET /rooms` 하나에 얹혀 있고, 거기 실리는 것은 **공개로 만든 방뿐**이다. 방 만들기 팝업의 기본값은 비공개이므로, 아무것도 건드리지 않고 만든 방은 목록에 뜨지 않고 코드로만 들어온다 — 그 방으로 빠른 참가가 닿을 수 없는 것도 정상이다.
+
+정적 개발 룸 `test` 는 공개로 열린다. 목록에 `DEV` 배지로 뜨며, 로비에서 그 방에 닿는 유일한 길이다 — id 가 4자라 초대 코드 형식(최소 6자)을 만족하지 않아 코드 입력 칸으로는 들어갈 수 없다.
 
 **개발 계기판 (빠른 길)**
 
 1. `dotnet run --project Api`
 2. `Assets/Scenes/MultiplayerTest.unity` 를 열고 Play
-3. 계기판에서 코드 칸에 `test` (설정으로 열어 둔 정적 룸) → **참가**
+3. 계기판에서 코드 칸에 `test` (설정으로 열어 둔 정적 룸) → **참가**. 이 칸은 초대 코드 형식을 요구하지 않는다 — 정적 룸 id 는 4자라 코드 규칙을 만족하지 않으므로 서버의 룸 id 규칙만 본다
 4. 두 번째 클라이언트도 같은 룸에 붙이고 **시작**
 
 씬과 맵은 짝이다. `MultiplayerTest` ↔ `test-room`, `SampleScene` ↔ `backrooms`. 로비에서 들어오면 `SessionSceneRouter` 가 룸의 맵으로 씬을 고르므로 어긋나지 않는다. 손으로 씬을 열어 붙일 때는 맵을 맞춰야 하고, 어긋나면 해시 불일치가 뜬다.
@@ -185,7 +193,7 @@ Unity 클라이언트는 형제 폴더 `../NVproject`다. 배치와 파일 위�
 
 | 방법 | 준비 | 쓰는 경우 |
 |---|---|---|
-| **에디터 + Windows 빌드** | **Tools ▸ NV Network ▸ Build and Launch 2 Clients** | 기본. 반복이 빠르다 |
+| **에디터 + Windows 빌드** | **Tools ▸ NV ▸ Build and Launch 2 Clients** | 기본. 반복이 빠르다 |
 | 에디터 + WebGL 빌드 | WebGL 빌드를 `Api/wwwroot` 에 넣고 브라우저 탭 2개 | 최종 타겟 확인. 빌드가 몇 분 걸려 반복에는 못 쓴다 |
 | Multiplayer Play Mode | `com.unity.multiplayer.playmode` 패키지 추가 | 빌드 없이 에디터 안에서 가상 플레이어. 새 패키지와 프로젝트 복제본 디스크 비용을 감수할 때 |
 
@@ -201,7 +209,7 @@ Windows 스탠드얼론은 전송 구현이 에디터와 같은 `ClientWebSocket
 
 빌드된 클라이언트는 인스턴스마다 `Builds/TestClient/client-{시각}.log` 에 로그를 남긴다. 같은 파일을 쓰면 두 번째 인스턴스가 로그를 남기지 못한다.
 
-`MultiplayerTest` 씬은 저장소에 들어 있다. 배선을 바꿀 때는 씬을 손으로 고치지 않고 **Tools ▸ NV Network ▸ Create Multiplayer Test Scene** 을 고쳐 다시 만든다. 씨드나 격자 수치를 바꿨다면 **Tools ▸ NV Network ▸ Export Map Collision** 을 먼저 돌린다.
+`MultiplayerTest` 씬은 저장소에 들어 있다. 배선을 바꿀 때는 씬을 손으로 고치지 않고 **Tools ▸ NV ▸ Scene ▸ Create Multiplayer Test Scene** 을 고쳐 다시 만든다. 씨드나 격자 수치를 바꿨다면 **Tools ▸ NV ▸ Map ▸ Export Map Collision** 을 먼저 돌린다.
 
 ### 접속 UI
 

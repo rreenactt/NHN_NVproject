@@ -22,8 +22,8 @@ namespace NV.Modules.Tests.Realtime
         {
             var registry = Registry(out var maps, StaticRooms.Empty);
 
-            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var defaultCode, out _, out _));
-            Assert.True(registry.TryCreate("test-room", out var namedCode, out _, out _));
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: false, out var defaultCode, out _, out _));
+            Assert.True(registry.TryCreate("test-room", isPublic: false, out var namedCode, out _, out _));
 
             Assert.True(registry.TryGet(defaultCode, out var defaultRoom));
             Assert.True(registry.TryGet(namedCode, out var namedRoom));
@@ -38,12 +38,12 @@ namespace NV.Modules.Tests.Realtime
         {
             var registry = Registry(out _, StaticRooms.Empty);
 
-            Assert.False(registry.TryCreate("no-such-map", out _, out _, out var error));
+            Assert.False(registry.TryCreate("no-such-map", isPublic: false, out _, out _, out var error));
             Assert.Equal(RoomCreateError.UnknownMap, error);
 
             // 기본 맵으로 대신 열면 방을 만든 사람은 자기가 무엇을 잘못 골랐는지
             // 알 수 없고, 증상은 맵 해시 불일치로만 나타난다.
-            Assert.Empty(registry.ListRooms());
+            Assert.Empty(registry.ListPublicRooms());
         }
 
         [Fact]
@@ -51,7 +51,7 @@ namespace NV.Modules.Tests.Realtime
         {
             var registry = Registry(out var maps, StaticRooms.Empty);
 
-            Assert.True(registry.TryCreate(null, out var code, out _, out _));
+            Assert.True(registry.TryCreate(null, isPublic: false, out var code, out _, out _));
             Assert.True(registry.TryGet(code, out var room));
             Assert.Equal(maps.Default.Hash, room.MapHash);
         }
@@ -61,7 +61,7 @@ namespace NV.Modules.Tests.Realtime
         {
             var registry = Registry(out _, StaticRooms.Empty);
 
-            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var code, out var token, out _));
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: false, out var code, out var token, out _));
 
             Assert.True(InviteCodeFormat.IsValid(code), code);
 
@@ -85,8 +85,8 @@ namespace NV.Modules.Tests.Realtime
         {
             var registry = Registry(out _, StaticRooms.Empty);
 
-            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var code, out var token, out _));
-            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var otherCode, out var otherToken, out _));
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: false, out var code, out var token, out _));
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: false, out var otherCode, out var otherToken, out _));
 
             Assert.True(registry.IsHostToken(code, token));
             Assert.False(registry.IsHostToken(code, otherToken));
@@ -129,13 +129,52 @@ namespace NV.Modules.Tests.Realtime
 
             for (var index = 0; index < 300; index++)
             {
-                Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var code, out _, out var error));
+                // 공개로 만든다. 목록으로 개수를 세는 검증이라 비공개로 만들면
+                // 0개가 나오고, 그것은 상한이 아니라 가시성을 재는 것이 된다.
+                Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: true, out var code, out _, out var error));
                 Assert.Equal(RoomCreateError.None, error);
                 Assert.True(InviteCodeFormat.IsValid(code), code);
                 Assert.True(codes.Add(code), "코드가 겹쳤다: " + code);
             }
 
-            Assert.Equal(300, registry.ListRooms().Count);
+            Assert.Equal(300, registry.ListPublicRooms().Count);
+        }
+
+        [Fact]
+        public void 비공개_방은_목록에_실리지_않는다()
+        {
+            var registry = Registry(out _, StaticRooms.Empty);
+
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: true, out var publicCode, out _, out _));
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: false, out var privateCode, out _, out _));
+
+            var listed = registry.ListPublicRooms();
+
+            Assert.Single(listed);
+            Assert.Equal(publicCode, listed[0].RoomId);
+            Assert.True(listed[0].IsPublic);
+
+            // 목록에서 빠지는 것이지 접근이 막히는 것이 아니다. 코드를 아는 사람은
+            // 그대로 들어온다 — 여기서 막으면 초대 코드 자체가 동작하지 않는다.
+            Assert.True(registry.TryGet(privateCode, out _));
+            Assert.True(registry.TryGetRoom(privateCode, out var summary));
+            Assert.False(summary.IsPublic);
+        }
+
+        [Fact]
+        public void 정적_룸은_공개다()
+        {
+            // 목록에 뜨지 않으면 로비에서 여기에 닿을 길이 없다. id 가 초대 코드
+            // 형식(6자 이상)을 만족하지 않아 코드 입력 칸으로도 들어갈 수 없다.
+            var registry = Registry(
+                out _,
+                new StaticRooms(new Dictionary<string, string> { ["test"] = "test-room" }));
+
+            var listed = registry.ListPublicRooms();
+
+            Assert.Single(listed);
+            Assert.Equal("test", listed[0].RoomId);
+            Assert.True(listed[0].IsPublic);
         }
 
         [Fact]
@@ -205,7 +244,7 @@ namespace NV.Modules.Tests.Realtime
             // POST /rooms 와 WebSocket 접속 사이에는 참가자가 0이다.
             var registry = Registry(out _, new StaticRooms(new Dictionary<string, string> { ["test"] = "test-room" }));
 
-            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var code, out _, out _));
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: false, out var code, out _, out _));
 
             registry.Sweep(RealtimeConstants.Rooms.UnjoinedExpiryTicks - 1u);
             Assert.True(registry.TryGet(code, out _));
@@ -222,7 +261,7 @@ namespace NV.Modules.Tests.Realtime
         {
             var registry = Registry(out _, StaticRooms.Empty);
 
-            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var code, out _, out _));
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: false, out var code, out _, out _));
             Assert.True(registry.TryGet(code, out var room));
 
             room.PostCommand(RoomCommand.Join(1, 0));
@@ -238,7 +277,7 @@ namespace NV.Modules.Tests.Realtime
         {
             var registry = Registry(out _, StaticRooms.Empty);
 
-            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var code, out _, out _));
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: false, out var code, out _, out _));
             Assert.True(registry.TryGet(code, out var room));
 
             RoomFixture.FillAndStart(room);
@@ -263,7 +302,7 @@ namespace NV.Modules.Tests.Realtime
         {
             var registry = Registry(out _, StaticRooms.Empty);
 
-            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var code, out _, out _));
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, isPublic: false, out var code, out _, out _));
             Assert.True(registry.TryGet(code, out var room));
 
             RoomFixture.FillAndStart(room);
@@ -283,7 +322,7 @@ namespace NV.Modules.Tests.Realtime
         {
             var registry = Registry(out _, StaticRooms.Empty);
 
-            Assert.True(registry.TryCreate("test-room", out var code, out _, out _));
+            Assert.True(registry.TryCreate("test-room", isPublic: false, out var code, out _, out _));
             Assert.True(registry.TryGetRoom(code, out var summary));
 
             Assert.Equal(code, summary.RoomId);

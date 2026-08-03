@@ -100,7 +100,18 @@ namespace NV.Realtime.Simulation
         }
 
         /// 초대 코드 룸을 만든다. 코드와 방장 토큰은 만든 사람에게만 돌아간다.
-        public bool TryCreate(string? mapId, out string code, out string hostToken, out RoomCreateError error)
+        ///
+        /// <param name="isPublic">
+        /// 목록(`GET /rooms`)에 실을 것인가. **기본은 비공개다.** 필드를 보내지 않는
+        /// 옛 클라이언트가 방을 만들면 비공개가 되어야 한다 — 반대로 두면 클라이언트를
+        /// 업데이트하지 않은 사람의 방이 본인도 모르게 목록에 뜬다.
+        /// </param>
+        public bool TryCreate(
+            string? mapId,
+            bool isPublic,
+            out string code,
+            out string hostToken,
+            out RoomCreateError error)
         {
             code = string.Empty;
             hostToken = string.Empty;
@@ -127,7 +138,7 @@ namespace NV.Realtime.Simulation
                     var candidate = InviteCode.NewCode(length);
                     var token = InviteCode.NewHostToken();
                     var entry = new Entry(
-                        new Room(candidate, map, _network, _logger),
+                        new Room(candidate, map, _network, _logger, isPublic: isPublic),
                         token,
                         createdTick);
 
@@ -140,8 +151,9 @@ namespace NV.Realtime.Simulation
                     }
 
                     _logger.LogInformation(
-                        "룸 {RoomId} 생성. 맵 {MapId}({MapName}) 해시 {MapHash:X8} 박스 {BoxCount}개, 룸 {RoomCount}개",
+                        "룸 {RoomId} 생성({Visibility}). 맵 {MapId}({MapName}) 해시 {MapHash:X8} 박스 {BoxCount}개, 룸 {RoomCount}개",
                         candidate,
+                        isPublic ? "공개" : "비공개",
                         resolvedMapId,
                         map.Name,
                         map.Hash,
@@ -280,11 +292,21 @@ namespace NV.Realtime.Simulation
             return false;
         }
 
-        public IReadOnlyList<RoomSummary> ListRooms()
+        /// 목록에 실을 방들. **공개로 만들어진 방만 나온다.**
+        ///
+        /// 거르는 자리를 레지스트리에 둔다. 엔드포인트에서 거르면 "전부 돌려주는" 메서드가
+        /// 남아 있게 되고, 다음에 목록이 필요한 곳이 생겼을 때 그쪽을 부르면 비공개 방이
+        /// 조용히 새어 나간다. 새지 않는 유일한 방법은 새는 메서드를 두지 않는 것이다.
+        public IReadOnlyList<RoomSummary> ListPublicRooms()
         {
             var summaries = new List<RoomSummary>(_rooms.Count);
             foreach (var entry in _rooms.Values)
             {
+                if (!entry.Room.IsPublic)
+                {
+                    continue;
+                }
+
                 summaries.Add(entry.Room.Summarize());
             }
 
@@ -333,8 +355,11 @@ namespace NV.Realtime.Simulation
                     throw new InvalidOperationException($"정적 룸 '{pair.Key}' 가 등록되지 않은 맵 '{pair.Value}' 를 가리킨다.");
                 }
 
+                // 정적 룸은 공개다. 개발용으로 미리 열어 둔 방이고, 목록에 뜨지 않으면
+                // 로비에서 여기에 닿을 길이 없다 — id 가 초대 코드 형식(6자 이상)을
+                // 만족하지 않아 코드 입력 칸으로도 들어갈 수 없다.
                 var entry = new Entry(
-                    new Room(pair.Key, map, _network, _logger, isStatic: true),
+                    new Room(pair.Key, map, _network, _logger, isStatic: true, isPublic: true),
                     string.Empty,
                     0u);
 

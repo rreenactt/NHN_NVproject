@@ -49,6 +49,16 @@ namespace NV.Realtime.Simulation
         private readonly ILogger _logger;
         private readonly bool _isStatic;
 
+        /// 이 방을 `GET /rooms` 목록에 실을 것인가.
+        ///
+        /// 방을 만든 사람이 정하고 바꿀 수 없다. 만든 뒤에 공개로 돌릴 수 있게 하면,
+        /// 비공개인 줄 알고 코드를 나눈 사람들의 방이 나중에 목록에 뜬다.
+        ///
+        /// 비공개 방도 코드로는 그대로 들어온다. 목록에서 빠질 뿐 접근이 막히는 것이
+        /// 아니며, `GET /rooms/{code}` 와 `/ws` 는 이 값을 보지 않는다 — 그쪽을 막으면
+        /// 초대 코드 자체가 동작하지 않는다.
+        private readonly bool _isPublic;
+
         private uint _tick;
         private int _playerCount;
 
@@ -72,13 +82,15 @@ namespace NV.Realtime.Simulation
             WorldMap map,
             NetworkConditionSimulator network,
             ILogger logger,
-            bool isStatic = false)
+            bool isStatic = false,
+            bool isPublic = false)
         {
             RoomId = roomId;
             _map = map;
             _network = network;
             _logger = logger;
             _isStatic = isStatic;
+            _isPublic = isPublic;
         }
 
         public string RoomId { get; }
@@ -96,6 +108,9 @@ namespace NV.Realtime.Simulation
 
         /// 설정으로 미리 열어 둔 룸. 방장이 없고 비어도 회수되지 않는다.
         public bool IsStatic => _isStatic;
+
+        /// 목록에 실리는 방인가. <see cref="_isPublic"/> 의 설명을 참고한다.
+        public bool IsPublic => _isPublic;
 
         /// 정원이 찼으면 false. 슬롯은 접속 스레드가 예약하고 틱 루프가 반납한다.
         /// 반납을 접속 스레드에서 하면 퇴장 커맨드가 적용되기 전에 같은 PlayerId 가
@@ -159,7 +174,8 @@ namespace NV.Realtime.Simulation
                 (RoomPhase)Volatile.Read(ref _phase),
                 (byte)Volatile.Read(ref _hostPlayerId),
                 _map.Name,
-                _map.Hash);
+                _map.Hash,
+                _isPublic);
         }
 
         /// 틱 루프에서만 호출한다.

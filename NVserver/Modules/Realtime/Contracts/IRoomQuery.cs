@@ -8,6 +8,10 @@ namespace NV.Realtime.Contracts
     {
         bool TryGetRoom(string roomId, out RoomSummary summary);
 
-        IReadOnlyList<RoomSummary> ListRooms();
+        /// 목록에 실을 방들. **공개로 만들어진 방만 나온다.**
+        ///
+        /// "전부 돌려주는" 메서드를 두지 않는다. 그런 것이 있으면 다음에 목록이 필요한
+        /// 곳에서 그쪽을 부르게 되고, 비공개 방이 조용히 새어 나간다.
+        IReadOnlyList<RoomSummary> ListPublicRooms();
     }
 }

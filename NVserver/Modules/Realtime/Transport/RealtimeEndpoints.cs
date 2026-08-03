@@ -32,7 +32,10 @@ namespace NV.Realtime.Transport
 
             endpoints.MapPost("/rooms", CreateRoom).RequireRateLimiting(RateLimitPolicies.RoomCreate);
             endpoints.MapGet("/rooms/{code}", GetRoom).RequireRateLimiting(RateLimitPolicies.CodeAttempt);
-            endpoints.MapGet("/rooms", ListRooms);
+            // 목록에도 제한을 붙인다. 예전에는 개발 설정 뒤에 있어 제한이 없었지만
+            // 이제 상시 열려 있다. 코드 시도와 양동이를 나눈 이유는 반대다 — 목록을
+            // 자주 새로고침하는 것이 정작 방에 들어갈 예산을 깎으면 안 된다.
+            endpoints.MapGet("/rooms", ListRooms).RequireRateLimiting(RateLimitPolicies.RoomList);
         }
 
         /// 방을 만든다. 코드와 방장 토큰을 돌려준다.
@@ -43,7 +46,11 @@ namespace NV.Realtime.Transport
         {
             var mapId = string.IsNullOrWhiteSpace(request?.Map) ? RoomMaps.DefaultMapId : request!.Map!.Trim();
 
-            if (!rooms.TryCreate(mapId, out var code, out var hostToken, out var error))
+            // 보내지 않았으면 비공개다. 노출은 선택이어야 하고, 선택하지 않은 요청을
+            // 노출하는 쪽으로 해석하면 필드를 모르는 클라이언트의 방이 목록에 뜬다.
+            var isPublic = request?.IsPublic ?? false;
+
+            if (!rooms.TryCreate(mapId, isPublic, out var code, out var hostToken, out var error))
             {
                 return error switch
                 {
@@ -73,6 +80,7 @@ namespace NV.Realtime.Transport
                     MapHash = map.Hash,
                     Capacity = RealtimeConstants.Rooms.MaxPlayers,
                     MinPlayers = RealtimeConstants.Rooms.MinPlayersToStart,
+                    IsPublic = isPublic,
                 },
                 JsonDefaults.Options,
                 statusCode: (int)HttpStatusCode.Created);
@@ -149,19 +157,23 @@ namespace NV.Realtime.Transport
             return Results.Json(body, JsonDefaults.Options);
         }
 
-        /// 열려 있는 룸 목록. 개발 설정에서만 응답한다.
+        /// 공개로 만들어진 룸의 목록.
         ///
-        /// 초대 코드 모델에서 공개 목록은 기능이 아니라 결함이다. 코드를 아는 사람만
-        /// 들어올 수 있다는 전제가 목록 하나로 사라진다. 서버 상태를 눈으로 볼 수단은
-        /// 개발 중에 필요하므로 설정 뒤에 둔다.
-        private static IResult ListRooms(RoomRegistry rooms, RealtimeOptions options)
+        /// 예전에는 설정(`Realtime:AllowRoomListing`) 뒤에 있었고 기본값이 꺼짐이었다.
+        /// 그 플래그는 목록이 **모든** 방을 내주던 시절의 방어선이다 — 코드를 아는 사람만
+        /// 들어올 수 있다는 전제가 목록 하나로 사라지므로, 통째로 막는 것 말고 할 수 있는
+        /// 일이 없었다.
+        ///
+        /// 방마다 공개 여부를 정하게 되면서 그 근거가 없어졌다. 여기 실리는 방은 만든
+        /// 사람이 실리기로 선택한 방뿐이고, 노출은 이제 사고가 아니라 동의다. 플래그를
+        /// 남겨 두면 공개를 선택한 방조차 목록에 뜨지 않아 기능이 죽는다.
+        ///
+        /// 대신 **요청 속도 제한이 붙었다.** 플래그가 사라지면 이 경로는 상시 열린 공개
+        /// 엔드포인트가 되는데, 지금까지 제한이 없었던 것은 개발 설정에서만 열렸기
+        /// 때문이다. 그 전제가 바뀌었으므로 제한이 그 자리를 대신한다.
+        private static IResult ListRooms(RoomRegistry rooms)
         {
-            if (!options.AllowRoomListing)
-            {
-                return Results.NotFound();
-            }
-
-            var summaries = rooms.ListRooms();
+            var summaries = rooms.ListPublicRooms();
             var body = new RoomInfoResponse[summaries.Count];
 
             for (var index = 0; index < summaries.Count; index++)
@@ -177,6 +189,7 @@ namespace NV.Realtime.Transport
                     Capacity = summary.Capacity,
                     HostPlayerId = summary.HostPlayerId,
                     MinPlayers = RealtimeConstants.Rooms.MinPlayersToStart,
+                    IsPublic = summary.IsPublic,
                 };
             }
 
