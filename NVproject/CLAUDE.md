@@ -147,12 +147,34 @@ The game itself — one Seeker against Runners who insert **10 keys** into a hid
 
 **Every rule is decided in `MatchManager` and nowhere else.** Keys, door, devices and agents hold state and raise intentions; the manager resolves them. That is not tidiness — the game is asymmetric, so every rule is also an *information* rule, and a client that decides its own hits decides it was never hit. The event list on it (`PhaseChanged`, `KeysChanged`, `EscapesChanged`, `AgentHit`, `MatchEnded`, `RolesAssigned`, `Notified`) is exactly what a replication layer has to carry. Nothing in it assumes the single local player it currently has.
 
-**Networked, the server owns four things and the rules still do not move.** `MatchSync` (in `Scripts/Net/Session/`) hands down the start tick, the seeker, the placement seed and the end of the match; `MatchBootstrap.autoStart` and `debugKeys` switch themselves off when a session exists, because a local start would give that client its own seed and its own door.
+**Networked, the server owns the rules.** That was not true when this file was first written and the change is the point: `MatchSync` (in `Scripts/Net/Session/`) no longer hands down a seed and a start tick for this client to run a match with — it applies what the server decided. `MatchBootstrap.autoStart` and `debugKeys` still switch themselves off when a session exists, because a local start would run a second match alongside the real one.
 
-- **`PlacementSeedOverride` is the load-bearing one.** `BeginMatch` falls back to `Environment.TickCount` when the seed is 0, so without it every player gets a different door, key and device layout — and the symptom is somebody inserting keys into a door that isn't there, which reads as anything but a networking fault. It is a property rather than a write into `GameConfig` because mutating a ScriptableObject at runtime persists in the editor, and the next offline session would silently reuse the last match's seed.
+Two flags gate it, and they are separate on purpose:
+
+- **`ServerOwnsObjectives`** — placement, key pickup, key insertion, the door opening, escapes. With it on, `KeyPickup` stops polling and `MatchManager.TryPickUpKey`/`TryInsertKey`/`TickEscapes` refuse.
+- **`ServerOwnsCombat`** — where a round goes, who it hits, and what that costs. With it on, `MatchManager.ReportHit` refuses.
+
+They are always set together today, but they crossed over in different tasks and for several iterations the server judged one and not the other. One flag covering both would have had to lie during that gap.
+
+**`Bullet` was not deleted, it was disarmed.** It still flies on the shooter's machine and still calls `SendMessageUpwards("OnHit")`; `ReportHit` throws that away under server authority. The offline path runs the identical code and judges normally. The one visible seam left: the hit marker fires off the *local* round's impact, so a shooter can see a marker for a shot the server scored as a miss — presentation, not a rule.
+
+What arrives from the server, and by which route:
+
+| What | Route | Applied by |
+|---|---|---|
+| Match phase, clock | `MatchState` bulletin, 2 Hz | `AcceptMatchState` |
+| Keys inserted, door open | `MatchState` + `ObjectiveState` | `AcceptObjectiveProgress` |
+| Carried keys (per player) | `MatchState` participants | `AcceptCarriedKeys` |
+| Escape count | `MatchState` | `AcceptEscapes` |
+| Hits (per player) | `MatchState` participants | `AcceptCombatState` |
+| Bleeding, downed, escaped **on a body** | `EntityFlags` in every snapshot | `AcceptCombatState` / `AcceptEscaped` |
+| Objective positions | `ObjectiveState`, role-filtered | `AcceptObjectiveState` |
+
+**Counts come from the bulletin, per-body state from the snapshot.** The bulletin says *how many* escaped; only the flags say *who*, and a body has to disappear the frame it happens rather than up to half a second later. Anything applied by polling must also be idempotent — `SetBleeding` starts a `BloodTrail`, so calling it every frame restarts the trail every frame and the wounded Runner leaves no trail at all.
+
 - **`ServerPlacesAgents`** suppresses `PlaceAgentsAtStart`: movement is server-authoritative, so a teleport here is undone by the next snapshot and the local player visibly snaps twice on the way.
-- **`ResolvesOutcome`** is true only on the room's host. Every client counting its own escapes and kills ends the match at a different moment and disagrees about the result; the host decides, reports through `Control(EndMatch)`, and the rest take it via `AcceptOutcome`. The clock still runs everywhere — the HUD needs it.
-- Hits, keys and escapes are **still resolved on each client**, which is exactly the cheatable seam this file warns about. It is deferred knowingly; `AcceptOutcome` and `ResolvesOutcome` are where a server-side ruleset plugs in, and `EvaluateWinConditions` is what it replaces.
+- **`ResolvesOutcome`** is true only on the room's host, and it is **the last rule still resolved client-side**. The server counts escapes, hits and keys but deliberately does not declare a winner — the design doc and the implementation disagree about whether a wipe wins and a two-player match cannot reach two escapes, so `Match` leaves the outcome code at 0. Until that is settled the host decides, reports through `Control(EndMatch)`, and the rest take it via `AcceptOutcome`.
+- **`PlacementSeedOverride` no longer comes from the server** — the seed was removed from the wire so that a Seeker holding the placement function has no input to compute the door with. It survives for offline play, where `GameConfig.placementSeed` (or `Environment.TickCount`) feeds it.
 
 Remote players get a `PlayerAgent`, `FootstepAudio` and `WeaponAudio` from `RemotePlayerPuppet.Create` — but only when a `MatchManager` exists in the scene, since `MultiplayerTest` wants bodies without rules. `PlayerAgent` registers itself in `OnEnable`, which is the `SetActive(true)` at the end of that builder, so its name and role have to be set before then. The match waits until every roster member has a body before starting; bodies only appear on the first snapshot, and roles are assigned to whoever is present at `BeginMatch`.
 
@@ -161,6 +183,8 @@ Remote players get a `PlayerAgent`, `FootstepAudio` and `WeaponAudio` from `Remo
 **The door has no collider**, and neither do the keys. A door the Seeker cannot see but *can* walk into would be found by bumping into thin air.
 
 **Combat counts hits, not health.** `Bullet` still calls `SendMessageUpwards("OnHit", damage)`; `PlayerAgent.OnHit` throws the number away. First hit → bleeding + teleport to a random standable cell; second → death, dropping carried keys where they fell. `hitImmunity` (0.75 s) exists because three rounds can be in the air at once — without it one burst kills through the teleport by hitting the place the victim just left.
+
+Networked, all of that happens on the server instead (`Room.ApplyHit`) and this client is told. The rules are the same by construction — the numbers live in `MatchConstants`, which both sides read — but the server counts the immunity window in **ticks** (23, not 22.5: rounding it down would reopen the burst-through-teleport case the window exists to close). A value that has to survive being converted to ticks is a value worth writing as ticks in one place, not dividing at each use.
 
 **Bleeding is enforced by the trail, not by a timer.** Running lays a thin dotted line; standing still past `bleedStillGrace` pools blood on the spot, bigger and lasting `bleedPoolLifetimeScale`× longer. Hiding while wounded paints a sign over the hiding place, which is what "must keep moving" means here.
 

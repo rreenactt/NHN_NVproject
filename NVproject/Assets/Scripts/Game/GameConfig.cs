@@ -86,14 +86,20 @@ namespace NV.Game
 
         // ============================================================ still decided client-side
         //
-        // These are judgements, not presentation, and they belong in RealtimeConstants.Match once
-        // the server makes them. They stay serialized while this client still resolves the rule —
-        // RealtimeConstants is internal to the server module, so moving them now would leave the
-        // client unable to read a value it is still using. Each moves with its own task:
-        //   dropKeysOnDeath, teleportOnHit, hitImmunity → IG-014 (combat)
-        //   seekerWinsOnWipe                            → IG-007 (win conditions, blocked on OQ-2)
-        //   seekerCanActivateDevices                    → IG-013 (devices, blocked on OQ-1)
-        //   chainAnchorRange                            → IG-016 (chain drag, blocked on OQ-4)
+        // These are judgements, not presentation. **The rule they encode is now the server's** for
+        // everything except the blocked tasks below, but the *offline practice path* still resolves
+        // it locally — so the value has to stay readable here.
+        //
+        // Where a value ended up depended on one question: does this client compute with it?
+        //   hitImmunity                → MatchConstants.HitImmunity (IG-014b). Offline `ReportHit`
+        //                                still uses it, so it is shared, not server-only.
+        //   dropKeysOnDeath, teleportOnHit → **still local switches.** The server always drops and
+        //                                always teleports (design doc §4.1), so these only steer the
+        //                                offline path now. Deleting them would remove offline knobs
+        //                                that cost nothing to keep.
+        //   seekerWinsOnWipe           → IG-007 (win conditions, blocked on OQ-2)
+        //   seekerCanActivateDevices   → IG-013 (devices, blocked on OQ-1)
+        //   chainAnchorRange           → IG-016 (chain drag, blocked on OQ-4)
 
         [Header("Match (moves to the server)")]
         [Tooltip("End the match the moment no Runner is left standing. Off, the Seeker has to " +
@@ -110,9 +116,10 @@ namespace NV.Game
         [Tooltip("Teleport the Runner to a random valid location on every non-fatal hit.")]
         public bool teleportOnHit = true;
 
-        [Tooltip("Seconds of immunity after a hit. Without it a three-round burst kills through " +
-                 "the teleport before the victim has rendered a frame anywhere else.")]
-        public float hitImmunity = 0.75f;
+        // 0.75f 를 여기 다시 적지 않는다. IG-014b 가 이 값을 `MatchConstants` 로 올렸고, 직렬화
+        // 필드로 남겨 두면 에셋이 자기 사본을 들고 있어 서버와 갈린다 — 이 루프가 이미 세 번 만난
+        // 함정이다(`keyPickupHeight`·`interactHeight`·이것).
+        public float hitImmunity => MatchConstants.HitImmunity;
 
         // ============================================================ this client's own
         //

@@ -89,6 +89,12 @@
 | `EnsureCreated()` | 마이그레이션 | 두 번째 컨텍스트의 테이블 누락 |
 | 스냅샷 델타 압축 | 매 틱 풀 스냅샷 | TCP head-of-line blocking |
 | 클라이언트가 위치 전송 | 입력만 전송 | 클라이언트 권위가 됨 |
+| 클라이언트가 규칙 판정 | 서버가 판정하고 전문으로 내려보냄 | 인정하지 않는 클라이언트가 이긴다 |
+| 상호작용 대상을 와이어에 싣기 | 비트 하나 + 서버가 대상 선택 | 사거리 밖도 지목 가능 |
+| 씨드를 공유해 양쪽이 배치 계산 | 서버가 계산해 역할별로 걸러 전송 | 계산 가능성이 곧 정보 누출 |
+| 역할별 필터를 호출부에서 | 코덱 안에서 | 호출부는 우회할 수 있다 |
+| 매치 판정 비트를 `PlayerState.Flags` 에 | `PlayerEntity.MatchFlags` 에 두고 인코딩 시 합침 | `StateHash` 가 영구히 불일치 |
+| 초 단위 시간값을 판정에 직접 사용 | `const int` 틱으로 변환해 한 곳에 | 프레임레이트 의존 · 반올림 선택 소실 |
 
 ---
 
@@ -266,7 +272,7 @@ Kestrel 스레드풀                          GameLoopService
 | `0x01` | C → S | `Input` — 최근 3틱치 중복 전송 |
 | `0x02` | C → S | `Control` — 룸에 대한 요청. 종류는 `ControlKind`(시작, 매치 종료 보고, 로비 복귀) |
 | `0x81` | S → C | `Snapshot` — 풀 스냅샷, 매 틱. `Playing` 단계에서만 |
-| `0x82` | S → C | `Event` — 종류는 `EventKind`. 지금은 룸 상태 전문 하나 |
+| `0x82` | S → C | `Event` — 종류는 `EventKind`: `RoomState`, `MatchState`, `ObjectiveState` |
 | `0x83` | S → C | `Welcome` — 자기 ID, 서버 틱, 맵 해시 |
 
 | 구조체 | 크기 | 필드 |
@@ -274,16 +280,26 @@ Kestrel 스레드풀                          GameLoopService
 | `InputFrame` | 7B | buttons(u8), moveX/Z(i8), yaw(u16), pitch(i16) |
 | `EntityState` | 13B | id(u8), x/y/z(i16), yaw(u16), flags(u8), hp(u8) |
 | `ControlMessage` | 3B | opcode(u8), kind(u8), value(u8) |
-| `RoomStateHeader` | 15B | opcode·kind·phase·host·seeker·outcome(u8×6), startTick(u32), placementSeed(i32), playerCount(u8) |
+| `RoomStateHeader` | 11B | opcode·kind·phase·host·seeker·outcome(u8×6), startTick(u32), playerCount(u8) |
 | `RoomPlayerEntry` | 2B + 이름 | playerId(u8), nameLength(u8), ASCII 이름(≤12B) |
+| `MatchStateHeader` | 9B | opcode·kind·phase(u8×3), timeRemainingTenths(u16), keysInserted·escapes·outcome·count(u8×4) |
+| `MatchParticipant` | 5B | playerId·role·flags·hits·carriedKeys(u8×5) |
+| `ObjectiveStateHeader` | 5B | opcode·kind·flags·keyCount·deviceCount(u8×5) |
+| `ObjectivePoint` / `ObjectiveDevice` | 6B / 10B | 양자화 좌표 (+yaw·type·state) |
 
-8명 기준 스냅샷 114B, 30Hz에서 3.6KB/s. 룸 상태 전문은 최대 127B, 2Hz.
+8명 기준 스냅샷 114B(30Hz, 3.6KB/s), 룸 상태 전문 최대 123B(2Hz), 매치 상태 전문 최대 49B(2Hz), 목표물 전문 최대 176B(변경 시 + 5초).
 
-**룸 상태는 알림이 아니라 전문이다.** "매치가 시작됐다" 를 한 번 보내지 않고, 지금 상태 전체를 2Hz 로 계속 보낸다. 세션 송신 채널은 `Bounded(32, DropOldest)` 라 밀리면 오래된 프레임을 버리는데 — 스냅샷은 다음 틱이 대체하므로 괜찮지만 — 한 번짜리 시작 알림이 그 규칙에 걸리면 그 클라이언트는 로비 화면에 영구히 남는다. 멱등한 전문을 반복하면 ack 와 재전송 장치 없이 수렴한다.
+**`RoomStateHeader` 에서 `placementSeed` 가 빠져 15B → 11B 가 됐다.** 그 필드를 받은 Seeker 는 배치 함수를 돌려 문의 좌표를 계산할 수 있었다 — 좌표를 보내지 않는 것만으로는 부족하고, **계산할 입력을 없애야** 닫힌다. 목표물 좌표는 이제 서버가 계산해 `ObjectiveState` 로 내려보낸다.
+
+**세 전문 모두 알림이 아니라 전문이다.** "매치가 시작됐다" 를 한 번 보내지 않고, 지금 상태 전체를 계속 보낸다. 세션 송신 채널은 `Bounded(32, DropOldest)` 라 밀리면 오래된 프레임을 버리는데 — 스냅샷은 다음 틱이 대체하므로 괜찮지만 — 한 번짜리 시작 알림이 그 규칙에 걸리면 그 클라이언트는 로비 화면에 영구히 남는다. 멱등한 전문을 반복하면 ack 와 재전송 장치 없이 수렴한다.
+
+**`MatchState` 와 `ObjectiveState` 는 룸별이 아니라 세션별로 인코딩한다.** 기획서 §2.1 이 술래에게 목표의 위치와 진행도를 숨기므로, 코덱이 Seeker 사본에서 `keysInserted` 와 모든 `carriedKeys` 를 0 으로 만들고 **문 블록을 아예 뺀다**(좌표를 0 으로 채우는 것으로는 부족하다 — 그것도 "문이 있다" 를 알려 준다). 필터가 코덱 안에 있어야 호출부가 우회할 수 없다. 반대로 `escapes` 는 걸러지지 않는다 — 술래가 막아야 하는 수다.
+
+**매 틱과 2Hz 를 나누는 기준은 "표현이 즉시 따라가야 하는가" 다.** `EntityFlags`(8비트, 전부 사용)는 원격 몸의 겉모습 — 출혈·탈출·쓰러짐·잠금·역할 — 을 싣고, HUD 가 0.5초 늦어도 되는 수(삽입된 열쇠, 탈출 수, 피격 수)는 전문에 싣는다. 출혈을 전문에 두면 피 흔적이 늦게 시작하고, 열쇠 수를 플래그에 두면 없는 비트를 쓴다.
 
 `Control` 은 요청이지 명령이 아니다. 방장인지, 지금 단계에서 가능한 전이인지는 룸이 틱 경계에서 다시 판단한다. 자발적 퇴장은 여기 없다 — WebSocket 정상 종료 프레임으로 이미 구분되고, 제어 메시지로도 보내면 같은 소켓에 두 송신이 겹친다.
 
-프로토콜 버전이 다르면 접속 시 즉시 끊는다. 클라이언트와 서버가 다른 시점에 빌드되므로 이 핸드셰이크가 유일한 방어선이다. 현재 버전은 **2** 이며, 올릴 때는 서버와 클라이언트를 같은 커밋에 배포한다.
+프로토콜 버전이 다르면 접속 시 즉시 끊는다. 클라이언트와 서버가 다른 시점에 빌드되므로 이 핸드셰이크가 유일한 방어선이다. 현재 버전은 **3** 이며, 올릴 때는 서버와 클라이언트를 같은 커밋에 배포한다. **버튼 비트를 추가하는 것은 버전을 올리지 않는다** — 크기와 배치가 그대로이고, 구버전 클라이언트는 비트를 세우지 않으며 구버전 서버는 `ButtonFlags.All` 마스크로 지운다.
 
 ### HTTP
 
