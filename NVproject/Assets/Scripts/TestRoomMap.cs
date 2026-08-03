@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using NV.Client.Net;
+using NV.Shared.Collision;
 using UnityEngine;
 
 /// <summary>
@@ -87,6 +88,23 @@ public class TestRoomMap : MonoBehaviour, INetworkMapSource
 
         return _collisionBoxes;
     }
+
+    /// <inheritdoc />
+    ///
+    /// <remarks>
+    /// This map has no grid, and that is the right answer rather than a gap.
+    ///
+    /// The grid exists so the server can place objectives and pick teleport landing spots. This
+    /// arena never runs the match rules — <c>MultiplayerTest</c> wants bodies without rules, and
+    /// <c>RemotePlayerPuppet</c> only attaches the match components when a <c>MatchManager</c> is
+    /// present. Nothing here asks "where can a player stand".
+    ///
+    /// Filling one in anyway would be worse than useless: it is a single open room *with a centre
+    /// platform and four cover blocks*, so a blanket "all cells walkable" grid would declare the
+    /// inside of those blocks to be floor. A map with no grid contributes nothing to the map hash,
+    /// so this also keeps <c>test-room.json</c> stable.
+    /// </remarks>
+    public MapGridData BuildGrid() => null;
 
     /// <inheritdoc />
     public void GetSpawns(List<(Vector3 position, float yaw)> into)

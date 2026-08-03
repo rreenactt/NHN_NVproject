@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using NV.Client.Net;
+using NV.Shared.Collision;
 using Unity.AI.Navigation;
 using UnityEngine;
 
@@ -294,6 +295,56 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
         x = Mathf.FloorToInt((world.x - _originX) / cellSize);
         z = Mathf.FloorToInt((world.z - _originZ) / cellSize);
         return x >= 0 && z >= 0 && x < gridSize && z < gridSize;
+    }
+
+    /// <inheritdoc />
+    ///
+    /// <remarks>
+    /// Only <c>Standable</c> and <c>StairLink</c> are set here. <c>FreeFloor</c> is filled in by
+    /// <see cref="MapExport"/> from the collision boxes, because that flag means "the server can
+    /// put a player here without pushing them out" and so has to be judged with the server's own
+    /// player box — see <c>MapGridBuilder</c>.
+    ///
+    /// <c>StairLink</c> covers the whole stairwell rectangle rather than just the steps. The
+    /// upper storey's shaft cells are deliberately *not* <c>Standable</c> (there is no floor built
+    /// over them), yet they are exactly where a route crosses between storeys, so a path solver
+    /// needs them marked even though nothing stands there.
+    /// </remarks>
+    public MapGridData BuildGrid()
+    {
+        EnsureGrid();
+        if (!HasGrid) return null;
+
+        int floorCount = FloorCount;
+
+        var grid = new MapGridData
+        {
+            Floors = floorCount,
+            Width = gridSize,
+            Depth = gridSize,
+            CellSize = cellSize,
+            FloorHeight = floorHeight,
+
+            // The same origin CellCentre uses. MapGridData.CellToWorld reproduces that formula,
+            // and half a cell of disagreement would read as "keys sunk halfway into walls".
+            OriginX = _originX,
+            OriginZ = _originZ,
+            Cells = new byte[floorCount * gridSize * gridSize],
+        };
+
+        for (int f = 0; f < floorCount; f++)
+        for (int x = 0; x < gridSize; x++)
+        for (int z = 0; z < gridSize; z++)
+        {
+            var flags = MapCellFlags.None;
+
+            if (IsStandable(f, x, z)) flags |= MapCellFlags.Standable;
+            if (InRect(stairwell, x, z)) flags |= MapCellFlags.StairLink;
+
+            grid.Cells[grid.CellIndex(f, x, z)] = (byte)flags;
+        }
+
+        return grid;
     }
 
     /// <summary>Every standable cell centre in the level, as (x, z, floor).</summary>

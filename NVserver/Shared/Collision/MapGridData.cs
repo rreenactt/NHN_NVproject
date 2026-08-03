@@ -1,3 +1,4 @@
+using System.Numerics;
 using NV.Shared.Simulation;
 
 namespace NV.Shared.Collision
@@ -98,6 +99,45 @@ namespace NV.Shared.Collision
         public bool Has(int floor, int x, int z, MapCellFlags flag)
         {
             return (At(floor, x, z) & flag) == flag;
+        }
+
+        /// 셀 중심의 **발밑** 월드 좌표. y 는 그 층의 바닥면이다.
+        ///
+        /// 서버의 위치 규약이 발밑 기준이므로(`MapSpawn` 과 같다) 여기도 발밑이다.
+        /// 눈높이나 박스 중심이 필요한 쪽에서 `SimConstants` 로 올려 쓴다.
+        ///
+        /// **이 식도 여기에만 있어야 한다.** 클라이언트의 셀 중심 계산과 어긋나면
+        /// export 한 격자와 클라이언트가 그리는 것이 반 셀씩 밀리고, 증상은 "열쇠가
+        /// 벽에 반쯤 박혀 보임" 이다.
+        public Vector3 CellToWorld(int floor, int x, int z)
+        {
+            return new Vector3(
+                OriginX + ((x + 0.5f) * CellSize),
+                floor * FloorHeight,
+                OriginZ + ((z + 0.5f) * CellSize));
+        }
+
+        /// 월드 y 가 몇 층인가. 내림이며 올림하지 않는다.
+        ///
+        /// 올리면 점프 중인 플레이어가 위층으로 올라간다 — 점프 정점이 1.2m 이고 층
+        /// 간격이 3.2m 라, *가장 가까운* 층 높이는 머리 위쪽이 된다. 클라이언트의
+        /// `FloorIndexAt` 이 같은 이유로 같은 규칙을 쓴다.
+        public int FloorIndexAt(float worldY)
+        {
+            if (FloorHeight <= 0f)
+            {
+                return 0;
+            }
+
+            // 한쪽으로만 여유를 둔다. 서버의 발밑은 접촉면에서 SkinWidth 만큼 낮게 앉는다.
+            var index = (int)((worldY + 0.35f) / FloorHeight);
+
+            if (index < 0)
+            {
+                return 0;
+            }
+
+            return index >= Floors ? Floors - 1 : index;
         }
 
         /// 스키마가 자기 자신과 맞는가.

@@ -141,16 +141,22 @@
 |---|---|---|---|---|
 | R-0.1 | 씬의 맵 이름과 서버 등록 맵이 어긋난다 | `BackroomsMapGenerator.cs:113` → `"backrooms2f"`, `SessionSceneRouter.SceneByMap` 은 `"backrooms"` → `SampleScene` | 로비를 통해 기본 맵으로 방을 만들면 **접속마다 맵 해시 불일치 확정** | **해소** (IG-001) |
 | R-0.2 | `MapData/backrooms.json` 은 레거시 export | 박스 1367개·범위 ±89.6m(56셀×3.2m) vs 현재 씬 지형 736박스·±52.50m(35셀×3m·2층) | 같음 | **해소** (IG-001) |
-| R-0.3 | 서버가 "여기 설 수 있는가" 를 답할 수 없다 | `MapData` 는 AABB 박스 + 스폰 8개만 안다 (`Shared/Collision/MapData.cs`) | 목표물 배치·피격 순간이동 지점 선정 불가 → R-3.4·R-6.x·R-7.1 전부 차단 | `NONE` → IG-002~004 |
+| R-0.3 | 서버가 "여기 설 수 있는가" 를 답할 수 없다 | `MapData` 는 AABB 박스 + 스폰 8개만 알았다 | 목표물 배치·피격 순간이동 지점 선정 불가 → R-3.4·R-6.x·R-7.1 전부 차단 | **해소** (IG-002·IG-003), 질의 API 는 IG-004 |
 
 R-0.1·R-0.2 는 `conventions.md` 가 이미 경고한 두 항목("씨드·격자·벽 두께를 바꾸면 export 를
 다시 돌린다", "등록되지 않은 맵 id 는 거절한다")이 겹쳐 걸린 상태였다.
 
 **IG-001 (2026-08-04) 로 해소.** `MapName` 을 `"backrooms"` 로 통일하고 export 를 재실행했다.
-`default` → `backrooms.json`(736박스, 해시 `3B4B1D41`) → `WorldMap.Name = "backrooms"` → 라우터
-→ `SampleScene` → 생성기 `"backrooms"` 로 체인이 닫혔고, 런타임 `Generate()` / export
-`ComputeCollision()` / 서버 파일 로드가 **모두 736박스로 실측 일치**했다. 서버 테스트 173개 통과.
+`default` → `backrooms.json`(736박스) → `WorldMap.Name = "backrooms"` → 라우터 → `SampleScene`
+→ 생성기 `"backrooms"` 로 체인이 닫혔고, 런타임 `Generate()` / export `ComputeCollision()` /
+서버 파일 로드가 **모두 736박스로 실측 일치**했다.
 접속 시 해시 `일치` 로그의 실측만 남아 있고 IG-010 의 스모크 테스트에서 함께 확인한다.
+
+**R-0.3 은 IG-002·IG-003 으로 해소.** 서버는 이제 `backrooms` 의 격자를 갖는다 — 2층 35×35 =
+2450셀, `Standable` 583, `FreeFloor` 574, `StairLink` 30. `FreeFloor` 는 **서버 자신의 플레이어
+박스**로 판정되므로(`MapGridBuilder`) 그 플래그가 통과시킨 자리는 시뮬레이션도 통과한다.
+맵 해시는 `3B4B1D41` → `7996AF3A` 로 바뀌었고, 격자를 내놓지 않는 `test-room` 은 `27A9412D` 로
+그대로다. 배치가 쓸 질의 API(`TryRandomPoint` 등)는 IG-004 다.
 
 ---
 
@@ -162,7 +168,7 @@ R-0.1·R-0.2 는 `conventions.md` 가 이미 경고한 두 항목("씨드·격�
 | `PARTIAL` | 33 |
 | `NONE` | 3 (R-8.1~R-8.3, 보이스) |
 | 모순 → `OPEN_QUESTIONS` | 2 (R-2.5/R-7.7 은 같은 건 = OQ-1) |
-| 선행 차단 | 3 중 **2개 해소** (R-0.1·R-0.2 → IG-001), R-0.3 남음 |
+| 선행 차단 | 3 중 **3개 전부 해소** (R-0.1·R-0.2 → IG-001, R-0.3 → IG-002·IG-003) |
 
 **서버 권위가 필요한 항목 31개 중 3개만 서버에 있다.** 나머지는 클라이언트에 완성되어 있으나
 잘못된 자리에 있다.

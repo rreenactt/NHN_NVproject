@@ -191,6 +191,17 @@ public class BackroomsMap : MonoBehaviour, INetworkMapSource
     /// that order in one place and not the other and the exported map silently stops matching
     /// the level the player sees.
     /// </summary>
+    /// <inheritdoc />
+    ///
+    /// <remarks>
+    /// No grid. This generator is legacy — no scene references it, and the level the game
+    /// actually loads is <c>BackroomsMapGenerator</c> — so building a walkability grid here
+    /// would be work nothing reads. It is here only because the interface requires it.
+    ///
+    /// This class is slated for deletion (IG-020, pending OQ-5); this member goes with it.
+    /// </remarks>
+    public NV.Shared.Collision.MapGridData BuildGrid() => null;
+
     public IReadOnlyList<Bounds> ComputeCollision()
     {
         var random = new System.Random(seed);

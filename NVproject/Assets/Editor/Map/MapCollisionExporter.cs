@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -50,9 +51,15 @@ namespace NV.Client.EditorTools
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllText(path, Serialize(data), new UTF8Encoding(false));
 
+            var grid = data.Grid == null
+                ? "격자 없음"
+                : $"격자 {data.Grid.Floors}층 {data.Grid.Width}×{data.Grid.Depth}" +
+                  $" (설 수 있는 셀 {CountFlag(data.Grid, MapCellFlags.Standable)}개," +
+                  $" 몸이 들어가는 셀 {CountFlag(data.Grid, MapCellFlags.FreeFloor)}개)";
+
             Debug.Log(
                 $"[NV] 맵 콜리전 export 완료: {path}\n" +
-                $"박스 {data.Boxes.Length}개, 스폰 {data.Spawns.Length}개, 해시 {data.ComputeHash():X8}");
+                $"박스 {data.Boxes.Length}개, 스폰 {data.Spawns.Length}개, {grid}, 해시 {data.ComputeHash():X8}");
         }
 
         private static string Serialize(MapData data)
@@ -91,8 +98,48 @@ namespace NV.Client.EditorTools
                 text.Append('\n');
             }
 
-            text.Append("  ]\n}\n");
+            text.Append("  ]");
+
+            AppendGrid(text, data.Grid);
+
+            text.Append("\n}\n");
             return text.ToString();
+        }
+
+        /// 격자를 쓴다. 없으면 아무것도 쓰지 않는다 — 필드가 없으면 서버가 `null` 로
+        /// 읽고, 그것이 "격자를 내놓지 않는 레벨" 의 정상 표현이다.
+        ///
+        /// `cells` 는 base64 다. System.Text.Json 이 `byte[]` 를 그렇게 읽으므로 서버는
+        /// 파싱 코드를 한 줄도 쓰지 않는다. 2층 35×35 = 2450 셀이 한 줄에 들어가고,
+        /// 숫자 배열로 쓰면 같은 정보가 4배 넘게 커진다.
+        private static void AppendGrid(StringBuilder text, MapGridData grid)
+        {
+            if (grid == null) return;
+
+            text.Append(",\n  \"grid\": {\n")
+                .Append("    \"floors\": ").Append(grid.Floors).Append(",\n")
+                .Append("    \"width\": ").Append(grid.Width).Append(",\n")
+                .Append("    \"depth\": ").Append(grid.Depth).Append(",\n")
+                .Append("    \"cellSize\": ").Append(F(grid.CellSize)).Append(",\n")
+                .Append("    \"floorHeight\": ").Append(F(grid.FloorHeight)).Append(",\n")
+                .Append("    \"originX\": ").Append(F(grid.OriginX)).Append(",\n")
+                .Append("    \"originZ\": ").Append(F(grid.OriginZ)).Append(",\n")
+                .Append("    \"cells\": \"")
+                .Append(Convert.ToBase64String(grid.Cells ?? new byte[0]))
+                .Append("\"\n  }");
+        }
+
+        private static int CountFlag(MapGridData grid, MapCellFlags flag)
+        {
+            if (grid == null || grid.Cells == null) return 0;
+
+            var count = 0;
+            for (var index = 0; index < grid.Cells.Length; index++)
+            {
+                if ((((MapCellFlags)grid.Cells[index]) & flag) == flag) count++;
+            }
+
+            return count;
         }
 
         private static string F(float value)

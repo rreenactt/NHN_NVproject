@@ -62,7 +62,41 @@ namespace NV.Client.Net
                 };
             }
 
+            AttachGrid(data, source);
+
             return data;
+        }
+
+        /// 레벨의 격자를 싣고 `FreeFloor` 를 채운다.
+        ///
+        /// 레벨은 `Standable` 과 `StairLink` 만 준다. `FreeFloor` 는 여기서 — 방금 만든
+        /// 콜리전 박스와 서버의 플레이어 박스로 — 계산한다. 그 플래그의 뜻이 "서버가
+        /// 여기에 플레이어를 놓아도 밀려나지 않는다" 이므로, 판정을 `Shared` 에 두어야
+        /// 서버의 기준과 갈리지 않는다.
+        ///
+        /// 순서가 중요하다. 박스가 `data` 에 들어간 **뒤에** 불려야 같은 지형으로
+        /// 판정한다.
+        private static void AttachGrid(MapData data, INetworkMapSource source)
+        {
+            var grid = source.BuildGrid();
+            if (grid == null)
+            {
+                // 격자를 내놓지 않는 레벨이 있다. 매치 규칙을 돌리지 않는 개발용 맵이
+                // 그렇고, 없으면 맵 해시에도 들어가지 않는다.
+                data.Grid = null;
+                return;
+            }
+
+            if (!grid.TryValidate(out var error))
+            {
+                Debug.LogError($"[NV] 레벨이 내놓은 격자가 잘못됐다: {error}. 격자를 싣지 않는다.");
+                data.Grid = null;
+                return;
+            }
+
+            MapGridBuilder.MarkFreeFloor(grid, data.ToCollisionWorld());
+
+            data.Grid = grid;
         }
 
         /// 씬에서 콜리전을 내놓을 수 있는 레벨을 찾는다. 인터페이스로는 FindAnyObjectByType

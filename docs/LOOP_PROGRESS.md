@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 2)
-현재 이터레이션: 2
-기준 커밋: `b20b4e9`
+최종 갱신: 2026-08-04 (이터레이션 3)
+현재 이터레이션: 3
+기준 커밋: `0cf64a1`
 
 ## 이 루프가 실제로 하는 일
 
@@ -117,7 +117,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 |---|---|---|---|---|---|
 | IG-001 | 맵 이름·등록·export 정합성 복구 | **DONE** | P0 | - | R-0.1, R-0.2 |
 | IG-002 | `MapData` 격자 스키마 + 해시 + `DeterministicSequence` | **DONE** | P0 | IG-001 | R-0.3 |
-| IG-003 | 클라이언트 격자 export (`MapExport`·`INetworkMapSource`) | TODO | P0 | IG-002 | R-0.3 |
+| IG-003 | 클라이언트 격자 export (`MapExport`·`INetworkMapSource`) | **DONE** | P0 | IG-002 | R-0.3 |
 | IG-004 | 서버 `MapGrid` 질의 + 테스트 | TODO | P0 | IG-003 | R-0.3 |
 | IG-005 | `MatchConstants` 분리 (`Shared`) + `GameConfig` 프로퍼티 대체 | TODO | P1 | IG-004 | R-1.x 전반 |
 | IG-006 | 서버 매치 단계·시계 (`Match.cs`) | TODO | P1 | IG-005 | R-1.3, R-1.4, R-1.6 |
@@ -253,16 +253,64 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
     없다.** IG-004 의 범위다. 지금은 스키마와 조회 원시연산(`At`/`Has`)만 있다.
 
 ### IG-003 — 클라이언트 격자 export
-- 상태: TODO
-- 계획: `MapExport.BuildMapData` 가 `INetworkMapSource` 의 새 격자 질의를 호출. `FreeFloor` 는
-  `MatchManager.IsFreeFloor`(`MatchManager.cs:628-636`)와 **같은 캡슐**로 계산해야 한다 —
-  `feet + up*0.35` ~ `feet + up*1.5`, 반지름 0.32. 그 상수를 한 곳으로 모아 두 번 적지 않는다.
-  `TestRoomMap` 은 방 하나이므로 전부 `FreeFloor`.
-- 변경 예정 파일: `Net/MapExport.cs`, `Net/INetworkMapSource.cs`, `BackroomsMapGenerator.cs`,
-  `TestRoomMap.cs`, `MapData/*.json` (재생성)
-- 검증: `dotnet build Assembly-CSharp.csproj` + export 실행 + `ExportedMapTests`
-- 비고: Unity 물리가 필요한 판정을 **export 시점에 구워 넣는다.** 서버가 생성기 로직을 다시
-  구현하면 `structure.md` 가 금지하는 중복이 되고 씨드를 바꿀 때마다 두 곳이 갈린다.
+- 상태: **DONE** (이터레이션 3, 2026-08-04)
+- 계획했던 것과 **다르게 구현했다.** 계획은 `FreeFloor` 를 `MatchManager.IsFreeFloor` 와 같은
+  캡슐(`Physics.CheckCapsule`, 반지름 0.32)로 계산하는 것이었다. 두 가지 이유로 불가능하고 부정확했다:
+  1. **불가능** — export 는 지오메트리를 만들지 않는 경로(`ComputeCollision`, `_collisionOnly`)로
+     도는데 `Physics.CheckCapsule` 은 씬에 실제 콜라이더가 있어야 답한다. 그 경로에서 물리 질의는
+     전부 "아무것도 없음" 을 돌려주고 결과는 **모든 셀 통과**다.
+  2. **부정확** — 캡슐 반지름 0.32 는 서버 플레이어 박스의 `SimConstants.PlayerRadius`(0.4)보다
+     **작다.** 작은 프로브는 서버가 밀어낼 자리를 통과시킨다.
+  대신 **서버의 플레이어 박스 + 서버의 충돌 코드**로 판정한다(`MapGridBuilder`, `Shared`).
+  계단이 걸러지는 성질은 유지된다 — 계단 스텝은 콜리전 박스로 export 되므로
+  (`AddBox("Step", …)`, `BackroomsMapGenerator.cs:868`) 박스 목록 안에 있다.
+- 변경 파일 (9개):
+  - `Shared/Collision/MapGridBuilder.cs` (신규) — `MarkFreeFloor`/`IsFree`/`StandingHalfExtents`
+  - `Shared/Collision/MapGridData.cs` — `CellToWorld`, `FloorIndexAt` 추가
+  - `Net/INetworkMapSource.cs` — `BuildGrid()` 추가 (`null` 허용)
+  - `Net/MapExport.cs` — `AttachGrid`: 격자를 싣고 `FreeFloor` 를 채운다
+  - `Editor/Map/MapCollisionExporter.cs` — `grid` 블록 직렬화 (base64), 로그에 격자 통계
+  - `BackroomsMapGenerator.cs` — `BuildGrid()` 구현 (`Standable`·`StairLink`)
+  - `TestRoomMap.cs` — `BuildGrid() => null`
+  - `BackroomsMap.cs` — `BuildGrid() => null` (레거시, 인터페이스 확장에 걸려 어쩔 수 없이 수정)
+  - `tests/…/ExportedMapTests.cs` — 격자 검증 5개
+  - (+ `MapData/backrooms.json` 재생성, `MapGridBuilder.cs.meta`)
+- 검증 (전부 실행함):
+
+  | 확인 | 수단 | 결과 |
+  |---|---|---|
+  | 서버 테스트 | `dotnet test` | ✅ **214개 통과**, 실패 0 (209 → 214) |
+  | 서버 경고 0 | `dotnet build` | ✅ 오류 0개 |
+  | 클라이언트 컴파일 | `Assembly-CSharp` + `Assembly-CSharp-Editor` | ✅ 둘 다 오류 0개 |
+  | export 내용 | PowerShell base64 디코드 | ✅ 2층 35×35 = **2450셀**, `Standable` 583, `FreeFloor` 574, `StairLink` 30 |
+  | `StairLink` 정합 | 계산 대조 | ✅ 30 = stairwell 3×5 × 2층 (정확히 일치) |
+  | 층별 `FreeFloor` | PowerShell | ✅ 1층 275/284, 2층 299/299 |
+  | 불변식 | PowerShell + 테스트 | ✅ `FreeFloor ⊆ Standable`, 위반 0개 |
+  | **해시 변경** | 기동 로그 | ✅ `backrooms` `3B4B1D41` → **`7996AF3A`** (D-4 대로 격자 포함) |
+  | **해시 불변** | 기동 로그 | ✅ `test-room` `27A9412D` 그대로 (격자 없음 → 기여 없음) |
+  | 좌표계 검산 | `FreeFloor_로_표시된_칸에는_실제로_플레이어가_들어간다` | ✅ 서버가 574셀 전부를 자기 충돌 코드로 재검증 |
+
+- **이 태스크에서 실제 버그를 하나 찾아 고쳤다.** 첫 export 에서 **위층 `FreeFloor` 가 0개**였다
+  (1층 275, 2층 0). 격자 크기·플래그 검증·맵 해시는 전부 통과했으므로 자동 검증으로는 잡히지
+  않는 종류였다. 원인은 박스 하단을 `(feet + halfY) - halfY` 로 왕복 계산하는 데 있었다 —
+  float 에서 `(3.2f + 0.9f) - 0.9f == 3.1999999` 이고 발밑보다 아래라, 박스가 바닥 슬래브를
+  1e-7 만큼 파고들어 `Depenetrate` 가 밀어냈다. **발밑이 정확히 `0f` 인 1층만 오차가 0 이라
+  무사했고**, 그래서 증상이 "위층에만 목표물이 생기지 않는다" 로만 나타난다.
+  판정 시 발밑을 `SimConstants.SkinWidth` 만큼 올려 고쳤다 — 임의의 여유가 아니라 서버가
+  접촉면에 정지할 때 실제로 띄우는 값이다(`CollisionWorld.MoveBox`). `conventions.md` §시뮬레이션
+  에 기록했고, `모든_층에_몸이_들어가는_셀이_있다` 테스트로 고정했다.
+- 비고:
+  - `test-room` 은 격자를 내놓지 않는다. 계획서는 "방 하나이므로 전부 `FreeFloor`" 라고 했지만
+    그 맵에는 **중앙 플랫폼과 커버 블록 4개**가 있어 전부 채우면 블록 안이 걸을 수 있는 곳이
+    된다. 그리고 그 씬은 매치 규칙을 돌리지 않으므로(`MultiplayerTest` 는 규칙 없는 몸만 필요)
+    배치할 목표물이 없다. 격자 없음이 정확한 답이고, 덕분에 `test-room.json` 해시도 안 바뀐다.
+  - `StairLink` 는 stairwell 사각형 **전체**에 세운다. 위층 샤프트 셀은 일부러 `Standable` 이
+    아니지만(바닥이 없다) 경로가 층을 넘는 자리가 정확히 거기다.
+  - 레거시 `BackroomsMap.cs` 가 `INetworkMapSource` 를 구현하고 있어 인터페이스 확장에 걸렸다.
+    삭제는 OQ-5 대기 중이라 `BuildGrid() => null` 한 줄로 맞췄다. **레거시가 살아 있는 비용이
+    이번에 실제로 발생했다** — OQ-5 의 가치가 올랐다.
+  - 파일 9개로 §6.1 의 8개를 하나 넘겼다. 인터페이스를 확장하면 구현체를 모두 맞춰야 하고
+    (레거시 포함), 검증 없이 `DONE` 을 적을 수 없어 테스트도 같은 단위에 들어간다.
 
 ### IG-004 — 서버 `MapGrid` 질의 + 테스트
 - 상태: TODO
@@ -493,6 +541,8 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 | 2026-08-03 | `match-authority-plan.md` 를 이 루프의 구현 계획 근거로 채택 | 이미 코드 인용 기반으로 Phase 0~6 을 정리해 두었다. 백로그는 그것을 LOOP §6 단위로 쪼갠 것이다 | — |
 | 2026-08-04 | (D-3) 격자 `Cells` 를 `byte[]` 로 두고 base64 로 직렬화 | System.Text.Json 의 기본 동작이라 서버 파싱 코드가 0줄이고, 2450셀이 한 줄에 들어간다. 숫자 배열이면 4배 넘게 커진다. `MapLoaderGridTests` 로 왕복을 실증했다 | — |
 | 2026-08-04 | (D-4) `Grid == null` 이면 맵 해시에 기여하지 않고, 있으면 반드시 포함한다 | 계획서는 "격자를 넣으면 export 를 다시 돌려야 한다" 고 했지만, 없을 때 0 을 섞으면 격자가 아직 없는 기존 파일 전부의 해시가 바뀌어 정보를 늘리지 않는 re-export 를 강요한다. 있으면 반드시 넣어야 하는 이유는 반대다 — 빼면 격자가 어긋난 채 해시가 일치하고, 이동 판정은 격자를 쓰지 않으므로 걸어 다니는 동안 아무 신호도 나지 않는다 | — |
+| 2026-08-04 | (D-5) `FreeFloor` 를 `Physics.CheckCapsule`(r 0.32) 대신 **서버 플레이어 박스**(`PlayerRadius` 0.4)와 서버 충돌 코드로 판정 | 계획서의 캡슐 방식은 두 가지로 틀렸다. 불가능하다 — export 는 지오메트리를 만들지 않는 경로로 돌고 물리 질의는 "아무것도 없음" 을 돌려주므로 모든 셀이 통과한다. 부정확하다 — 0.32 프로브는 0.4 박스가 밀려날 자리를 통과시킨다. 플래그의 뜻이 "서버가 여기 플레이어를 놓아도 밀려나지 않는다" 이므로 판정을 서버 기준으로 두는 것이 정의에 맞다. 계단은 스텝이 콜리전 박스로 export 되므로 그대로 걸러진다 | — |
+| 2026-08-04 | (D-6) `test-room` 은 격자를 내놓지 않는다 | 계획서는 "방 하나이므로 전부 `FreeFloor`" 라고 했으나 그 맵에는 중앙 플랫폼과 커버 블록 4개가 있어 전부 채우면 블록 안이 걸을 수 있는 곳이 된다. 게다가 그 씬은 매치 규칙을 돌리지 않으므로 배치할 목표물이 없다. 없으면 해시에도 기여하지 않아 `test-room.json` 이 안정적으로 유지된다 | — |
 
 ## 가정 (ASSUMPTIONS)
 
@@ -520,24 +570,25 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-003 — 클라이언트 격자 export** (P0, IG-002 완료로 해제됨).
+**IG-004 — 서버 `MapGrid` 질의 + 테스트** (P0, IG-003 완료로 해제됨).
 
-IG-001·IG-002 로 스키마와 검증이 서버 쪽에 준비됐다. 남은 것은 그 격자를 **채우는** 일이고,
-그것이 R-0.3 을 실제로 닫는다.
+**R-0.3 이 사실상 닫혔다.** 서버는 이제 격자를 갖고 있고(`backrooms` 2450셀, `FreeFloor` 574),
+`At`/`Has`/`CellToWorld`/`FloorIndexAt` 로 조회할 수 있다. IG-004 는 그 위에 배치가 실제로 쓰는
+질의를 올린다 — `TryRandomPoint(ref DeterministicSequence, …)`, `TryNearestFreeFloor(pos, …)`.
 
 BLOCKED 5건(IG-007, IG-013, IG-016, IG-017, IG-020)은 OQ-1·2·3·4·5·6 의 답을 기다린다.
-나머지 13개는 의존 순서대로 진행 가능하다.
+나머지 12개는 의존 순서대로 진행 가능하다.
 
-**IG-003 진행 시 주의**
+**IG-004 진행 시 주의**
 
-1. **`FreeFloor` 는 `MatchManager.IsFreeFloor`(`MatchManager.cs:628-636`)와 같은 캡슐이어야 한다** —
-   `feet + up*0.35` ~ `feet + up*1.5`, 반지름 0.32. 그 상수를 한 곳으로 모아 두 번 적지 않는다.
-2. **`Physics.CheckCapsule` 은 지오메트리가 씬에 있어야 답한다.** 그런데 export 경로
-   (`ComputeCollision`)는 `_collisionOnly` 로 지오메트리를 **만들지 않는다**. 즉 `FreeFloor` 를
-   export 시점에 구우려면 그 경로에서 물리 질의를 할 수 없다 — 이것이 IG-003 의 핵심 난점이고,
-   설계가 두 갈래로 갈리면(임시 지오메트리를 만들고 지운다 / 격자만으로 계단을 판정한다)
-   ADR 초안 + `OPEN_QUESTIONS` 후 `BLOCKED` 로 두고 종료한다(§5.4).
-3. 격자가 채워지면 **해시가 바뀐다**(D-4). IG-001 이 확인한 세 경로(런타임 `Generate()` / export
-   `ComputeCollision()` / 서버 파일 로드)가 **격자에 대해서도** 일치하는지 같은 방식으로 실측한다.
-4. `CellIndex` 식을 클라이언트에서 다시 적지 않는다 — `MapGridData.CellIndex` 를 호출한다.
-5. `TestRoomMap` 은 방 하나이므로 전부 `Standable | FreeFloor` 로 채운다.
+1. **원시연산은 이미 있다.** `MapGridData` 에 `At`/`Has`/`CellIndex`/`CellToWorld`/`FloorIndexAt`,
+   `MapGridBuilder` 에 `IsFree`/`StandingHalfExtents`. IG-004 는 그것을 조합하는 것이고 새로
+   계산하지 않는다. 특히 `CellIndex`·`CellToWorld` 식을 다시 적지 않는다.
+2. `TryRandomPoint` 는 `DeterministicSequence` 를 `ref` 로 받는다. 값으로 받으면 호출자의 수열이
+   진행하지 않아 **같은 점이 계속 나온다** — 목표물이 한 자리에 겹치는 증상이다.
+3. 후보가 없을 때 무한 루프에 빠지지 않게 한다. `FreeFloor` 셀 목록을 먼저 모아 그중에서
+   뽑는 방식이면 시도 횟수 상한이 필요 없다.
+4. 격자가 **없는** 맵(`test-room`)에서 질의가 어떻게 답하는지 정해 둔다 — `false` 를 돌려주고
+   호출자가 거절하게 한다. 조용히 원점을 돌려주면 목표물이 전부 (0,0,0) 에 생긴다.
+5. `Depenetrate` 가 밀어내지 않는 것을 확인할 때는 발밑을 `SkinWidth` 만큼 올린다
+   (IG-003 이 찾은 float 왕복 함정, `conventions.md` §시뮬레이션).
