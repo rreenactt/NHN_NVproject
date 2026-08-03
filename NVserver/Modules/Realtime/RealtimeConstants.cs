@@ -1,3 +1,4 @@
+using NV.Shared.Contracts.Enums;
 using NV.Shared.Simulation;
 
 namespace NV.Realtime
@@ -83,6 +84,54 @@ namespace NV.Realtime
             /// 짧은 손실은 흡수하고, 그 이상 끊기면 이동을 멈춘다.
             /// 무제한 허용하면 입력을 끊은 클라이언트가 계속 달린다.
             public const int MaxInputRepeatTicks = 3;
+        }
+
+        /// 매치 판정 파라미터. 표시가 아니라 판정이므로 `MatchConstants` 가 아니라 여기다.
+        ///
+        /// 기준은 하나다 — **클라이언트가 이 값으로 무언가를 계산해 화면에 그리는가.**
+        /// 아래 값들은 그렇지 않다. 배치 간격은 서버가 목표물을 놓을 때만 쓰고, 클라이언트는
+        /// 결과 좌표를 받아 그리므로 간격을 알 필요가 없다.
+        internal static class Match
+        {
+            /// 열쇠끼리, 그리고 이미 놓인 것과 떨어뜨릴 최소 거리(m).
+            ///
+            /// 기획서에 없다. 클라이언트의 배치가 쓰던 값을 그대로 옮겼다
+            /// (`MatchManager.PlaceObjectives`) — 열쇠가 문간이나 서로 위에 겹쳐 생기면
+            /// 목표가 우연히 짧아진다.
+            public const float KeySpacing = 4f;
+
+            /// 장치끼리 떨어뜨릴 최소 거리(m). 열쇠보다 크다 — 장치는 부피가 있고
+            /// 상호작용 반경(`MatchConstants.DeviceUseRadius` 2.2m)이 겹치면 어느 것을
+            /// 쓰는지 모호해진다.
+            public const float DeviceSpacing = 5f;
+
+            /// 간격 조건을 만족하는 자리를 찾는 시도 횟수.
+            ///
+            /// 다 쓰면 간격을 포기하고 아무 자리나 쓴다. 무한히 시도하지 않는 이유는
+            /// 좁은 맵에서 조건을 만족하는 자리가 아예 없을 수 있기 때문이다 — 그때
+            /// 목표물이 하나도 안 생기는 것보다 겹쳐서라도 생기는 편이 낫다.
+            public const int PlacementAttempts = 64;
+
+            /// 놓을 장치의 효과 조합. 배열 길이가 곧 최대 장치 수다.
+            ///
+            /// 기획서 §5 는 8~9개를 놓으라고 하고 효과는 6종이므로 남는 자리가 생긴다.
+            /// 그 자리를 **다회 사용 효과**에 주는 것이 클라이언트의 선택이었고
+            /// (`MatchManager.PlaceDevices`) 그대로 옮겼다 — 1회용을 두 개 놓으면 그
+            /// 효과의 총량이 두 배가 되지만, 다회용을 두 개 놓으면 걸어가는 거리만 줄어든다.
+            ///
+            /// 룰셋이 "the mix of effects is a level-design choice" 로 위임한 부분이다.
+            public static readonly MatchDeviceType[] DeviceMix =
+            {
+                MatchDeviceType.AddTime,
+                MatchDeviceType.FullMapView,
+                MatchDeviceType.StopBleeding,
+                MatchDeviceType.FreezeAndXray,
+                MatchDeviceType.SeekerCameraView,
+                MatchDeviceType.Teleport,
+                MatchDeviceType.Teleport,
+                MatchDeviceType.FullMapView,
+                MatchDeviceType.StopBleeding,
+            };
         }
 
         /// 플레이어 하나의 상태와 입력 버퍼.

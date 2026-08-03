@@ -53,6 +53,13 @@ namespace NV.Realtime.Simulation
         /// 중일 수 있고, 그때는 이동만 잠긴다 — 시뮬레이션은 계속 돌아야 한다.
         private readonly Match _match = new();
 
+        /// 이 매치의 목표물 — 제단·문·열쇠·장치. 틱 루프만 만진다.
+        ///
+        /// 서버가 배치한다. 지금까지는 배치 씨드를 내려보내 **모든 클라이언트가 같은 씨드로
+        /// 계산**했고, 그래서 문의 좌표가 Seeker 의 메모리에도 있었다. 좌표를 역할별로 걸러
+        /// 내려보내는 것은 다음 태스크(IG-011b)이고, 여기서는 서버가 자기 배치를 갖는다.
+        private readonly Objectives _objectives = new();
+
         private readonly WorldMap _map;
         private readonly NetworkConditionSimulator _network;
         private readonly ILogger _logger;
@@ -135,6 +142,12 @@ namespace NV.Realtime.Simulation
         public float MatchSecondsRemaining => _match.MatchSecondsRemaining;
 
         public float RevealSecondsRemaining => _match.RevealSecondsRemaining;
+
+        /// 이 매치의 목표물 배치. 틱 루프에서만 조회한다.
+        ///
+        /// 아직 와이어에 실리지 않는다 — 좌표를 역할별로 걸러 내려보내는 전문은 IG-011b 다.
+        /// 지금은 서버가 배치를 갖는 것까지이고, 클라이언트는 여전히 씨드로 자기 배치를 만든다.
+        internal Objectives Objectives => _objectives;
 
         /// 목록에 실리는 방인가. <see cref="_isPublic"/> 의 설명을 참고한다.
         public bool IsPublic => _isPublic;
@@ -645,6 +658,23 @@ namespace NV.Realtime.Simulation
             _match.Begin();
             _matchStateDirty = true;
 
+            // 목표물을 서버가 배치한다. 씨드는 같은 값을 클라이언트에도 내려보내고 있어
+            // (아직) 양쪽이 같은 배치를 계산하지만, 그 좌표를 역할별로 걸러 내려보내면
+            // 씨드를 와이어에서 뺄 수 있다 — 그것이 IG-011b 이고 §2.1 의 문 좌표 누출을 닫는다.
+            var placement = new DeterministicSequence(_placementSeed);
+            MatchRules.PlaceObjectives(_objectives, _map.Grid, ref placement);
+
+            if (!_objectives.Placed)
+            {
+                // 격자가 없는 맵이다. 이동과 전투는 되지만 목표가 없으므로 Runner 가 이길
+                // 방법이 없다 — 조용히 지나가면 "왜 열쇠가 없는지" 를 찾는 데 시간이 걸린다.
+                _logger.LogWarning(
+                    "룸 {RoomId}: 맵 {MapName} 에 격자가 없어 목표물을 배치하지 못했다. " +
+                    "Export 에 격자가 포함되었는지 확인한다.",
+                    RoomId,
+                    _map.Name);
+            }
+
             // 커맨드는 틱을 올리기 전에 드레인된다. 그래서 +1 이 실제로 시뮬레이션되는
             // 첫 틱이며, 이 값과 스냅샷의 틱이 같은 기준이 된다.
             _startTick = _tick + 1u;
@@ -723,6 +753,7 @@ namespace NV.Realtime.Simulation
             _startTick = 0;
             _outcome = 0;
             _match.Reset();
+            _objectives.Reset();
             _matchStateDirty = true;
         }
 
