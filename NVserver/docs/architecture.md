@@ -264,18 +264,26 @@ Kestrel 스레드풀                          GameLoopService
 | opcode | 방향 | 메시지 |
 |---|---|---|
 | `0x01` | C → S | `Input` — 최근 3틱치 중복 전송 |
-| `0x81` | S → C | `Snapshot` — 풀 스냅샷, 매 틱 |
-| `0x82` | S → C | `Event` — 킬 피드, 매치 상태 |
+| `0x02` | C → S | `Control` — 룸에 대한 요청. 종류는 `ControlKind`(시작, 매치 종료 보고, 로비 복귀) |
+| `0x81` | S → C | `Snapshot` — 풀 스냅샷, 매 틱. `Playing` 단계에서만 |
+| `0x82` | S → C | `Event` — 종류는 `EventKind`. 지금은 룸 상태 전문 하나 |
 | `0x83` | S → C | `Welcome` — 자기 ID, 서버 틱, 맵 해시 |
 
 | 구조체 | 크기 | 필드 |
 |---|---|---|
 | `InputFrame` | 7B | buttons(u8), moveX/Z(i8), yaw(u16), pitch(i16) |
 | `EntityState` | 13B | id(u8), x/y/z(i16), yaw(u16), flags(u8), hp(u8) |
+| `ControlMessage` | 3B | opcode(u8), kind(u8), value(u8) |
+| `RoomStateHeader` | 15B | opcode·kind·phase·host·seeker·outcome(u8×6), startTick(u32), placementSeed(i32), playerCount(u8) |
+| `RoomPlayerEntry` | 2B + 이름 | playerId(u8), nameLength(u8), ASCII 이름(≤12B) |
 
-8명 기준 스냅샷 114B, 30Hz에서 3.6KB/s.
+8명 기준 스냅샷 114B, 30Hz에서 3.6KB/s. 룸 상태 전문은 최대 127B, 2Hz.
 
-프로토콜 버전이 다르면 접속 시 즉시 끊는다. 클라이언트와 서버가 다른 시점에 빌드되므로 이 핸드셰이크가 유일한 방어선이다.
+**룸 상태는 알림이 아니라 전문이다.** "매치가 시작됐다" 를 한 번 보내지 않고, 지금 상태 전체를 2Hz 로 계속 보낸다. 세션 송신 채널은 `Bounded(32, DropOldest)` 라 밀리면 오래된 프레임을 버리는데 — 스냅샷은 다음 틱이 대체하므로 괜찮지만 — 한 번짜리 시작 알림이 그 규칙에 걸리면 그 클라이언트는 로비 화면에 영구히 남는다. 멱등한 전문을 반복하면 ack 와 재전송 장치 없이 수렴한다.
+
+`Control` 은 요청이지 명령이 아니다. 방장인지, 지금 단계에서 가능한 전이인지는 룸이 틱 경계에서 다시 판단한다. 자발적 퇴장은 여기 없다 — WebSocket 정상 종료 프레임으로 이미 구분되고, 제어 메시지로도 보내면 같은 소켓에 두 송신이 겹친다.
+
+프로토콜 버전이 다르면 접속 시 즉시 끊는다. 클라이언트와 서버가 다른 시점에 빌드되므로 이 핸드셰이크가 유일한 방어선이다. 현재 버전은 **2** 이며, 올릴 때는 서버와 클라이언트를 같은 커밋에 배포한다.
 
 ### HTTP
 

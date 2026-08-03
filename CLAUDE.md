@@ -56,10 +56,12 @@ The client's skills (`fps-*`, `unity-mcp-ops`, `game-rules`, …) live in `NVpro
 ### Running both
 
 1. `dotnet run --project Api` — no config edit needed, both maps are registered
-2. Open `Assets/Scenes/MultiplayerTest.unity`, Play, connect to room `test` in the connection panel
+2. Either path:
+   - **Lobby (product flow)** — open `Assets/Scenes/Lobby.unity`, Play, **방 만들기**, hand the code to the second client, host presses **게임 시작**. `SessionSceneRouter` loads the scene that matches the room's map.
+   - **Dev dashboard (fast)** — open `Assets/Scenes/MultiplayerTest.unity`, Play, join room `test` (the pre-opened static room) in the panel.
 3. Second client via **Build and Launch 2 Clients**
 
-Scene and room are a pair: `MultiplayerTest` ↔ room `test`, `SampleScene` ↔ any other room. Mismatch surfaces only as a map-hash warning. Full walkthrough with the connection-state table is in `NVserver/docs/readme.md`.
+Scene and map are a pair: `MultiplayerTest` ↔ `test-room`, `SampleScene` ↔ `backrooms`. Coming through the lobby the router picks it for you; opening a scene by hand and joining the wrong room surfaces only as a map-hash warning. A match needs **two players** — one Seeker, one Runner. Full walkthrough with the session-state table is in `NVserver/docs/readme.md`.
 
 ## The seam between the two projects
 
@@ -74,9 +76,13 @@ Three things cross the folder boundary. Everything else is independent.
 
 After changing `Shared`, `dotnet build` passing is half the check; confirm the Unity Editor compiles it too. `Shared/*.meta` files are committed on purpose.
 
-**2. The map's source of truth is the client.** The level is generated in code from a seed, so the server only knows the terrain as an exported box list in `NVserver/MapData/*.json`. Change the seed, grid, or wall thickness and re-run **Export Map Collision**, or you get a map-hash mismatch on connect — that hash is the only guard on this coupling. Rooms pick their map by id in `appsettings.json` under `Game:Maps` (`default` must exist; unregistered room ids fall back to it).
+**2. The map's source of truth is the client.** The level is generated in code from a seed, so the server only knows the terrain as an exported box list in `NVserver/MapData/*.json`. Change the seed, grid, or wall thickness and re-run **Export Map Collision**, or you get a map-hash mismatch on connect — that hash is the only guard on this coupling. `appsettings.json`'s `Game:Maps` is keyed by **map id**, and a room picks its map when it is created; an unregistered map id is rejected rather than quietly opened as `default`. `Game:StaticRooms` pre-opens fixed rooms (`test` → `test-room`) so the two-client dev loop still has a room id to connect to.
 
-**3. The wire protocol lives in `Shared/Contracts/Messages`.** Binary frames, opcode first, little-endian: `0x01` Input (C→S, last 3 ticks resent), `0x81` Snapshot (full, every tick), `0x82` Event, `0x83` Welcome. `ProtocolInfo.Version` is checked *before* the WebSocket upgrade and mismatch is rejected with 426 — the version and room travel in the query string because browsers cannot set handshake headers. Client sends input, never position.
+**3. The wire protocol lives in `Shared/Contracts/Messages`.** Binary frames, opcode first, little-endian: `0x01` Input (C→S, last 3 ticks resent), `0x02` Control (C→S: start, report match end, return to lobby), `0x81` Snapshot (full, every tick, only while the room is `Playing`), `0x82` Event (the room-state bulletin), `0x83` Welcome. `ProtocolInfo.Version` is **2**; it is checked *before* the WebSocket upgrade and mismatch is rejected with 426 — the version, room code, host token and display name travel in the query string because browsers cannot set handshake headers. Client sends input, never position.
+
+The room state is a **bulletin, not a notification**: phase, host, seeker, placement seed and roster go out at 2Hz, in full, forever. A one-shot "the match started" would eventually be the frame that the session's `Bounded(32, DropOldest)` channel drops, and that client would sit in the lobby screen for good. `Control` is a *request* — the room re-checks who is host and whether the transition is legal at the tick boundary.
+
+**Rooms are made, not stumbled into.** `POST /rooms` returns a 6-character invite code and a host token; connecting with an unknown code is a 404. `GET /rooms/{code}?v=2` is the pre-flight that separates the failure cases (400/404/409/426/503) *before* the upgrade, because a browser turns every handshake rejection into close code `1006` and nothing else.
 
 ## Server architecture in one screen
 
