@@ -38,10 +38,16 @@ public static class MatchSetup
         bootstrap.map = Object.FindFirstObjectByType<BackroomsMapGenerator>();
         bootstrap.player = Object.FindFirstObjectByType<FirstPersonController>();
 
+        // The bridge from the server's room phase to the match layer. Harmless offline — with no
+        // session in the scene it does nothing — and required online, because the seeker, the
+        // placement seed and the moment the match starts all have to come from the server.
+        Undo.AddComponent<NV.Client.Net.Session.MatchSync>(go);
+
         EditorUtility.SetDirty(go);
         Selection.activeGameObject = go;
 
-        Debug.Log("[MatchSetup] Match object added. Press play: F1 swaps side, F2 restarts, F5 takes a hit.");
+        Debug.Log("[MatchSetup] Match object added. Press play: F1 swaps side, F2 restarts, F5 takes a hit. "
+            + "In a networked match the server starts it and the debug keys are switched off.");
     }
 
     [MenuItem("Tools/Backrooms/Create Game Config Asset", priority = 21)]

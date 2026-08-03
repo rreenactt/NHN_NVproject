@@ -1,3 +1,4 @@
+using NV.Game;
 using UnityEngine;
 
 namespace NV.Client.Net
@@ -19,10 +20,13 @@ namespace NV.Client.Net
 
         public FirstPersonController Controller { get; private set; }
 
+        /// 매치 레이어에서 이 몸에 해당하는 참가자. 매치 레이어가 없는 씬에서는 null 이다.
+        public PlayerAgent Agent { get; private set; }
+
         /// 몸을 만든다. 컴포넌트의 Awake 가 필드보다 먼저 도는 것을 막기 위해
         /// 비활성 상태로 조립한 뒤 마지막에 활성화한다. 이 순서를 어기면
         /// FirstPersonController 가 자기를 로컬 플레이어로 알고 메인 카메라를 붙잡는다.
-        public static RemotePlayerPuppet Create(byte playerId, Transform parent, Material blockMaterial)
+        public static RemotePlayerPuppet Create(byte playerId, string displayName, Transform parent, Material blockMaterial)
         {
             var go = new GameObject($"Remote Player {playerId}");
             go.SetActive(false);
@@ -55,6 +59,33 @@ namespace NV.Client.Net
             var puppet = go.AddComponent<RemotePlayerPuppet>();
             puppet.PlayerId = playerId;
             puppet.Controller = controller;
+
+            // 매치 레이어가 있는 씬에서만 참가자로 만든다. MultiplayerTest 처럼 규칙
+            // 레이어가 없는 씬에서는 몸만 필요하다.
+            //
+            // PlayerAgent 는 OnEnable 에서 스스로 명단에 등록한다. 아래의 SetActive 가
+            // 그 시점이며, 그래서 역할과 이름을 그 전에 채워야 한다.
+            if (MatchManager.Instance != null)
+            {
+                var agent = go.AddComponent<PlayerAgent>();
+                agent.isLocalPlayer = false;
+                agent.displayName = string.IsNullOrEmpty(displayName) ? "플레이어 " + playerId : displayName;
+                agent.controller = controller;
+
+                // head 는 비워 둔다. 리그의 관절은 Awake 에서 만들어지고 그 Awake 는 아래
+                // SetActive 에서야 돌기 때문에 지금은 아직 없다. PlayerAgent 는 비어 있으면
+                // 트랜스폼 + 1.6m 를 쓰는데, 그것이 바로 이 리그의 눈높이다.
+
+                // 원격 플레이어의 발소리는 위치를 갖는다. 이 게임에서 발소리는 Seeker 의
+                // 주 감각이고 Runner 의 주 누출이므로, 이것이 빠지면 술래잡기의 절반이 없다.
+                var steps = go.AddComponent<FootstepAudio>();
+                steps.isLocalListener = false;
+
+                var shots = go.AddComponent<WeaponAudio>();
+                shots.isLocalListener = false;
+
+                puppet.Agent = agent;
+            }
 
             go.SetActive(true);
             return puppet;

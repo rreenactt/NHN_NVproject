@@ -75,6 +75,39 @@ namespace NV.Game
         public IReadOnlyList<PlayerAgent> Agents => _agents;
         public EscapeDoor Door => _door;
 
+        /// <summary>
+        /// Placement seed handed down by the server, or 0 to use <see cref="GameConfig"/>'s.
+        ///
+        /// In a networked match every client has to place the door, the keys and the devices in the
+        /// same spots, and those spots come out of one seeded <see cref="System.Random"/>. Left to
+        /// the config, a seed of 0 falls back to this machine's clock — so each player would get a
+        /// different door. The symptom reads as "somebody is inserting keys into a door that isn't
+        /// there", which does not look like a networking fault at all.
+        ///
+        /// Set instead of writing to the config asset: mutating a ScriptableObject at runtime
+        /// persists it in the editor, and the next offline session would silently reuse the
+        /// last match's seed.
+        /// </summary>
+        public int PlacementSeedOverride { get; set; }
+
+        /// <summary>
+        /// The server put everyone at their spawn, so the manager must not move them.
+        ///
+        /// Movement is server-authoritative. Teleporting agents here would be undone by the next
+        /// snapshot anyway, and in between the local player visibly snaps twice.
+        /// </summary>
+        public bool ServerPlacesAgents { get; set; }
+
+        /// <summary>
+        /// Does this client decide when the match is over?
+        ///
+        /// With the rules still resolved client-side, letting every client end the match on its own
+        /// count means they end it at different moments and disagree about the result. One client —
+        /// the room's host — decides and reports; the rest take the answer. That is the seam the
+        /// rules will move across when they become server-side.
+        /// </summary>
+        public bool ResolvesOutcome { get; set; } = true;
+
         public MatchPhase Phase { get; private set; } = MatchPhase.Lobby;
         public MatchOutcome Outcome { get; private set; } = MatchOutcome.None;
         public float TimeRemaining { get; private set; }
@@ -152,9 +185,15 @@ namespace NV.Game
         {
             if (config == null) config = ScriptableObject.CreateInstance<GameConfig>();
 
-            _random = new System.Random(config.placementSeed != 0
-                ? config.placementSeed
-                : Environment.TickCount);
+            // The server's seed wins. Everything placed below comes out of this one Random, so this
+            // line is what makes two clients see the same door.
+            int seed = PlacementSeedOverride != 0
+                ? PlacementSeedOverride
+                : config.placementSeed != 0
+                    ? config.placementSeed
+                    : Environment.TickCount;
+
+            _random = new System.Random(seed);
 
             // The level's grid is plain managed memory and does not survive a domain reload, while
             // its geometry does. Ask for it back before anything is placed on it.
@@ -194,7 +233,7 @@ namespace NV.Game
 
         private void PlaceAgentsAtStart(PlayerAgent seeker)
         {
-            if (map == null || !map.HasGrid) return;
+            if (ServerPlacesAgents || map == null || !map.HasGrid) return;
 
             for (int i = 0; i < _agents.Count; i++)
             {
@@ -232,10 +271,17 @@ namespace NV.Game
                     if (TimeRemaining <= 0f)
                     {
                         TimeRemaining = 0f;
+
                         // Time attack: the clock running out is a Seeker win by itself, with no
                         // reference to how close the Runners were.
-                        EndMatch(MatchOutcome.SeekerTimeout);
-                        return;
+                        //
+                        // The clock still runs on a client that does not resolve the outcome — the
+                        // HUD needs it — but the ending comes from whoever does.
+                        if (ResolvesOutcome)
+                        {
+                            EndMatch(MatchOutcome.SeekerTimeout);
+                            return;
+                        }
                     }
                     TickEscapes();
                     EvaluateWinConditions();
@@ -283,7 +329,7 @@ namespace NV.Game
 
         private void EvaluateWinConditions()
         {
-            if (Phase != MatchPhase.Playing) return;
+            if (Phase != MatchPhase.Playing || !ResolvesOutcome) return;
 
             if (Escapes >= config.escapesToWin) { EndMatch(MatchOutcome.RunnersEscaped); return; }
 
@@ -299,6 +345,29 @@ namespace NV.Game
                 if (agent != null && agent.Role == Role.Runner && agent.InPlay) runnersLeft++;
             }
             if (runnersLeft == 0) EndMatch(MatchOutcome.SeekerWipedRunners);
+        }
+
+        /// <summary>
+        /// Ends the match on a result decided elsewhere — the room's host, relayed by the server.
+        ///
+        /// This exists because the rules are still resolved client-side. When they move onto the
+        /// server this becomes the *only* way a match ends, and <see cref="EvaluateWinConditions"/>
+        /// goes away.
+        /// </summary>
+        public void AcceptOutcome(MatchOutcome outcome)
+        {
+            if (Phase == MatchPhase.Ended) return;
+            EndMatch(outcome);
+        }
+
+        /// <summary>
+        /// Back to waiting, between matches. The objective set is left standing; the next
+        /// <see cref="BeginMatch"/> tears it down, which is the same path the restart key uses.
+        /// </summary>
+        public void ReturnToLobby()
+        {
+            Outcome = MatchOutcome.None;
+            SetPhase(MatchPhase.Lobby);
         }
 
         private void EndMatch(MatchOutcome outcome)

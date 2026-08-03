@@ -69,6 +69,51 @@ namespace NV.Client.Net
 
         public string MapName => _map != null ? _map.MapName : "(맵 없음)";
 
+        /// 이 id 의 원격 몸. 없으면 false — 첫 스냅샷이 오기 전에는 아무 몸도 없다.
+        public bool TryGetPuppet(byte playerId, out RemotePlayerPuppet puppet)
+        {
+            puppet = playerId < _puppets.Length ? _puppets[playerId] : null;
+            return puppet != null;
+        }
+
+        /// 지금 씬에 있는 원격 몸의 수. 명단과 대조해 전원이 도착했는지 판단하는 데 쓴다.
+        public int PuppetCount
+        {
+            get
+            {
+                var count = 0;
+                for (var index = 0; index < _puppets.Length; index++)
+                {
+                    if (_puppets[index] != null)
+                    {
+                        count++;
+                    }
+                }
+
+                return count;
+            }
+        }
+
+        /// 명단에서 이 id 의 표시 이름을 찾는다. 없으면 빈 문자열이다.
+        private string RosterName(byte playerId)
+        {
+            if (_client == null)
+            {
+                return string.Empty;
+            }
+
+            for (var index = 0; index < _client.RosterCount; index++)
+            {
+                var entry = _client.RosterEntry(index);
+                if (entry.PlayerId == playerId)
+                {
+                    return entry.Name;
+                }
+            }
+
+            return string.Empty;
+        }
+
         private void Start()
         {
             _localPlayer = FindLocalPlayer();
@@ -269,7 +314,7 @@ namespace NV.Client.Net
                 {
                     // 씬 루트에 만든다. 이 컴포넌트가 어디에 붙어 있든 원격 몸이
                     // 로컬 플레이어의 트랜스폼을 상속하지 않게 한다.
-                    _puppets[id] = RemotePlayerPuppet.Create(id, null, null);
+                    _puppets[id] = RemotePlayerPuppet.Create(id, RosterName(id), null, null);
                     Debug.Log($"[NV] 플레이어 {id} 입장.");
                 }
 
