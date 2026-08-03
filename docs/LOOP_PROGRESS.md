@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 11)
-현재 이터레이션: 11
-기준 커밋: `8a460ac`
+최종 갱신: 2026-08-04 (이터레이션 12)
+현재 이터레이션: 12
+기준 커밋: `68e7352`
 
 ## 이 루프가 실제로 하는 일
 
@@ -93,6 +93,21 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | `Welcome` `0x83` | S→C | 13B (protocolVersion, playerId, serverTick, mapHash, tickRate) | 서버 | `Shared/Contracts/Messages/WelcomeMessage.cs` |
 | `Event` `0x82` + `EventKind.MatchState=2` | S→C | 고정부 9B (phase, timeRemaining u16 0.1초, keysInserted, escapes, outcome, count) + 참가자 5B × N (playerId, role, flags, hits, carriedKeys). 8인 = 49B. **세션별 인코딩** | 서버 | `Shared/Contracts/Messages/MatchStateMessage.cs` |
 
+| `Event` `0x82` + `EventKind.ObjectiveState=3` | S→C | 고정부 5B (flags, keyCount, deviceCount) + 제단 12B + 문 9B(위치·yaw·개방) + 열쇠 6B × N + 장치 10B × N. 최악 ≈176B. **변경 즉시 + 5초**, 세션별 인코딩 | 서버 | `Shared/Contracts/Messages/ObjectiveStateMessage.cs` |
+
+`ObjectiveState` 는 IG-011b 에서 들어왔다. **`MatchState` 보다 한 걸음 더 나간 필터다** —
+값을 0 으로 채우는 것이 아니라 **Seeker 사본에서 문 블록 자체를 뺀다.** 0 으로 채우면 "문이
+있다" 는 사실과 블록 크기가 여전히 남기 때문이다. 헤더의 `HasDoor` 비트도 함께 내려가고,
+전문 길이가 정확히 9B 짧아진다.
+
+열쇠·제단·장치는 전원 공통이다. 룰셋이 그렇게 정한다 — 복도의 열쇠는 물리적 물건이고 Seeker 가
+그것을 보는 것이 열쇠를 지키는 전술을 만든다. 제단은 벌칙 지점, 장치는 §5.3 의 파괴 대상이다.
+
+주기가 다르다(2Hz 가 아니라 5초). 배치는 매치 중 거의 바뀌지 않으므로 2Hz 로 보내면 8인 룸에서
+2.8KB/s 가 더 붙고 그만큼의 정보가 없다. **바뀐 틱에는 즉시 보낸다.**
+
+아직 0 으로 나가는 필드: 장치 `State`(소진·파괴·쿨다운 → IG-013·IG-015), 문 개방 여부(→ IG-012).
+
 `MatchState` 는 IG-008 에서 들어왔다. **`RoomState` 와 성격은 같고(전문, 2Hz + 변경 즉시, 멱등)
 본문이 수신자마다 다르다** — Seeker 사본에서는 `keysInserted` 와 모든 `carriedKeys` 가 0 이다.
 필터는 `MessageCodec.WriteMatchState` 안에 있어 호출부가 우회할 수 없다.
@@ -110,7 +125,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | 메시지 | 방향 | 페이로드 | 권위 | 태스크 |
 |---|---|---|---|---|
 | ~~`EventKind.MatchState=2`~~ | — | **완료 (IG-008)** — 위 현존 표로 옮겼다 | — | ✅ |
-| `EventKind.ObjectiveState=3` | S→C | 문(위치·yaw·개방) / 열쇠 위치 목록 / 장치(위치·yaw·타입·상태) / 제단 위치. ≈166B | 서버 | IG-011 |
+| ~~`EventKind.ObjectiveState=3`~~ | — | **완료 (IG-011b)** — 아래 현존 표로 옮겼다 | — | ✅ |
 | ~~`EntityFlags` 확장~~ | — | **완료 (IG-009)** — `Bleeding=8`, `Seeker=16`, `Escaped=32`, `Frozen=64`. `EntityState` 13B 그대로. `Seeker`·`Frozen` 은 실제 값이 나가고 `Bleeding`·`Escaped` 는 0(→ IG-014·IG-012) | 서버 | ✅ |
 
 `MatchPhase`(Lobby/RoleReveal/Playing/Ended)는 **IG-006 에서 이미 `Shared/Contracts/Enums` 에
@@ -143,7 +158,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-023 | 클라이언트 이동 예측 + 리컨실리에이션 | TODO | P4 | - | (품질) |
 | IG-021 | 클라이언트 판정 경로 제거 (뷰 전환 2/2) | **BLOCKED** | P1 | IG-010, IG-007 | R-1.5, R-3.1 |
 | IG-011a | 서버 목표물 배치 (제단·문·열쇠·장치) | **DONE** | P2 | IG-010 | R-6.3, R-7.1 |
-| IG-011b | `ObjectiveState` 전문 + 역할별 필터 + 씨드 제거 | TODO | P2 | IG-011a | **R-2.3**, R-6.4 |
+| IG-011b | `ObjectiveState` 전문 + 역할별 필터 | **DONE** | P2 | IG-011a | **R-2.3**, R-6.4 |
 | IG-011c | 클라이언트 목표물 수신·적용 | TODO | P2 | IG-011b | R-6.3, R-7.1 |
 | IG-012 | 열쇠 습득·삽입·문 개방·탈출 판정 | TODO | P2 | IG-011 | R-6.1, R-6.2, R-6.5, R-6.7 |
 | IG-013 | `Interact` 입력 + 장치 사용 판정 | **BLOCKED** | P2 | IG-011 | R-7.2~R-7.7, R-4.3 |
@@ -815,8 +830,61 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
     라운딩 차이를 이유로 `System.Numerics` 의 벡터 연산을 금지한다.
   - 배치 간격(열쇠 4m·장치 5m)과 조합표는 기획서에 없고 클라이언트 구현에서 왔다 → AS-5·AS-9.
 
-### IG-011b — `ObjectiveState` 전문 + 역할별 필터 + 씨드 제거
-- 상태: TODO
+### IG-011b — `ObjectiveState` 전문 + 역할별 필터
+- 상태: **DONE** (이터레이션 12, 2026-08-04)
+- 변경 파일 (9개 + meta) — §6.1 을 하나 넘겼다. IG-008 과 같은 이유로 프로토콜 추가는 계약·
+  코덱·상수·송신·수신·테스트를 한꺼번에 건드린다. **이미 a/b/c 로 쪼갠 뒤에도 그렇다** —
+  다음에 와이어를 추가할 때는 (계약+코덱)과 (송신+통합 테스트)를 더 나눈다.
+  - `Shared/Contracts/Messages/ObjectiveStateMessage.cs` (신규) — 헤더 5B + 가변 블록
+  - `Shared/Contracts/Enums/EventKind.cs` — `ObjectiveState = 3`
+  - `Shared/Serialization/MessageCodec.cs` — `WriteObjectiveState`(문 필터 포함)·`Read…`·`…MaxWireSize`
+  - `Modules/Realtime/RealtimeConstants.cs` — `ObjectiveStateIntervalTicks` (5초)
+  - `Modules/Realtime/Simulation/Room.cs` — 세션별 인코딩 송신, 버퍼, 게이트
+  - `NVproject/…/Net/NetworkClient.cs` — 종류 분기에 자리 추가 (지금은 버린다)
+  - `tests/…/Serialization/ObjectiveStateCodecTests.cs` (신규, 13개)
+  - `tests/…/Realtime/RoomFixture.cs` — 격자 있는 픽스처 맵, `TryLastObjectiveState`
+  - `tests/…/Realtime/RoomTests.cs` — 통합 검증 6개
+- 검증 (전부 실행함):
+
+  | 확인 | 수단 | 결과 |
+  |---|---|---|
+  | 서버 테스트 | `dotnet test` | ✅ **336개 통과**, 실패 0 (317 → 336, +19) |
+  | 서버 경고 0 | `dotnet build` | ✅ 오류 0개 |
+  | 클라이언트 컴파일 | `Assembly-CSharp` | ✅ 오류 0개 |
+  | Unity `Shared` | Refresh + `.meta` | ✅ `ObjectiveStateMessage.cs.meta` |
+  | **문 블록이 없다** | `Seeker_사본에는_문_블록이_없다` | ✅ `HasDoor=false`, 좌표·yaw·개방 전부 0 |
+  | **바이트가 짧다** | `Seeker_사본이_문_블록만큼_짧다` | ✅ 정확히 9B 짧다 (0 으로 채우는 방식이면 같았을 것) |
+  | **좌표가 남지 않는다** | `Seeker_사본_바이트에_문_좌표가_없다` | ✅ 문의 x(-3000)의 바이트 연속이 전문 어디에도 없다 |
+  | 나머지는 동일 | `문_블록_앞부분은_두_사본이_같다` | ✅ flags 의 `HasDoor` 비트만 다르다 |
+  | **룸이 세션별로 인코딩** | `문은_Runner_에게만_실린다` | ✅ 두 세션 중 **정확히 한쪽만** 문을 받고, 받지 않은 쪽 좌표는 0 |
+  | 공통 항목 | `열쇠와_장치는_양쪽_모두_받는다` | ✅ 열쇠 수·장치 수·제단 모두 같다 |
+  | 주기 | `목표물_전문은_매_틱_나가지_않는다` | ✅ 60틱에 1~3회 (매 틱이면 60회) |
+  | 격자 없음 | `격자가_없는_맵에서는_목표물_전문이_나가지_않는다` | ✅ 0회, `MatchState` 는 정상 |
+  | 로비 복귀 | `로비로_되돌리면_목표물_전문이_멈춘다` | ✅ 200틱 동안 0회 |
+  | 버퍼 여유 | `최악의_경우가_수신_버퍼_안에_들어간다` | ✅ 열쇠 18 + 장치 9 = 최악이 512B 미만 |
+  | 프로토콜 게이트 | `curl "…?v=3"` | ✅ HTTP 200 (버전은 3 그대로 — 이 전문은 IG-008 의 인상 안에 들어간다) |
+  | 회귀 — 맵 해시 | 기동 로그 | ✅ `7996AF3A` |
+
+- **R-2.3 이 닫혔다.** 문 좌표는 이제 Seeker 세션에 **도달하지 않는다.** 0 으로 채우는 방식을
+  택하지 않은 것이 요점이다 — 그것도 "문이 있다" 는 사실과 블록 크기를 알려 준다. 없는 블록은
+  복원할 방법이 없다. 테스트가 세 층으로 확인한다: 헤더 비트, 전문 길이, 그리고 **좌표 바이트가
+  어디에도 남아 있지 않은지.**
+- **픽스처 맵에 격자를 넣을 때 `FreeFloor` 를 손으로 적지 않았다.** `MapGridBuilder.MarkFreeFloor`
+  로 실제 충돌에서 계산했다 — 손으로 적으면 벽 안의 셀을 통행 가능으로 표시하는 실수를 테스트가
+  그대로 믿는다. 벽(x 5~6)이 지나가는 열이 자동으로 빠진다.
+- 비고:
+  - **씨드를 아직 제거하지 않았다.** 계획대로다 — 클라이언트가 수신 측이 되기 전에
+    `RoomStateHeader.PlacementSeed` 를 빼면 클라이언트가 배치를 계산할 수 없어 목표물이 전부
+    사라진다. IG-011c 와 같은 커밋이어야 한다. **IG-008 에서 `ControlKind.EndMatch` 를 서버만
+    먼저 제거하면 매치가 끝나지 않는다고 판단한 것과 같은 종류의 순서 문제다.**
+  - 그래서 **지금은 씨드와 전문이 둘 다 나간다.** 클라이언트는 전문을 버리고 씨드로 계산하므로
+    게임 동작은 이전과 같다. 정보 누출도 아직 씨드 경로로 남아 있다 — **R-2.3 은 와이어 계약
+    수준에서 닫혔고, 실제로 닫히는 것은 씨드가 빠지는 IG-011c 다.**
+  - 장치 상태 바이트(소진·파괴·쿨다운)는 0 이 나간다 → IG-013·IG-015. 열거형을 만들지 않은
+    이유는 D-8 과 같다.
+  - 문 개방 여부도 `false` 가 나간다. 삽입된 열쇠 수로 정해지므로 IG-012 가 채운다.
+  - 주기가 다른 전문이 셋이 됐다 — `RoomState`·`MatchState` 2Hz, `ObjectiveState` 5초. 게이트
+    깃발도 셋이다. 공유하면 한쪽이 깃발을 내려 다른 쪽의 즉시 전송이 사라진다(IG-008 에서 확인).
 - **이 태스크가 이 루프의 보안 목표를 달성한다 (R-2.3).** 지금은 `RoomStateHeader.PlacementSeed`
   가 와이어로 가서 **모든 클라이언트가 같은 씨드로 문 위치를 계산**하므로, Seeker 의 프로세스
   메모리에 문 좌표가 들어 있다. 룰셋은 문이 Runner 에게만 보여야 한다고 정하지만 WebGL 빌드가
@@ -1009,7 +1077,49 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-011b — `ObjectiveState` 전문 + 역할별 필터** (P2).
+**IG-011c — 클라이언트 목표물 수신·적용** (P2). **이 태스크가 R-2.3 을 실제로 닫는다.**
+
+IG-011b 로 와이어 계약 수준에서는 닫혔다 — 문 좌표가 Seeker 세션에 도달하지 않는다. 그런데
+**씨드가 아직 나가므로 실제 누출은 남아 있다.** 클라이언트가 전문을 적용하고 씨드가 와이어에서
+빠질 때 비로소 Seeker 의 프로세스에서 문 좌표가 사라진다.
+
+**IG-011c 는 순서가 강제된다.** 한 커밋에서 셋을 함께 해야 한다:
+1. 클라이언트가 `ObjectiveState` 를 받아 목표물을 배치한다
+2. `MatchManager.PlaceObjectives`·`PlaceChainAltar`·`PlaceDevices`·`ScatterKeys`·
+   `TryFindSpacedPoint`·`IsFreeFloor` 제거
+3. `RoomStateHeader.PlacementSeed` 를 와이어에서 제거 (`WireSize` 15 → 11)
+
+먼저 3만 하면 목표물이 사라지고, 먼저 1만 하면 서버 좌표와 클라이언트 좌표가 겹쳐 목표물이
+두 벌 생긴다.
+
+**시작 전에 판단할 것 — 오프라인 연습 모드.** 배치 코드가 클라이언트에서 사라지면 세션 없이
+Play 할 때 목표물이 하나도 생기지 않는다(현재 `SampleScene` 을 그냥 Play 하면 오프라인 매치가
+돈다 — 이터레이션 5·9에서 실측했다). 선택지 둘:
+- (a) `MatchRules.PlaceObjectives` 를 `Shared` 로 옮겨 양쪽이 쓴다. **씨드가 와이어에 없으면
+  코드가 공유되어도 정보 누출은 없다** — Seeker 클라이언트가 배치 함수를 갖고 있어도 씨드를
+  모르므로 문을 계산할 수 없다. 계획서(§5.2 끝)가 권하는 방식이다.
+- (b) 오프라인 모드를 포기한다.
+(a) 를 권한다. 다만 `MatchRules` 가 `RealtimeConstants.Match`(서버 `internal`)를 읽고 있어,
+옮기려면 배치 상수도 함께 `Shared` 로 가야 한다 — **그 상수들은 판정이지 표시가 아니라서
+`MatchConstants` 에 두기로 한 기준(D-8)과 충돌한다.** ADR 이 필요할 수 있다.
+
+BLOCKED 6건(IG-007, IG-013, IG-016, IG-017, IG-020, IG-021)은 여전히 OQ-1·2·3·4·5·6 을 기다린다.
+
+---
+
+### 이전 판단 기록 (이터레이션 12)
+
+문 필터를 **0 으로 채우지 않고 블록을 빼는** 방식으로 만들었다. 0 으로 채우면 "문이 있다" 는
+사실과 블록 크기가 남고, 그것도 정보다. 테스트를 세 층으로 두었다 — 헤더 비트, 전문 길이(정확히
+9B 짧다), 그리고 **좌표 바이트가 전문 어디에도 남아 있지 않은지.**
+
+픽스처 맵에 격자를 넣을 때 `FreeFloor` 를 손으로 적지 않고 `MapGridBuilder.MarkFreeFloor` 로
+실제 충돌에서 계산했다. 손으로 적으면 벽 안의 셀을 통행 가능으로 표시하는 실수를 테스트가 그대로
+믿는다.
+
+§6.1 을 또 하나 넘겼다(9개). **이미 a/b/c 로 쪼갠 뒤에도** 프로토콜 추가는 계약·코덱·상수·송신·
+수신·테스트를 한꺼번에 건드린다. 다음에 와이어를 추가할 때는 (계약+코덱)과 (송신+통합 테스트)를
+더 나눈다.
 
 **서버가 목표물을 배치한다** — 제단·문·열쇠 10·장치 9가 실제 `backrooms` 격자에서 전부 몸이
 들어가는 자리에 놓이고, 같은 씨드가 같은 배치를 낸다. 아직 서버 안에만 있다.

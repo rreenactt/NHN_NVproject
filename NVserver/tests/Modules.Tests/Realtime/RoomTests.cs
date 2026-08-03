@@ -799,6 +799,128 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(0, transport.CountOfEvent(1, EventKind.MatchState));
         }
 
+        // ==================================================== 목표물 전문
+
+        [Fact]
+        public void 격자가_없는_맵에서는_목표물_전문이_나가지_않는다()
+        {
+            var room = RoomFixture.Create(withGrid: false);
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            Run(room, transport, 5);
+
+            // 빈 전문을 보내면 클라이언트가 "목표물이 전부 사라졌다" 로 읽는다.
+            Assert.False(room.Objectives.Placed);
+            Assert.Equal(0, transport.CountOfEvent(1, EventKind.ObjectiveState));
+
+            // 다른 전문은 정상으로 나간다 — 목표물이 없다고 매치가 멈추는 것은 아니다.
+            Assert.True(transport.CountOfEvent(1, EventKind.MatchState) > 0);
+        }
+
+        [Fact]
+        public void 매치가_시작되면_목표물_전문이_나간다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            Run(room, transport, 1);
+
+            Assert.True(room.Objectives.Placed);
+            Assert.True(transport.TryLastObjectiveState(1, out var header, out _, out var keys));
+
+            Assert.True(header.HasAltar);
+            Assert.True(keys.Length > 0);
+            Assert.True(header.DeviceCount > 0);
+        }
+
+        /// **이 테스트가 R-2.3 을 닫았다는 증거다.** 두 세션이 같은 룸에서 같은 배치를 받지만
+        /// 문 블록은 Runner 에게만 간다. 코덱 테스트는 필터 자체를 보고, 이것은 룸이 실제로
+        /// 세션별로 인코딩하는지를 본다 — 한 번 인코딩해 전원에게 보내면 여기서 걸린다.
+        [Fact]
+        public void 문은_Runner_에게만_실린다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            Run(room, transport, 1);
+
+            Assert.True(transport.TryLastObjectiveState(1, out var first, out var firstDoor, out _));
+            Assert.True(transport.TryLastObjectiveState(2, out var second, out var secondDoor, out _));
+
+            // 정확히 한쪽만 문을 받는다 — 이 룸의 Seeker 는 한 명이다.
+            Assert.True(
+                first.HasDoor != second.HasDoor,
+                "두 세션이 같은 문 가시성을 받았다. 세션별 인코딩이 아니다.");
+
+            // 문을 받은 쪽에는 좌표가 있고, 받지 않은 쪽은 0 이다.
+            var runnerDoor = first.HasDoor ? firstDoor : secondDoor;
+            var seekerDoor = first.HasDoor ? secondDoor : firstDoor;
+
+            Assert.True(
+                runnerDoor.X != 0 || runnerDoor.Z != 0,
+                "Runner 사본의 문 좌표가 비어 있다.");
+
+            Assert.Equal(0, seekerDoor.X);
+            Assert.Equal(0, seekerDoor.Y);
+            Assert.Equal(0, seekerDoor.Z);
+        }
+
+        [Fact]
+        public void 열쇠와_장치는_양쪽_모두_받는다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            Run(room, transport, 1);
+
+            Assert.True(transport.TryLastObjectiveState(1, out var first, out _, out var firstKeys));
+            Assert.True(transport.TryLastObjectiveState(2, out var second, out _, out var secondKeys));
+
+            // 룰셋 — 복도의 열쇠는 물리적 물건이고, Seeker 가 그것을 보는 것이 열쇠를
+            // 지키는 전술을 만든다.
+            Assert.Equal(firstKeys.Length, secondKeys.Length);
+            Assert.Equal(first.DeviceCount, second.DeviceCount);
+            Assert.True(first.HasAltar && second.HasAltar);
+        }
+
+        /// 5초 주기다. 2Hz 로 보내면 176B × 2 × 8명 = 2.8KB/s 가 더 붙고 그만큼의 정보가 없다.
+        [Fact]
+        public void 목표물_전문은_매_틱_나가지_않는다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            Run(room, transport, 60);
+
+            var count = transport.CountOfEvent(1, EventKind.ObjectiveState);
+
+            // 60틱(2초)이면 시작 시 한 번뿐이어야 한다. 매 틱 보내면 60번이다.
+            Assert.InRange(count, 1, 3);
+        }
+
+        [Fact]
+        public void 로비로_되돌리면_목표물_전문이_멈춘다()
+        {
+            var room = RoomFixture.Create();
+
+            RoomFixture.FillAndStart(room);
+            room.PostCommand(RoomCommand.EndMatch(1, 1));
+            room.Advance();
+            room.PostCommand(RoomCommand.ReturnToLobby(1));
+            room.Advance();
+
+            var transport = new RecordingTransport();
+            Run(room, transport, 200);
+
+            Assert.False(room.Objectives.Placed);
+            Assert.Equal(0, transport.CountOfEvent(1, EventKind.ObjectiveState));
+        }
+
         // ==================================================== 스냅샷의 매치 플래그
 
         /// 기획서 §2 — 술래는 정확히 한 명이다. 스냅샷의 몸에 그것이 실려야 원격

@@ -40,7 +40,7 @@
 |---|---|---|---|---|---|
 | R-2.1 | §2.1 술래: 총기 사용 | `PARTIAL` | `WeaponController.cs`, `PlayerRoleLoadout.cs` — 탄약이 클라이언트 소유 | 필요 | 필요 |
 | R-2.2 | §2.1 술래: 출혈 흔적 추적 | `PARTIAL` | `BloodTrail.cs`, `MatchLayers.cs` (`SeekerVision` 레이어 11) | 판정 필요 (출혈 상태) / 표현은 클라이언트 | 필요 (`EntityFlags`) |
-| R-2.3 | §2.1 술래: **탈출 문을 볼 수 없음** | `PARTIAL` — 컬링 레이어로만 가림 | `MatchLayers.cs`, `RoomStateMessage.cs:PlacementSeed` | 필요 (좌표를 내려보내지 않아야) | 필요 (역할별 필터) |
+| R-2.3 | §2.1 술래: **탈출 문을 볼 수 없음** | `PARTIAL` → **와이어 계약 수준에서 닫혔다**(IG-011b): 문 블록이 Seeker 사본에서 빠지고 좌표 바이트가 남지 않는다. **씨드가 아직 나가므로 실제 누출은 IG-011c 까지 남는다** | `MessageCodec.WriteObjectiveState`, 아직 `RoomStateHeader.PlacementSeed` | 필요 ✅ | 필요 ✅ |
 | R-2.4 | §2.2 플레이어: 무기 없음 | `PARTIAL` | `PlayerRoleLoadout.cs` | 필요 | 필요 |
 | R-2.5 | §2.1 술래: 일부 맵 이벤트 전용 사용 | **모순** — 구현은 술래 장치 사용 금지 | `GameConfig.asset:seekerCanActivateDevices: 0` | — | — |
 

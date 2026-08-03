@@ -445,6 +445,190 @@ namespace NV.Shared.Serialization
             return participantCount;
         }
 
+        /// 목표물 전문의 최대 크기. 문·제단이 다 실리고 열쇠·장치가 상한까지 있는 경우다.
+        public static int ObjectiveStateMaxWireSize(int maxKeys, int maxDevices)
+        {
+            return ObjectiveStateHeader.WireSize
+                + (ObjectivePoint.WireSize * 2)          // 제단 위치 + 착지점
+                + ObjectivePoint.WireSize + 2 + 1        // 문 위치 + yaw + 개방 여부
+                + (maxKeys * ObjectivePoint.WireSize)
+                + (maxDevices * ObjectiveDevice.WireSize);
+        }
+
+        /// 목표물 전문을 **수신자의 역할에 맞게** 쓴다.
+        ///
+        /// `forRole` 이 Seeker 면 **문 블록을 아예 쓰지 않고** `HasDoor` 를 내린다. 좌표를
+        /// 0 으로 채우는 것과 다르다 — 그것도 "문이 있다" 는 사실과 블록 크기를 알려 준다.
+        /// 없는 블록은 복원할 방법이 없다.
+        ///
+        /// 필터를 인코딩 지점에 두는 이유는 `WriteMatchState` 와 같다. 호출부가 필터를 잊는
+        /// 경로가 있으면 그 경로로 좌표가 새고, 클라이언트에서 숨기는 방식은 디컴파일로
+        /// 되살아난다.
+        ///
+        /// 열쇠·제단·장치는 걸러내지 않는다. 룰셋상 Seeker 도 봐야 하는 것들이다 — 열쇠를
+        /// 지키는 전술, 벌칙 지점, §5.3 의 파괴 대상.
+        public static int WriteObjectiveState(
+            Span<byte> destination,
+            ObjectiveStateHeader header,
+            ObjectivePoint altarPosition,
+            ObjectivePoint altarDragPoint,
+            ObjectivePoint doorPosition,
+            ushort doorYaw,
+            bool doorOpen,
+            ReadOnlySpan<ObjectivePoint> keys,
+            ReadOnlySpan<ObjectiveDevice> devices,
+            MatchRole forRole)
+        {
+            if (keys.Length != header.KeyCount)
+            {
+                throw new ArgumentException("헤더의 KeyCount 와 열쇠 수가 다르다.", nameof(keys));
+            }
+
+            if (devices.Length != header.DeviceCount)
+            {
+                throw new ArgumentException("헤더의 DeviceCount 와 장치 수가 다르다.", nameof(devices));
+            }
+
+            // Seeker 에게는 문이 없다. 헤더의 비트도 함께 내려야 수신 측이 블록을 찾지 않는다.
+            var flags = header.Flags;
+            if (forRole == MatchRole.Seeker)
+            {
+                flags &= ~ObjectiveFlags.HasDoor;
+            }
+
+            var writer = new BitWriter(destination);
+            writer.WriteByte((byte)MessageOpcode.Event);
+            writer.WriteByte((byte)EventKind.ObjectiveState);
+            writer.WriteByte((byte)flags);
+            writer.WriteByte(header.KeyCount);
+            writer.WriteByte(header.DeviceCount);
+
+            if ((flags & ObjectiveFlags.HasAltar) != 0)
+            {
+                WritePoint(ref writer, altarPosition);
+                WritePoint(ref writer, altarDragPoint);
+            }
+
+            if ((flags & ObjectiveFlags.HasDoor) != 0)
+            {
+                WritePoint(ref writer, doorPosition);
+                writer.WriteUInt16(doorYaw);
+                writer.WriteByte(doorOpen ? (byte)1 : (byte)0);
+            }
+
+            for (var index = 0; index < keys.Length; index++)
+            {
+                WritePoint(ref writer, keys[index]);
+            }
+
+            for (var index = 0; index < devices.Length; index++)
+            {
+                var device = devices[index];
+
+                writer.WriteInt16(device.X);
+                writer.WriteInt16(device.Y);
+                writer.WriteInt16(device.Z);
+                writer.WriteUInt16(device.Yaw);
+                writer.WriteByte((byte)device.Type);
+                writer.WriteByte(device.State);
+            }
+
+            return writer.BytesWritten;
+        }
+
+        /// 읽은 열쇠 수를 반환한다. 장치 수는 헤더에 있다.
+        public static int ReadObjectiveState(
+            ReadOnlySpan<byte> source,
+            out ObjectiveStateHeader header,
+            out ObjectivePoint altarPosition,
+            out ObjectivePoint altarDragPoint,
+            out ObjectivePoint doorPosition,
+            out ushort doorYaw,
+            out bool doorOpen,
+            Span<ObjectivePoint> keys,
+            Span<ObjectiveDevice> devices)
+        {
+            altarPosition = default;
+            altarDragPoint = default;
+            doorPosition = default;
+            doorYaw = 0;
+            doorOpen = false;
+
+            var reader = new BitReader(source);
+            var opcode = (MessageOpcode)reader.ReadByte();
+            if (opcode != MessageOpcode.Event)
+            {
+                throw new InvalidOperationException($"Event 가 아니다: 0x{(byte)opcode:X2}");
+            }
+
+            var kind = (EventKind)reader.ReadByte();
+            if (kind != EventKind.ObjectiveState)
+            {
+                throw new InvalidOperationException($"ObjectiveState 가 아니다: {kind}");
+            }
+
+            var flags = (ObjectiveFlags)reader.ReadByte();
+            var keyCount = reader.ReadByte();
+            var deviceCount = reader.ReadByte();
+
+            if (keys.Length < keyCount)
+            {
+                throw new ArgumentException($"열쇠 {keyCount} 개를 담을 공간이 없다.", nameof(keys));
+            }
+
+            if (devices.Length < deviceCount)
+            {
+                throw new ArgumentException($"장치 {deviceCount} 개를 담을 공간이 없다.", nameof(devices));
+            }
+
+            if ((flags & ObjectiveFlags.HasAltar) != 0)
+            {
+                altarPosition = ReadPoint(ref reader);
+                altarDragPoint = ReadPoint(ref reader);
+            }
+
+            if ((flags & ObjectiveFlags.HasDoor) != 0)
+            {
+                doorPosition = ReadPoint(ref reader);
+                doorYaw = reader.ReadUInt16();
+                doorOpen = reader.ReadByte() != 0;
+            }
+
+            for (var index = 0; index < keyCount; index++)
+            {
+                keys[index] = ReadPoint(ref reader);
+            }
+
+            for (var index = 0; index < deviceCount; index++)
+            {
+                // 와이어 순서대로 읽어 한 번에 만든다. 인자 위치로 읽으면 C# 이 평가 순서를
+                // 보장하더라도 읽는 순서가 코드에서 보이지 않아, 필드를 추가할 때 어긋난다.
+                var x = reader.ReadInt16();
+                var y = reader.ReadInt16();
+                var z = reader.ReadInt16();
+                var yaw = reader.ReadUInt16();
+                var type = (MatchDeviceType)reader.ReadByte();
+                var state = reader.ReadByte();
+
+                devices[index] = new ObjectiveDevice(type, x, y, z, yaw, state);
+            }
+
+            header = new ObjectiveStateHeader(flags, keyCount, deviceCount);
+            return keyCount;
+        }
+
+        private static void WritePoint(ref BitWriter writer, ObjectivePoint point)
+        {
+            writer.WriteInt16(point.X);
+            writer.WriteInt16(point.Y);
+            writer.WriteInt16(point.Z);
+        }
+
+        private static ObjectivePoint ReadPoint(ref BitReader reader)
+        {
+            return new ObjectivePoint(reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16());
+        }
+
         public static int WriteControl(Span<byte> destination, ControlMessage message)
         {
             var writer = new BitWriter(destination);

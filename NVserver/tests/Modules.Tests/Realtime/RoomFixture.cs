@@ -17,9 +17,17 @@ namespace NV.Modules.Tests.Realtime
     internal static class RoomFixture
     {
         /// 40x40 바닥과 X = 5 의 벽. 스폰은 원점 부근이다.
-        public static WorldMap Map()
+        ///
+        /// `withGrid` 면 6×6 격자를 함께 싣는다. **`FreeFloor` 는 손으로 적지 않고
+        /// `MapGridBuilder.MarkFreeFloor` 로 실제 충돌에서 계산한다** — 손으로 적으면 벽
+        /// 안의 셀을 통행 가능으로 표시하는 실수를 테스트가 그대로 믿는다. 그래서 벽(x 5~6)
+        /// 이 지나가는 열은 자동으로 빠진다.
+        ///
+        /// 격자가 없는 맵도 필요하다. 목표물 배치가 격자를 요구하므로, "격자가 없으면
+        /// 배치하지 않는다" 를 검사하려면 그쪽도 만들 수 있어야 한다.
+        public static WorldMap Map(bool withGrid = true)
         {
-            return new WorldMap(new MapData
+            var data = new MapData
             {
                 Name = "test",
                 Boxes = new[]
@@ -32,7 +40,40 @@ namespace NV.Modules.Tests.Realtime
                     new MapSpawn { X = 0f, Y = 0f, Z = 0f, Yaw = 0f },
                     new MapSpawn { X = -2f, Y = 0f, Z = 0f, Yaw = 0f },
                 },
-            });
+            };
+
+            if (!withGrid)
+            {
+                return new WorldMap(data);
+            }
+
+            const int size = 6;
+
+            var grid = new MapGridData
+            {
+                Floors = 1,
+                Width = size,
+                Depth = size,
+                CellSize = 4f,
+                FloorHeight = 4f,
+                OriginX = -12f,
+                OriginZ = -12f,
+                Cells = new byte[size * size],
+            };
+
+            // 전부 격자상 통행 가능으로 두고, 몸이 실제로 들어가는지는 충돌이 답한다.
+            for (var index = 0; index < grid.Cells.Length; index++)
+            {
+                grid.Cells[index] = (byte)MapCellFlags.Standable;
+            }
+
+            data.Grid = grid;
+
+            // 콜리전을 먼저 만들어 FreeFloor 를 채운다. `WorldMap` 이 생성 시점에 후보
+            // 목록을 고정하므로 그 전에 끝나야 한다.
+            MapGridBuilder.MarkFreeFloor(grid, data.ToCollisionWorld());
+
+            return new WorldMap(data);
         }
 
         public static NetworkConditionSimulator NoConditions()
@@ -54,9 +95,10 @@ namespace NV.Modules.Tests.Realtime
         public static Room Create(
             NetworkConditionSimulator? network = null,
             bool isStatic = false,
-            string roomId = "test")
+            string roomId = "test",
+            bool withGrid = true)
         {
-            return new Room(roomId, Map(), network ?? NoConditions(), NullLogger.Instance, isStatic);
+            return new Room(roomId, Map(withGrid), network ?? NoConditions(), NullLogger.Instance, isStatic);
         }
 
         /// 세션 1..count 를 playerId 0..count-1 로 넣고 방장(세션 1)이 매치를 시작한다.
@@ -210,6 +252,42 @@ namespace NV.Modules.Tests.Realtime
 
             participants = new MatchParticipant[count];
             Array.Copy(buffer, participants, count);
+            return true;
+        }
+
+        /// 목표물 전문. **문이 실려 있는지는 헤더의 `HasDoor` 로 본다** — Seeker 사본에서는
+        /// 블록 자체가 없다.
+        public bool TryLastObjectiveState(
+            int sessionId,
+            out ObjectiveStateHeader header,
+            out ObjectivePoint door,
+            out ObjectivePoint[] keys)
+        {
+            header = default;
+            door = default;
+            keys = Array.Empty<ObjectivePoint>();
+
+            if (!TryLastEvent(sessionId, EventKind.ObjectiveState, out var payload))
+            {
+                return false;
+            }
+
+            var keyBuffer = new ObjectivePoint[64];
+            var deviceBuffer = new ObjectiveDevice[16];
+
+            var count = MessageCodec.ReadObjectiveState(
+                payload,
+                out header,
+                out _,
+                out _,
+                out door,
+                out _,
+                out _,
+                keyBuffer,
+                deviceBuffer);
+
+            keys = new ObjectivePoint[count];
+            Array.Copy(keyBuffer, keys, count);
             return true;
         }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using NV.Realtime.Contracts;
@@ -43,6 +44,18 @@ namespace NV.Realtime.Simulation
 
         private readonly MatchParticipant[] _participantBuffer = new MatchParticipant[RealtimeConstants.Rooms.MaxPlayers];
         private readonly byte[] _matchStateBuffer = new byte[MessageCodec.MatchStateMaxWireSize(RealtimeConstants.Rooms.MaxPlayers)];
+
+        /// 목표물 전문 버퍼. 열쇠는 사망 시 흘려질 수 있어 배치 수보다 늘어날 수 있으므로
+        /// 정원만큼 여유를 둔다 — 8명이 각자 열쇠를 들고 죽어도 담긴다.
+        private readonly ObjectivePoint[] _keyBuffer =
+            new ObjectivePoint[MatchConstants.KeysPlaced + RealtimeConstants.Rooms.MaxPlayers];
+
+        private readonly ObjectiveDevice[] _deviceBuffer =
+            new ObjectiveDevice[RealtimeConstants.Match.DeviceMix.Length];
+
+        private readonly byte[] _objectiveStateBuffer = new byte[MessageCodec.ObjectiveStateMaxWireSize(
+            MatchConstants.KeysPlaced + RealtimeConstants.Rooms.MaxPlayers,
+            RealtimeConstants.Match.DeviceMix.Length)];
 
         private readonly bool[] _slots = new bool[RealtimeConstants.Rooms.MaxPlayers];
         private readonly object _slotGate = new();
@@ -100,6 +113,11 @@ namespace NV.Realtime.Simulation
         /// 서로 다른 이유로 바뀌므로 깃발도 둘이어야 한다.
         private bool _matchStateDirty;
         private uint _lastMatchStateTick;
+
+        /// 목표물 전문도 게이트를 따로 둔다. 주기가 다르고(5초) 바뀌는 이유도 다르다 —
+        /// 열쇠가 주워지거나 장치가 부서질 때만이다.
+        private bool _objectiveStateDirty;
+        private uint _lastObjectiveStateTick;
 
         public Room(
             string roomId,
@@ -273,6 +291,7 @@ namespace NV.Realtime.Simulation
 
             BroadcastRoomState(transport);
             BroadcastMatchState(transport);
+            BroadcastObjectiveState(transport);
 
             if (Phase != RoomPhase.Playing)
             {
@@ -420,6 +439,97 @@ namespace NV.Realtime.Simulation
                     new ReadOnlySpan<byte>(_matchStateBuffer, 0, length),
                     Reliability.Reliable);
             }
+        }
+
+        /// 목표물 전문을 보낸다. **세션별로 인코딩하고, Seeker 사본에서는 문이 빠진다.**
+        ///
+        /// 이 필터가 이 이관 작업의 원래 목적이다. 씨드를 공유해 양쪽이 같은 배치를 계산하는
+        /// 방식으로는 문 좌표가 Seeker 의 프로세스에 도달하는 것을 막을 수 없었다 — 컬링
+        /// 레이어는 화면에서 가릴 뿐이고 WebGL 빌드는 디컴파일된다.
+        ///
+        /// 배치되지 않았으면 보내지 않는다. 격자가 없는 맵이 그 경우이고, 빈 전문을 보내면
+        /// 클라이언트가 "목표물이 전부 사라졌다" 로 읽는다.
+        private void BroadcastObjectiveState(IServerTransport transport)
+        {
+            if (!_objectives.Placed)
+            {
+                return;
+            }
+
+            var due = _objectiveStateDirty
+                || _tick - _lastObjectiveStateTick >= (uint)RealtimeConstants.Match.ObjectiveStateIntervalTicks;
+
+            if (!due)
+            {
+                return;
+            }
+
+            _objectiveStateDirty = false;
+            _lastObjectiveStateTick = _tick;
+
+            var keyCount = 0;
+            for (var index = 0; index < _objectives.Keys.Count && keyCount < _keyBuffer.Length; index++)
+            {
+                _keyBuffer[keyCount] = ToPoint(_objectives.Keys[index]);
+                keyCount++;
+            }
+
+            var deviceCount = 0;
+            for (var index = 0; index < _objectives.Devices.Count && deviceCount < _deviceBuffer.Length; index++)
+            {
+                var device = _objectives.Devices[index];
+
+                _deviceBuffer[deviceCount] = new ObjectiveDevice(
+                    device.Type,
+                    Quantization.ToFixedPosition(device.Position.X),
+                    Quantization.ToFixedPosition(device.Position.Y),
+                    Quantization.ToFixedPosition(device.Position.Z),
+                    Quantization.ToFixedYaw(device.Yaw),
+
+                    // 소진·파괴·쿨다운은 아직 서버가 판정하지 않는다 → IG-013·IG-015.
+                    0);
+
+                deviceCount++;
+            }
+
+            var header = new ObjectiveStateHeader(
+                ObjectiveFlags.HasAltar | ObjectiveFlags.HasDoor,
+                (byte)keyCount,
+                (byte)deviceCount);
+
+            var keys = new ReadOnlySpan<ObjectivePoint>(_keyBuffer, 0, keyCount);
+            var devices = new ReadOnlySpan<ObjectiveDevice>(_deviceBuffer, 0, deviceCount);
+
+            foreach (var player in _players.Values)
+            {
+                var length = MessageCodec.WriteObjectiveState(
+                    _objectiveStateBuffer,
+                    header,
+                    ToPoint(_objectives.AltarPosition),
+                    ToPoint(_objectives.AltarDragPoint),
+                    ToPoint(_objectives.DoorPosition),
+                    Quantization.ToFixedYaw(_objectives.DoorYaw),
+
+                    // 문 개방은 삽입된 열쇠 수로 정해진다. 서버가 그것을 세기 시작하면
+                    // (IG-012) 이 자리가 채워진다.
+                    false,
+                    keys,
+                    devices,
+                    RoleOf(player.PlayerId));
+
+                transport.TrySend(
+                    player.SessionId,
+                    new ReadOnlySpan<byte>(_objectiveStateBuffer, 0, length),
+                    Reliability.Reliable);
+            }
+        }
+
+        private static ObjectivePoint ToPoint(Vector3 position)
+        {
+            return new ObjectivePoint(
+                Quantization.ToFixedPosition(position.X),
+                Quantization.ToFixedPosition(position.Y),
+                Quantization.ToFixedPosition(position.Z));
         }
 
         /// 이 플레이어가 어느 편인가.
@@ -664,6 +774,8 @@ namespace NV.Realtime.Simulation
             var placement = new DeterministicSequence(_placementSeed);
             MatchRules.PlaceObjectives(_objectives, _map.Grid, ref placement);
 
+            _objectiveStateDirty = true;
+
             if (!_objectives.Placed)
             {
                 // 격자가 없는 맵이다. 이동과 전투는 되지만 목표가 없으므로 Runner 가 이길
@@ -755,6 +867,7 @@ namespace NV.Realtime.Simulation
             _match.Reset();
             _objectives.Reset();
             _matchStateDirty = true;
+            _objectiveStateDirty = true;
         }
 
         /// 방장이 필요 없는 룸에서는 누구나 시작할 수 있다. 설정으로 미리 열어 둔

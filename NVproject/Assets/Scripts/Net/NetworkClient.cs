@@ -393,6 +393,12 @@ namespace NV.Client.Net
                     ReadMatchState(payload);
                     break;
 
+                case EventKind.ObjectiveState:
+                    // 서버가 이미 목표물 좌표를 보내고 있다. 이 클라이언트는 아직
+                    // PlacementSeed 로 자기 배치를 계산하므로 지금은 받아만 두고 버린다 —
+                    // 적용은 IG-011c 이고, 그때 씨드를 와이어에서 뺄 수 있다.
+                    break;
+
                 default:
                     // 모르는 종류. 서버가 앞서 나갔거나 프레임이 손상되었다.
                     break;
