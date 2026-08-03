@@ -199,16 +199,18 @@ namespace NV.Modules.Tests.Realtime
         }
 
         [Fact]
-        public void 아무도_들어오지_않은_룸은_회수된다()
+        public void 아직_아무도_들어오지_않은_룸은_붙을_시간을_준_뒤_회수된다()
         {
+            // 즉시 회수하면 모든 방이 만든 사람이 들어오기 전에 사라진다 —
+            // POST /rooms 와 WebSocket 접속 사이에는 참가자가 0이다.
             var registry = Registry(out _, new StaticRooms(new Dictionary<string, string> { ["test"] = "test-room" }));
 
             Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var code, out _, out _));
 
-            registry.Sweep(RealtimeConstants.Rooms.EmptyExpiryTicks - 1u);
+            registry.Sweep(RealtimeConstants.Rooms.UnjoinedExpiryTicks - 1u);
             Assert.True(registry.TryGet(code, out _));
 
-            registry.Sweep(RealtimeConstants.Rooms.EmptyExpiryTicks);
+            registry.Sweep(RealtimeConstants.Rooms.UnjoinedExpiryTicks);
             Assert.False(registry.TryGet(code, out _));
 
             // 정적 룸은 남는다. 사라지면 다음 테스트에서 다시 만들 방법이 없다.
@@ -226,13 +228,13 @@ namespace NV.Modules.Tests.Realtime
             room.PostCommand(RoomCommand.Join(1, 0));
             room.Advance();
 
-            registry.Sweep(RealtimeConstants.Rooms.EmptyExpiryTicks * 10u);
+            registry.Sweep(RealtimeConstants.Rooms.UnjoinedExpiryTicks * 10u);
 
             Assert.True(registry.TryGet(code, out _));
         }
 
         [Fact]
-        public void 전원이_나간_룸은_대기로_돌아간_뒤_회수된다()
+        public void 마지막_참가자가_나가면_즉시_회수된다()
         {
             var registry = Registry(out _, StaticRooms.Empty);
 
@@ -241,15 +243,39 @@ namespace NV.Modules.Tests.Realtime
 
             RoomFixture.FillAndStart(room);
 
+            // 사람이 있는 것을 한 번 본 뒤부터 즉시 회수 규칙이 적용된다.
+            registry.Sweep(1u);
+            Assert.True(registry.TryGet(code, out _));
+
             room.PostCommand(RoomCommand.Leave(1, 0));
             room.PostCommand(RoomCommand.Leave(2, 1));
             room.Advance();
 
-            // 비어 있으면서 진행 중인 룸은 존재하지 않는다. 그래서 회수 기준이 하나다.
-            Assert.Equal(NV.Shared.Contracts.Enums.RoomPhase.Waiting, room.Phase);
+            Assert.Equal(0, room.PlayerCount);
 
-            registry.Sweep(RealtimeConstants.Rooms.EmptyExpiryTicks);
+            // 다음 틱에 사라진다. 기다리는 시간이 없다.
+            registry.Sweep(2u);
             Assert.False(registry.TryGet(code, out _));
+        }
+
+        [Fact]
+        public void 한_명만_나가면_회수되지_않는다()
+        {
+            var registry = Registry(out _, StaticRooms.Empty);
+
+            Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var code, out _, out _));
+            Assert.True(registry.TryGet(code, out var room));
+
+            RoomFixture.FillAndStart(room);
+            registry.Sweep(1u);
+
+            room.PostCommand(RoomCommand.Leave(2, 1));
+            room.Advance();
+
+            Assert.Equal(1, room.PlayerCount);
+
+            registry.Sweep(2u);
+            Assert.True(registry.TryGet(code, out _));
         }
 
         [Fact]

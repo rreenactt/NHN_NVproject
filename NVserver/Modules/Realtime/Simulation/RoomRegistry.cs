@@ -45,7 +45,7 @@ namespace NV.Realtime.Simulation
             {
                 Room = room;
                 HostToken = hostToken;
-                LastOccupiedTick = createdTick;
+                CreatedTick = createdTick;
             }
 
             public Room Room { get; }
@@ -54,8 +54,14 @@ namespace NV.Realtime.Simulation
             /// 룸은 전송도 인증도 모르는 채로 남아야 소켓 없이 테스트할 수 있다.
             public string HostToken { get; }
 
-            /// 마지막으로 사람이 있던 틱. 회수 판단이 이 값 하나로 끝난다.
-            public uint LastOccupiedTick { get; set; }
+            /// 만들어진 틱. 아직 아무도 들어오지 않은 룸의 회수 시점을 여기서 잰다.
+            public uint CreatedTick { get; }
+
+            /// 한 번이라도 사람이 있었는가.
+            ///
+            /// 이 값이 회수 규칙을 가른다. 참이면 비는 즉시 회수하고, 거짓이면 만든
+            /// 사람이 붙을 시간을 준다. 둘을 합치면 방이 만들어지자마자 사라진다.
+            public bool WasOccupied { get; set; }
         }
 
         private readonly ConcurrentDictionary<string, Entry> _rooms = new(StringComparer.Ordinal);
@@ -206,7 +212,16 @@ namespace NV.Realtime.Simulation
             return difference == 0;
         }
 
-        /// 틱 루프가 매 틱 호출한다. 아무도 없는 룸을 회수한다.
+        /// 틱 루프가 매 틱 호출한다. 참가자가 없는 룸을 회수한다.
+        ///
+        /// 규칙이 둘이다.
+        /// - 한 번이라도 사람이 있었던 룸은 비는 즉시 회수한다. 마지막 사람이 나간
+        ///   방을 남겨 둘 이유가 없다 — 코드도 방장 토큰도 그 방과 함께 끝난다.
+        /// - 아직 아무도 들어오지 않은 룸은 만든 사람이 붙을 시간을 준다. `POST /rooms`
+        ///   와 WebSocket 접속 사이에는 참가자가 0이므로, 그 구간에서 즉시 회수하면
+        ///   모든 방이 만든 사람이 들어오기 전에 사라진다.
+        ///
+        /// 설정으로 열어 둔 정적 룸은 회수하지 않는다. 사라지면 다시 만들 방법이 없다.
         public void Sweep(uint serverTick)
         {
             Volatile.Write(ref _serverTick, serverTick);
@@ -217,7 +232,7 @@ namespace NV.Realtime.Simulation
 
                 if (entry.Room.PlayerCount > 0)
                 {
-                    entry.LastOccupiedTick = serverTick;
+                    entry.WasOccupied = true;
                     continue;
                 }
 
@@ -226,9 +241,19 @@ namespace NV.Realtime.Simulation
                     continue;
                 }
 
-                var idle = serverTick - entry.LastOccupiedTick;
+                if (entry.WasOccupied)
+                {
+                    if (_rooms.TryRemove(pair.Key, out _))
+                    {
+                        _logger.LogInformation("룸 {RoomId} 회수. 마지막 참가자가 나갔다.", pair.Key);
+                    }
 
-                if (idle < RealtimeConstants.Rooms.EmptyExpiryTicks)
+                    continue;
+                }
+
+                var waited = serverTick - entry.CreatedTick;
+
+                if (waited < RealtimeConstants.Rooms.UnjoinedExpiryTicks)
                 {
                     continue;
                 }
@@ -236,9 +261,9 @@ namespace NV.Realtime.Simulation
                 if (_rooms.TryRemove(pair.Key, out _))
                 {
                     _logger.LogInformation(
-                        "룸 {RoomId} 회수. {Seconds}초 동안 아무도 없었다.",
+                        "룸 {RoomId} 회수. 만든 뒤 {Seconds}초 동안 아무도 들어오지 않았다.",
                         pair.Key,
-                        idle / SimConstants.TickRate);
+                        waited / SimConstants.TickRate);
                 }
             }
         }
