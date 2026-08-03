@@ -10,7 +10,9 @@ The player is a **Minecraft-style figure built from white cubes in code, animate
 
 ## Working in this project (no CLI build)
 
-There is no build script or test suite. All work happens through the **Unity Editor via MCP** (`mcp__unity-mcp__*`, Unity's official `com.unity.ai.assistant` package).
+There is no build script. **There is now an EditMode test suite** — `Assets/Editor/Tests/` — and it needed no assembly definition: `Assembly-CSharp-Editor` already references `nunit.framework`, both TestRunner assemblies, and `Assembly-CSharp` itself, so a test dropped in that folder sees the client code. Compile-check it with `dotnet build Assembly-CSharp-Editor.csproj`; **running** it needs the Editor's Test Runner. The cost of that boundary is that a separate assembly cannot see `internal` members or `[SerializeField] private` fields, which is what currently limits how much of `MatchManager`'s apply path can be reached.
+
+Everything else happens through the **Unity Editor via MCP** (`mcp__unity-mcp__*`, Unity's official `com.unity.ai.assistant` package).
 
 - **Scripts can be compile-checked without the Editor**, which is worth doing before handing work over — a script error otherwise surfaces as an MCP call failing for no visible reason. Unity leaves `Assembly-CSharp.csproj` / `Assembly-CSharp-Editor.csproj` in the project root (gitignored, regenerated), and `dotnet build Assembly-CSharp.csproj` builds them against the real Unity DLLs. **A newly added `.cs` is not in that project's `Compile` list**, so it fails first with `CS0234` on its own namespace; add the `<Compile Include="…" />` line and rerun. This does not build a player and does not run anything — it only type-checks.
 - **Read the `unity-mcp-ops` skill before any Unity MCP task** — the `fps-*` skills say what to build, `unity-mcp-ops` says how to drive the server.

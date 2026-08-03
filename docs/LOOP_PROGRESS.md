@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 34)
-현재 이터레이션: 34
-기준 커밋: `ba5a121`
+최종 갱신: 2026-08-04 (이터레이션 35)
+현재 이터레이션: 35
+기준 커밋: `abc6405`
 
 > **§10 리포트가 작성됐다.** 최종 리포트는 `INGAME_GAP_MATRIX.md` 끝에, 질문 리포트는 이 파일의
 > **OPEN_QUESTIONS** 절에 있다. **규칙 이관은 끝났고 남은 규칙 태스크는 전부 OQ 의 답을 기다린다.**
@@ -35,7 +35,7 @@
 | 서버 단일 테스트 | `cd NVserver && dotnet test --filter "FullyQualifiedName~MovementTests"` | (표기만, `dotnet test` 로 검증됨) |
 | 클라이언트 컴파일 검증 | `cd NVproject && dotnet build Assembly-CSharp.csproj` | ✅ **오류 0개**, 경고 2개 (MSB3277 `System.IO.Compression` 참조 통합 — 무해, 기존부터 있음) |
 | 로컬 서버 실행 | `cd NVserver && dotnet run --project Api` | 미실행 (스모크 테스트 태스크에서) |
-| EditMode 테스트 | **없음** | ❌ `com.unity.test-framework` 1.6.0 은 설치되어 있으나 `Assets/**` 에 **asmdef 가 0개**, 테스트 폴더도 없다. 인프라를 만들어야 한다 → IG-018 |
+| EditMode 테스트 | `Assets/Editor/Tests/` | **asmdef 가 필요 없다**(IG-018). `Assembly-CSharp-Editor` 가 `nunit.framework`·TestRunner·`Assembly-CSharp` 를 이미 참조하므로 그 폴더에 두면 보인다. 컴파일 검증은 `dotnet build Assembly-CSharp-Editor.csproj`. **실행은 에디터의 Test Runner 가 필요하다** — `internal`·`[SerializeField]` 는 보이지 않는다(→ IG-029) |
 | 맵 export (Unity MCP) | `Unity_RunCommand` 로 `NV.Client.EditorTools.MapCollisionExporter.Export()` 호출 | ✅ 동작 (이터레이션 1). 씬이 열려 있어야 하고 play 모드가 아니어야 한다 |
 | 맵 export (사람) | **Tools ▸ NV ▸ Map ▸ Export Map Collision** | 같음 |
 
@@ -202,7 +202,8 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-015 | 장치 파괴 (4발) | TODO | P3 | IG-013, IG-014 | R-7.8 |
 | IG-016 | 체인 드래그 서버 판정 | **BLOCKED** | P3 | IG-014 | R-3.7 |
 | IG-017 | 근접 보이스 시스템 | **BLOCKED** | P3 | - | R-8.1~R-8.3 |
-| IG-018 | Unity EditMode 테스트 인프라 (asmdef) | TODO | P2 | IG-010 | (검증 수단) |
+| IG-018 | Unity EditMode 테스트 인프라 | **DONE** (asmdef 불필요였다) | P2 | IG-010 | (검증 수단) |
+| IG-029 | 적용 경로에 테스트용 공개 이음새 | TODO | P3 | IG-018 | (검증 수단) |
 | IG-019 | 상수 정리·문서 갱신·죽은 경로 제거 | **DONE** | P4 | 전부 | (정리) |
 | IG-025 | `Jump` 엣지가 입력 반복에 실리는 문제 | **DONE** (결함 아님, 관계를 테스트로 고정) | P4 | - | (품질) |
 | IG-020 | 레거시 맵 파일·스크립트 정리 | **BLOCKED** | P4 | IG-001 | R-0.2 |
@@ -1708,13 +1709,48 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 - 비고: 범위 축소(§7.4 옵션 제외) 또는 `DEFERRED` 가 현실적 결론일 수 있다.
 
 ### IG-018 — Unity EditMode 테스트 인프라
-- 상태: TODO
-- 계획: `Assets/**` 에 asmdef 가 0개다. 런타임 asmdef 하나 + EditMode 테스트 asmdef 하나를 만들고
-  `Packages/manifest.json` 에 `testables` 를 추가한다. 대상은 클라이언트에 **남는** 뷰 로직 —
-  전문 → 이벤트 발화(IG-010 의 `AcceptMatchState`)가 첫 테스트다.
-- 검증: 테스트가 실제로 실행되고 통과하는 명령줄을 확정해 명령 카탈로그에 기록
-- 비고: asmdef 추가는 `Assembly-CSharp` 의 구성을 바꾸므로 컴파일 검증 명령이 함께 바뀔 수 있다.
-  D-2 에 따라 순수 로직은 `dotnet test` 가 담당하므로 이 태스크의 범위는 좁다.
+- 상태: **DONE** (이터레이션 35) — **asmdef 가 필요하지 않았다**
+- **내가 세 번(이터레이션 21·26·32) 적은 차단 사유가 틀렸다.** "Unity 의 asmdef 는
+  `Assembly-CSharp` 를 참조할 수 없으므로 `Assets/Scripts` 전체를 asmdef 로 옮겨야 한다" 고
+  적었는데, **그 전제는 asmdef 로 테스트를 만들 때만 성립한다.** 생성된 프로젝트를 열어 보니:
+  - `Assembly-CSharp-Editor.csproj` 가 **`nunit.framework`·`UnityEditor.TestRunner`·
+    `UnityEngine.TestRunner` 를 이미 참조한다**(테스트 프레임워크 패키지가 설치돼 있으므로).
+  - 그리고 **`Assembly-CSharp` 와 `Shared` 를 `ProjectReference` 로 참조한다** — 에디터 스크립트가
+    런타임 컴포넌트를 조작하기 위해 원래 그래야 한다.
+  - 즉 **`Assets/Editor/` 아래 테스트를 두면 아무 설정 없이 클라이언트 코드가 보인다.**
+  세 이터레이션 동안 "확인해야 한다" 고 적고 확인하지 않은 채 차단 사유로 인용했다.
+- 첫 테스트 대상은 **폴링 멱등성**이다. `Accept*` 들은 여섯 이터레이션에 걸쳐 자동 테스트 없이
+  쓰였고, 그 코드가 가장 쉽게 깨는 규칙이 "전문은 2Hz 로 반복되므로 더하면 안 된다" 다.
+- 변경 파일(1): 신규 `NVproject/Assets/Editor/Tests/ClientApplyTests.cs`(4개 —
+  소지 열쇠의 반복 적용·감소 방향·음수 하한·몸이 없는 참가자)
+- 검증:
+  - `dotnet build Assembly-CSharp-Editor.csproj` → **오류 0.** 실제 Unity DLL 에 대해
+    `NUnit.Framework`·`MatchManager`·`PlayerAgent` 가 전부 해석된다 — 이것이 "인프라가 있다" 의
+    증거다.
+  - **테스트가 Test Runner 에서 실제로 실행되는 것은 확인하지 못했다.** 에디터를 열어
+    `Window ▸ General ▸ Test Runner ▸ EditMode` 에서 `ClientApplyTests` 4개가 보이고 통과하는지
+    봐야 한다 — 사람 검증 표에 추가했다. **컴파일이 통과한 것을 "테스트가 통과했다" 로 적지 않는다.**
+- **이 경계가 남기는 제약을 기록해 둔다.** `Assembly-CSharp-Editor` 는 별개 어셈블리이므로
+  **`internal` 멤버와 `[SerializeField] private` 필드가 보이지 않는다.** 그래서 지금 닿는 것은
+  공개 표면뿐이다:
+  - `AcceptCarriedKeys` ✅ (공개 메서드 + 공개 `CarriedKeys`)
+  - `AcceptObjectiveProgress`·`AcceptEscapes` ❌ — `config`(`[SerializeField] private`)를 읽으므로
+    테스트가 `GameConfig` 를 주입할 수 없다. `BeginMatch` 만 그것을 만든다.
+  - `AcceptCombatState` ❌ — `PlayerAgent.SetBleeding`·`Kill` 이 `internal` 이라 상태를 준비할 수 없다.
+  **이것을 뚫으려면 공개 이음새(테스트용 config 주입)가 필요하고 그것은 요청되지 않은 리팩터링이다**
+  (§9) → IG-029 로 올렸다.
+- 비고: D-2("순수 로직은 `dotnet test`")는 유효하다. 이 인프라의 대상은 **서버로 옮길 수 없는
+  적용·표시 로직**이고, 그것이 지금 유일하게 테스트가 없는 층이다.
+
+### IG-029 — 적용 경로에 테스트용 공개 이음새를 만든다
+- 상태: TODO (P3)
+- IG-018 이 인프라를 열었지만 `Assembly-CSharp-Editor` 에서 `internal`·`[SerializeField] private`
+  가 보이지 않아 `AcceptObjectiveProgress`·`AcceptEscapes`·`AcceptCombatState` 에 닿을 수 없다.
+- 선택지: (a) `MatchManager` 에 `config` 를 넣는 공개 초기화 메서드, (b) `AssemblyInfo` 에
+  `InternalsVisibleTo("Assembly-CSharp-Editor")`, (c) 적용 로직을 `MonoBehaviour` 밖의 순수
+  클래스로 빼서 `dotnet test` 대상으로 만든다(D-2 와 가장 일관된다).
+- **(b) 가 가장 작지만 `internal` 의 뜻을 넓힌다. (c) 가 가장 옳지만 적용 로직이 Unity 타입
+  (`PlayerAgent`)에 묶여 있어 그것부터 갈라야 한다.** 되돌리기 어려운 갈림이므로 ADR 이 선행된다.
 
 ### IG-019 — 상수 정리·문서 갱신·죽은 경로 제거
 - 상태: **DONE** (이터레이션 26)
@@ -1856,6 +1892,7 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 | IG-011c2 | 목표물(제단·열쇠·장치)이 두 화면에서 **같은 자리**에 있다. **Seeker 화면에는 문이 없다** |
 | IG-012a | 한쪽이 열쇠를 밟으면 **두 화면에서 동시에 사라지고**, 소지 수는 밟은 쪽만 오른다. Seeker 화면의 소지 수는 계속 0 이다 |
 | IG-012c1~c2 | 문이 열린 뒤 문간에 0.8초 서 있으면 그 Runner 가 **두 화면에서 사라지고**, **탈출 수가 Seeker 화면에서도 오른다** — 열쇠 진행도와 달리 이 값은 Seeker 도 받는다. 0.8초가 되기 전에 문에서 벗어나면 아무 일도 없다 |
+| IG-018 | **에디터에서 확인한다**(스모크가 아니다): `Window ▸ General ▸ Test Runner ▸ EditMode` 에 `ClientApplyTests` 4개가 보이고 통과하는가. 컴파일만 확인됐다 |
 | IG-028a~b2 | 술래 화면의 탄피가 3발에서 줄고, **Runner 화면에서는 술래의 남은 탄이 보이지 않는다**. Runner 화면에 **술래가 쏜 예광탄이 보인다**(지금까지는 자기 총알만 보였다). 예광탄이 총구에서 나가고 벽에서 멈춘다 |
 | IG-014a~c | 술래가 Runner 를 쏘면 **두 화면에서** 피가 나고, 두 번째 명중에 몸이 사라진다. 첫 명중에 Runner 가 **다른 곳으로 던져진다**. 0.75초 안의 연사는 한 번만 센다. 탄창 3발을 비우면 더 쏠 수 없다(재장전 없음 — IG-016 대기). **부정 클라이언트가 피격을 거부할 수 없다**: 맞은 쪽 클라이언트를 조작해도 서버가 정한다 |
 | IG-012b1~b3 | **지금 가장 값이 큰 확인이다** (이 경로에는 자동 테스트가 없다). 문 앞에서 E 를 누르면 진행도가 두 Runner 화면에서 같이 오르고, 소지 수는 넣은 쪽만 줄어든다. 0.6초 안에 두 번 눌러도 한 개만 들어간다. 10개째에 두 화면에서 같은 순간에 문이 열린다. **Seeker 화면에는 문도 진행도도 나오지 않는다** |
@@ -1864,7 +1901,24 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**진행 가능한 규칙·표현 태스크가 없다. §10 의 질문 리포트 상태다.**
+**IG-029 — 적용 경로에 테스트용 공개 이음새** (P3). 진행 가능한 유일한 태스크이고 **ADR 이 선행된다.**
+
+IG-018 이 EditMode 인프라를 열었지만 `Assembly-CSharp-Editor` 에서 `internal` 과
+`[SerializeField] private` 가 보이지 않아 적용 경로의 대부분에 닿을 수 없다 —
+`AcceptObjectiveProgress`·`AcceptEscapes`(둘 다 `config` 를 읽는다)와 `AcceptCombatState`
+(`PlayerAgent` 의 `internal` 상태 변경자가 필요하다).
+
+세 갈래가 있고 되돌리기 어렵다:
+- **(a) `MatchManager` 에 공개 초기화** — 가장 작지만 프로덕션 API 를 테스트를 위해 넓힌다.
+- **(b) `InternalsVisibleTo("Assembly-CSharp-Editor")`** — 한 줄이지만 `internal` 의 뜻을 넓히고,
+  이 프로젝트가 `internal` 로 모듈 경계를 지키는 것과 결이 다르다(서버 쪽은 테스트에 그것을 이미
+  허용한다 — 일관성 논거가 양쪽에 있다).
+- **(c) 적용 로직을 `MonoBehaviour` 밖 순수 클래스로** — **D-2 와 가장 일관되고**(순수 로직은
+  `dotnet test`) 가장 크다. 적용 로직이 `PlayerAgent` 에 묶여 있어 그 의존부터 갈라야 한다.
+
+**§5.4 에 따라 ADR 초안을 먼저 쓰고, 갈림이 남으면 OQ 로 올린다.**
+
+### 그 밖에 진행 가능한 것은 없다 — §10 의 질문 리포트 상태다
 
 남은 것을 성격별로 보면:
 
@@ -1876,7 +1930,7 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 | IG-017 근접 보이스 | **OQ-3.** 갭 매트릭스의 유일한 `NONE` 영역 |
 | IG-020 레거시 정리 | **OQ-5** |
 | IG-021 클라 판정 제거 | IG-007 대기 |
-| IG-018 EditMode 인프라 | **asmdef 이관 ADR 이 선행**된다(`Assembly-CSharp` 는 asmdef 에서 참조할 수 없다) |
+| ~~IG-018 EditMode 인프라~~ | **이터레이션 35 에서 DONE.** asmdef 이관이 필요하다는 내 주장이 틀렸다 |
 | IG-023 클라이언트 예측 | 진행 가능하지만 **AS-8 이 "지금 예측이 없다" 를 기록**했고 §8 은 예측을 요구하지 않는다. 로컬 서버에서는 증상이 없으므로 실측 없이 손대면 무엇을 고쳤는지 알 수 없다 |
 
 **따라서 다음 이터레이션이 할 수 있는 가장 값 있는 일은 두 가지다:**
@@ -1956,7 +2010,7 @@ IG-027(열쇠 흩뿌리기).
 | IG-017 근접 보이스 | **규칙** | OQ-3 (전체가 미구현 영역) |
 | IG-020 레거시 정리 | 정리 | OQ-5 (삭제해도 되는지) |
 | IG-021 클라 판정 제거 | 정리 | IG-007 대기 |
-| IG-018 EditMode 인프라 | 검증 수단 | asmdef 이관 ADR 이 선행 |
+| ~~IG-018 EditMode 인프라~~ | 검증 수단 | **이터레이션 35 에서 DONE** — asmdef 불필요 |
 | IG-023 예측, IG-024 씨드 중복, IG-025 Jump 엣지, IG-026 E 키 통합, IG-027 열쇠 흩뿌리기, IG-028 서버 총알 | 품질·표현 | 진행 가능하지만 **규칙이 아니다** |
 
 **즉 규칙 태스크는 전부 BLOCKED 이고, 진행 가능한 것은 전부 품질·표현·검증 수단이다.** §10 의
@@ -2014,6 +2068,33 @@ BLOCKED 6건(IG-007, IG-013, IG-016, IG-017, IG-020, IG-021)은 여전히 OQ-1·
 "남은 태스크가 전부 BLOCKED" 조건에 가까워진다.**
 
 ---
+
+### 이전 판단 기록 (이터레이션 35)
+
+**세 이터레이션 동안 인용해 온 차단 사유가 거짓이었다.** 이터레이션 21·26·32 에서 "Unity 의
+asmdef 는 `Assembly-CSharp` 를 참조할 수 없으므로 스크립트 전체를 옮겨야 한다" 고 적고 IG-018 을
+미뤘다. 그 전제는 **asmdef 로 테스트를 만들 때만** 성립한다 — 생성된 프로젝트를 열어 보니
+`Assembly-CSharp-Editor` 가 **`nunit.framework`·TestRunner·`Assembly-CSharp` 를 이미 참조한다.**
+`Assets/Editor/` 아래 테스트를 두면 아무 설정도 필요 없었다.
+
+**"확인해야 한다" 고 적은 것을 확인하지 않고 근거로 재사용한 것이 문제다.** 매 이터레이션마다
+그 문장을 복사해 다음 이터레이션의 판단 근거로 썼고, 세 번째에는 그것이 확립된 사실처럼 보였다.
+IG-014a(이미 있던 레이캐스트)·IG-025(없던 결함)와 같은 계열인데 이번은 **내 기록이 스스로를
+보강한 경우**라 더 나쁘다.
+
+**두 번째 정정:** 이터레이션 33 의 IG-028b1 기록에 "`NVproject/Shared.csproj` 에 `Compile Include`
+를 손으로 추가해야 했다" 를 변경 파일로 적었는데, **`*.csproj` 는 gitignore 대상이라 커밋되지
+않았고 Unity 가 재생성한다.** 즉 그것은 **내 오프라인 컴파일 검증을 위한 로컬 조치**이고 다른
+사람이 할 일이 아니다. 커밋 목록에 넣은 것이 부정확했다.
+
+**컴파일과 실행을 구별해 적었다.** 이 태스크의 검증은 "실제 Unity DLL 에 대해 컴파일된다" 까지다 —
+Test Runner 가 `Assembly-CSharp-Editor` 의 테스트를 **발견하고 실행하는지**는 에디터가 필요하고
+확인하지 못했다. §7 이 금지하는 것이 정확히 그것을 "통과" 로 적는 일이다.
+
+**그리고 인프라를 열자마자 그 한계가 드러났다.** `internal` 과 `[SerializeField] private` 가 다른
+어셈블리에서 보이지 않으므로 적용 경로의 대부분에 닿을 수 없다. 테스트를 위해 프로덕션을 고치는
+것은 §9 가 막는 리팩터링이므로 **IG-029 로 올리고 ADR 을 선행하게 두었다** — 지금 뚫으면 그것이
+설계 결정 없이 들어간다.
 
 ### 이전 판단 기록 (이터레이션 34)
 
