@@ -81,7 +81,7 @@ namespace NV.Game
             //
             // The offline path keeps the poll. There is no server to ask, and the practice level is
             // where the Seeker's half of the ruleset gets exercised.
-            if (match.ServerPlacesObjectives) return;
+            if (match.ServerOwnsObjectives) return;
 
             float radius = match.Config.keyPickupRadius;
             var agents = match.Agents;

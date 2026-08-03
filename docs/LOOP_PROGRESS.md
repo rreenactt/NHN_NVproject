@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 19)
-현재 이터레이션: 19
-기준 커밋: `72539d8`
+최종 갱신: 2026-08-04 (이터레이션 20)
+현재 이터레이션: 20
+기준 커밋: `78c3f86`
 
 ## 이 루프가 실제로 하는 일
 
@@ -179,7 +179,8 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-012a | 열쇠 습득 서버 판정 | **DONE** | P2 | IG-011c3 | **R-6.1 ✅** |
 | IG-012b1 | `ButtonFlags.Interact` 입력 경로 | **DONE** | P2 | IG-012a | (기반) |
 | IG-012b2 | 삽입·문 개방 서버 판정 | **DONE** | P2 | IG-012b1 | R-6.2, R-6.5 |
-| IG-012b3 | 클라이언트 삽입 적용 + 로컬 판정 차단 | TODO | P2 | IG-012b2 | R-6.2, R-6.5 |
+| IG-012b3 | 클라이언트 삽입 적용 + 로컬 판정 차단 | **DONE** | P2 | IG-012b2 | **R-6.2 ✅, R-6.5 ✅** |
+| IG-026 | `PlayerInteractor` 의 E 키를 `ConsumeInteract` 로 통합 | TODO | P4 | IG-012b3 | (정리) |
 | IG-012c | 탈출 판정 | TODO | P2 | IG-012b | R-6.7 |
 | IG-013 | `Interact` 입력 + 장치 사용 판정 | **BLOCKED** | P2 | IG-011 | R-7.2~R-7.7, R-4.3 |
 | IG-014 | 서버 발사체 + 피격 규칙 + 탄약 | TODO | P2 | IG-009 | R-3.1~R-3.6, R-2.1 |
@@ -716,7 +717,7 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
   | 뺀 것 | 이유 |
   |---|---|
   | `escapes` | 서버가 아직 세지 않아 **0 을 보낸다.** 적용하면 클라이언트가 올바르게 센 값을 0 으로 덮어써 HUD 가 되돌아간다. 증상은 "목표가 스스로 초기화된다" 로 보인다 → IG-012c |
-  | `keysInserted` | **IG-012b2 부터 서버가 센다.** 적용하는 것은 IG-012b3 이고, 그때 로컬 판정도 함께 막아야 한다 — 서버 값을 적용하면서 로컬 판정을 남기면 두 심판이 같은 카운터를 다르게 올린다 |
+  | ~~`keysInserted`~~ | **IG-012b2 가 세고 IG-012b3 이 적용한다.** 로컬 판정(`TryInsertKey`)을 같은 태스크에서 막았다 — 적용만 하고 판정을 남기면 두 심판이 같은 카운터를 다르게 올린다 |
   | ~~`carriedKeys`~~ | **IG-012a 에서 적용하기 시작했다.** 서버가 습득을 판정하므로 이제 0 이 아니고, 클라이언트의 폴링은 같은 태스크에서 멈췄다 — 덮어쓸 "올바르게 센 값" 이 더 이상 없다 |
   | `outcome` | 같은 이유 + 결과 코드는 IG-007(OQ-2·OQ-6) 이 정한다 |
   | `MatchPhase.Ended` 적용 | 매치를 끝내는 것은 **결과를 발표하는 일**이고 그 경로는 이미 있다(`AcceptOutcome` ← 룸 전문). 단계만 옮기면 결과 없는 결과 화면이 뜬다 |
@@ -961,7 +962,8 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 - 상태: **DONE** (이터레이션 14, 2026-08-04)
 - 변경 파일 (4개):
   - `Net/NetworkClient.cs` — `ReadObjectiveState`, `Objectives`·`HasObjectiveState`·`HasObjectiveDoor`
-  - `Game/MatchManager.cs` — 배치 헬퍼 6개 제거, `ServerPlacesObjectives`,
+  - `Game/MatchManager.cs` — 배치 헬퍼 6개 제거, `ServerPlacesObjectives`(→ IG-012b3 에서
+    `ServerOwnsObjectives` 로 개명),
     `AcceptObjectiveState`, `BuildObjectiveObjects`, `OfflineGrid`
   - `Net/Session/MatchSync.cs` — `ServerPlacesObjectives = true`, `ApplyObjectiveState` 폴링
 - 검증 (전부 실행함):
@@ -1079,7 +1081,7 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 - 기획서 근거: §3 — 열쇠 10개가 Runner 의 목표다
 - 계획(실행됨): 매 틱 거리 폴링을 서버로 옮긴다. 수평 `KeyPickupRadius`, 수직은 새로 올린
   `KeyPickupHeight`. 습득한 열쇠는 `Objectives.RemoveKeyAt` 로 빠지고 두 전문이 즉시 갱신된다
-  (목표물 — 맵에서 사라졌다, 매치 — 소지 수가 늘었다). 클라이언트는 `ServerPlacesObjectives`
+  (목표물 — 맵에서 사라졌다, 매치 — 소지 수가 늘었다). 클라이언트는 `ServerOwnsObjectives`
   면 폴링을 멈추고 전문의 소지 수를 받는다.
 - **범위 조정: `ButtonFlags.Interact` 를 넣지 않았다.** 기획서 §3 은 습득 방식을 정하지 않고,
   클라이언트가 쓰던 방식은 걸어가면 줍는 거리 폴링이었다(`KeyPickup.Update`). 상호작용 키는
@@ -1190,6 +1192,14 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 - 비고: `Jump` 도 엣지지만 지금도 반복된다. 접지 검사가 대부분 걸러 무해하나 착지 순간에 재점프가
   가능한 구조다 — 이동 동작을 바꾸는 별개의 변경이므로 **IG-025** 로 올렸다.
 
+### IG-026 — `PlayerInteractor` 의 E 키를 `ConsumeInteract` 로 통합
+- 상태: TODO (P4)
+- 지금 E 키를 두 곳이 읽는다 — 와이어 경로는 `FirstPersonController` 의 래치를 소비하고
+  (IG-012b1), 오프라인 경로는 `PlayerInteractor` 가 `wasPressedThisFrame` 을 직접 본다.
+  래치를 소비하는 것이 와이어뿐이라 서로의 신호를 먹지는 않지만, **`MovementLocked` 게이트가
+  와이어 경로에만 있다** — 오프라인에서는 체인에 끌려가는 중에도 장치를 쓸 수 있다.
+- 합치면 두 경로가 일치한다. 다만 오프라인 동작을 바꾸는 변경이므로 별도 태스크다(§6.3).
+
 ### IG-025 — `Jump` 엣지가 입력 반복에 실리는 문제
 - 상태: TODO (P4)
 - IG-012b2 에서 발견했다. 새 입력이 없으면 서버가 마지막 입력을 반복하는데
@@ -1200,15 +1210,40 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 - 확인 방법: 반복 구간에 걸치도록 입력을 끊고 착지시켜 수직 속도가 다시 양수가 되는지 본다.
 
 ### IG-012b3 — 클라이언트 삽입 적용 + 로컬 판정 차단
-- 상태: TODO
+- 상태: **DONE** (이터레이션 20)
 - 기획서 근거: §3, §6
-- 계획: `NetworkClient` 가 문 개방 여부를 노출하고, `MatchSync` 가 `keysInserted` 와 문 개방을
-  적용한다. `PlayerInteractor`·`EscapeDoor`·`MatchManager.TryInsertKey` 의 로컬 판정 경로를 막는다
-  — IG-012a 와 같은 형태로 오프라인은 그대로 두고 세션이 있을 때만 서버에 맡긴다.
-- 여기서 `MatchSync.ApplyMatchState` 의 "적용하지 않는다" 표(§메시지 카탈로그)에서
-  `keysInserted` 행을 지운다.
-- `PlayerInteractor` 의 E 키 직접 읽기를 `ConsumeInteract` 로 옮길지 결정해야 한다. 옮기면
-  `MovementLocked` 게이트가 오프라인에도 적용되어 두 경로의 동작이 일치한다(IG-012b1 이 남긴 차이).
+- **R-6.2·R-6.5 가 이것으로 닫힌다.** 서버 판정(b2)과 클라이언트 적용(b3)이 붙어 두 심판이
+  병행하던 상태가 끝났다.
+- 적용 경로: `NetworkClient.ObjectiveDoorOpen` → `MatchSync.ApplyMatchState` →
+  `MatchManager.AcceptObjectiveProgress(keysInserted, doorOpen)`.
+- **차단은 `MatchManager.TryInsertKey` 한 곳에서 한다.** 호출부(`EscapeDoor.Interact`,
+  `PlayerInteractor`)를 건드리지 않은 것이 의도다 — 규칙을 판단하는 곳이 하나라는 이 프로젝트의
+  구조를 유지하고, `Interact` 는 원래부터 **요청**이었다. 프롬프트는 그대로 뜬다: 플레이어가
+  무엇을 할 수 있는지는 바뀌지 않았고 **누가 판정하는지**만 바뀌었다.
+- **`ServerPlacesObjectives` → `ServerOwnsObjectives` 로 이름을 바꿨다.** IG-012a 부터 이 플래그가
+  배치가 아니라 **판정**을 가르고 있었다(습득 폴링 차단). 권위를 가리키는 이름이 실제와 다르면
+  이 코드베이스에서 가장 위험한 종류의 거짓말이 된다. 기계적 변경 3곳(`MatchManager`,
+  `KeyPickup`, `MatchSync`)이고 프로퍼티라 씬 직렬화에 영향이 없다.
+- **문 개방을 `keysInserted` 에서 유도하지 않고 전문 값을 쓴다.** 유도가 더 짧지만, 문 오브젝트를
+  다시 세우는 경로(`AcceptObjectiveState` → `BuildObjectiveObjects`)가 있으므로 **열린 뒤에 다시
+  세운 문이 잠긴 채로 돌아오는** 경우가 생긴다. 매 프레임 멱등하게 다시 적용하는 쪽이 그 순서
+  문제를 아예 없앤다 — 문이 아직 없으면 넘기고 다음 폴링에 다시 온다.
+- **열쇠 한 개마다 뜨던 알림("KEY IN 7/10")은 네트워크 경로에서 올리지 않는다.** 전문은 *누가*
+  넣었는지 말하지 않으므로 전원에게 띄우면 오프라인 게임이 알려 주지 않던 것을 알려 주게 된다.
+  HUD 의 열쇠 슬롯이 `KeysChanged` 로 진행도를 이미 보여 주고, 문 개방은 전원의 소식이므로 띄운다.
+- 변경 파일(4): `Net/NetworkClient.cs`(`ObjectiveDoorOpen`),
+  `Game/MatchManager.cs`(`AcceptObjectiveProgress`, `TryInsertKey` 차단, 이름 변경),
+  `Net/Session/MatchSync.cs`(적용 호출), `Game/KeyPickup.cs`(이름 변경만)
+- 검증:
+  - `dotnet build Assembly-CSharp.csproj` → **오류 0**
+  - `dotnet test` → **360 통과** (서버 무변경, 회귀 확인)
+  - `grep ServerPlacesObjectives` → 코드에 0건 (남은 것은 이름 변경을 설명하는 주석 한 줄)
+  - **이 태스크에는 자동 테스트가 없다.** 전부 클라이언트 코드이고 EditMode 인프라가 아직
+    없다(IG-018). §7.2 를 만족하지 못하는 상태이며, **실질적인 검증은 2클라이언트 스모크**다 —
+    그래서 아래 표의 IG-012b2·b3 항목이 지금 가장 값이 큰 사람 검증이다.
+- 남긴 것: `PlayerInteractor` 의 E 키 직접 읽기를 `ConsumeInteract` 로 옮기지 않았다. 옮기면
+  오프라인에도 `MovementLocked` 게이트가 걸려 두 경로가 일치하지만, **오프라인 동작을 바꾸는
+  변경**이라 이 태스크의 검증 범위를 넘는다 → IG-026.
 
 ### IG-012c — 탈출 판정
 - 상태: TODO
@@ -1373,32 +1408,56 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 | IG-010 | 두 화면의 단계 전이 시점과 남은 시간이 일치한다 |
 | IG-011c2 | 목표물(제단·열쇠·장치)이 두 화면에서 **같은 자리**에 있다. **Seeker 화면에는 문이 없다** |
 | IG-012a | 한쪽이 열쇠를 밟으면 **두 화면에서 동시에 사라지고**, 소지 수는 밟은 쪽만 오른다. Seeker 화면의 소지 수는 계속 0 이다 |
-| IG-012b1 | Runner 가 E 를 눌러도 (아직) 아무 일도 일어나지 않는다 — 서버 로그에 오류가 없으면 정상이다 |
-| IG-012b2 | **IG-012b3 이 끝난 뒤에 확인한다.** 열쇠 10개를 넣으면 두 Runner 화면에서 같은 순간에 문이 열리고, Seeker 화면에는 문도 진행도도 나오지 않는다 |
+| IG-012b1~b3 | **지금 가장 값이 큰 확인이다** (이 경로에는 자동 테스트가 없다). 문 앞에서 E 를 누르면 진행도가 두 Runner 화면에서 같이 오르고, 소지 수는 넣은 쪽만 줄어든다. 0.6초 안에 두 번 눌러도 한 개만 들어간다. 10개째에 두 화면에서 같은 순간에 문이 열린다. **Seeker 화면에는 문도 진행도도 나오지 않는다** |
 
 ---
 
 ## 다음 이터레이션
 
-**IG-012b3 — 클라이언트 삽입 적용 + 로컬 판정 차단** (P2).
+**IG-018 — Unity EditMode 테스트 인프라(asmdef)** (P2) 를 먼저 하는 쪽으로 기울었다.
 
-서버가 이제 삽입을 판정하고 문을 연다. **그런데 클라이언트가 그것을 보지 못한다** —
-`MatchSync` 는 `keysInserted` 를 일부러 적용하지 않고(IG-010 이 0 을 덮어쓰지 않기 위해 뺐다),
-문 개방도 로컬 `MatchManager.TryInsertKey` 가 결정한다. 그래서 지금은 **두 심판이 동시에 도는
-상태**이고, 이것이 IG-012a 때와 같은 이유로 이번 분할의 나머지 절반이다.
+IG-012 계열이 끝나 **열쇠 목표(R-6.1·6.2·6.5)가 전부 서버 권위**가 됐다. 남은 진행 가능 태스크는
+IG-012c(탈출), IG-014(전투), IG-018(테스트 인프라), IG-015·019·023·024·025·026 이다.
 
-할 일: `NetworkClient` 가 문 개방을 노출 → `MatchSync` 가 `keysInserted`·문 개방을 적용 →
-`PlayerInteractor`·`EscapeDoor`·`MatchManager.TryInsertKey` 의 로컬 판정을 세션이 있을 때만 막는다.
-IG-012a 의 형태를 그대로 따르므로 새 설계 판단은 없을 전망이다.
+IG-018 을 앞으로 당기는 이유: **IG-012b3 이 자동 검증 없이 끝났다.** 클라이언트 적용 경로가
+늘어나는 중인데(`AcceptMatchState`·`AcceptCarriedKeys`·`AcceptObjectiveProgress`) 그것을 확인하는
+수단이 컴파일뿐이고, §7.2 는 순수 로직에 테스트를 요구한다. IG-012c·IG-014 도 같은 종류의 적용
+경로를 만들 것이므로, 인프라를 먼저 두면 그쪽부터 테스트가 붙는다.
 
-한 가지 결정이 남아 있다 — `PlayerInteractor` 의 E 키 직접 읽기를 `ConsumeInteract` 로 옮기면
-`MovementLocked` 게이트가 오프라인에도 적용되어 IG-012b1 이 남긴 두 경로의 차이가 사라진다.
+대안은 IG-012c(탈출 판정)를 이어 끝내 목표 계통을 완성하는 것이다 — 문맥이 이어져 있고
+`EscapeHoldTime`·층 허용치가 IG-012b2 와 같은 형태다. **다음 이터레이션 시작 시 두 태스크의 파일
+수를 견적해 결정한다.**
 
 BLOCKED 6건(IG-007, IG-013, IG-016, IG-017, IG-020, IG-021)은 여전히 OQ-1·2·3·4·5·6 을 기다린다.
 **IG-012c 가 끝나면 남은 진행 가능 태스크가 거의 소진되고, OQ 의 답이 없으면 루프가 §10 의
 "남은 태스크가 전부 BLOCKED" 조건에 가까워진다.**
 
 ---
+
+### 이전 판단 기록 (이터레이션 20)
+
+**이름이 거짓말을 하고 있었다.** `ServerPlacesObjectives` 는 IG-012a 부터 배치가 아니라 **판정**을
+가르고 있었다(습득 폴링 차단). 이번에 삽입 판정까지 같은 플래그로 막게 되면서 두 번째 거짓이 되므로
+`ServerOwnsObjectives` 로 바꿨다. 권위를 가리키는 이름이 실제와 다른 것은 이 코드베이스에서 가장
+비싼 종류의 부정확이다 — 다음 사람이 "배치만 서버가 하는군" 으로 읽고 판정을 클라이언트에 추가한다.
+프로퍼티라 씬 직렬화에 영향이 없고 변경은 3곳뿐이었다.
+
+**차단을 호출부가 아니라 `TryInsertKey` 한 곳에 두었다.** `EscapeDoor.Interact` 와
+`PlayerInteractor` 를 건드리지 않은 것이 의도다 — "모든 규칙은 `MatchManager` 가 판단한다" 는
+구조를 유지하고, `Interact` 는 원래부터 요청이었다. **프롬프트는 그대로 뜬다: 플레이어가 무엇을 할
+수 있는지는 바뀌지 않았고 누가 판정하는지만 바뀌었다.**
+
+**문 개방을 `keysInserted` 에서 유도하지 않았다.** 유도가 두 줄 더 짧지만, 문 오브젝트를 다시 세우는
+경로가 있으므로 열린 뒤에 다시 세운 문이 잠긴 채로 돌아온다. 전문 값을 매 프레임 멱등하게 다시
+적용하면 그 순서 문제가 아예 없다 — 이 프로젝트의 "전문은 알림이 아니다" 가 클라이언트 쪽에서도
+같은 이득을 준다.
+
+**알림 하나를 일부러 뺐다.** `TryInsertKey` 는 넣은 사람에게 "KEY IN 7/10" 을 띄웠는데, 전문은 누가
+넣었는지 말하지 않는다. 전원에게 띄우면 오프라인 게임이 알려 주지 않던 것을 알려 주게 되므로,
+진행도는 HUD 슬롯에 맡기고 문 개방만 띄운다. 비대칭 게임에서는 **알림도 정보 규칙**이다.
+
+**이 태스크는 자동 테스트 없이 끝났다** — 전부 클라이언트 코드이고 EditMode 인프라가 없다(IG-018).
+§7.2 를 만족하지 못하며, 그 사실이 다음 이터레이션에서 IG-018 을 앞으로 당기는 근거다.
 
 ### 이전 판단 기록 (이터레이션 19)
 

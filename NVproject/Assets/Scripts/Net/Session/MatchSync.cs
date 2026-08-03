@@ -138,6 +138,14 @@ namespace NV.Client.Net.Session
                 state.Phase,
                 MatchStateHeader.FromTenths(state.TimeRemainingTenths));
 
+            // 목표 진행도. 문 개방은 **목표물 전문**에서 온다 — 두 전문의 주기가 다르므로
+            // (2Hz / 5초) 여기서 함께 넘기면 늦게 온 쪽이 다음 폴링에 반영된다. 두 값 모두
+            // 멱등이라 매 프레임 넘겨도 무해하고, 문 오브젝트가 아직 없으면
+            // `AcceptObjectiveProgress` 가 넘긴다 — 다음 폴링에 다시 온다.
+            MatchManager.Instance.AcceptObjectiveProgress(
+                state.KeysInserted,
+                _client.ObjectiveDoorOpen);
+
             ApplyCarriedKeys();
         }
 
@@ -288,13 +296,14 @@ namespace NV.Client.Net.Session
 
             match.ServerPlacesAgents = true;
 
-            // 목표물도 서버가 놓는다. 이 클라이언트는 전문을 기다린다.
+            // 목표물은 서버의 것이다 — 놓는 것도, 그것에 대한 판정도. 이 클라이언트는
+            // 전문을 기다리고, 열쇠 습득·삽입·문 개방을 스스로 판정하지 않는다.
             //
             // **씨드를 넘기지 않는다. 넘길 씨드가 이제 없다.** 그 값이 와이어에서 빠졌고
             // (`RoomStateHeader`), 그래서 이 클라이언트에는 문의 좌표를 계산할 입력이 없다 —
             // 배치 함수를 갖고 있어도(ADR 0002) 계산할 수 없다. 컬링 레이어가 화면에서 가리는
             // 것과 달리 이것은 디컴파일로 되살릴 수 없다.
-            match.ServerPlacesObjectives = true;
+            match.ServerOwnsObjectives = true;
 
             // 결과를 판정하는 클라이언트는 방장 하나다. 전원이 각자 판정하면 서로
             // 다른 순간에 매치를 끝내고 결과도 갈린다.

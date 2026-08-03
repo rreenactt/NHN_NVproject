@@ -109,7 +109,7 @@ namespace NV.Game
         public bool ServerPlacesAgents { get; set; }
 
         /// <summary>
-        /// The server decides where the objective goes, and this client waits to be told.
+        /// The server owns the objective layer — where it goes, and every judgement made against it.
         ///
         /// **This is what closes the door leak.** Placement used to be computed from a shared seed
         /// on every client, which put the door's coordinates in the Seeker's process memory — a
@@ -117,11 +117,16 @@ namespace NV.Game
         /// a defence. With the server placing it and filtering per role, the Seeker's copy of the
         /// bulletin simply has no door block in it.
         ///
+        /// It gates the *judgements* too, and that is why it is not called `ServerPlacesObjectives`
+        /// any more: with it on, `KeyPickup` stops polling (IG-012a) and <see cref="TryInsertKey"/>
+        /// refuses (IG-012b3). The server does the same tests against the authoritative positions,
+        /// and this client is told the answer.
+        ///
         /// Off (no session), this client places the objective itself by calling the same shared
-        /// code the server uses (<c>ObjectivePlacement</c>, ADR 0002). That keeps the offline
-        /// practice path alive without a second copy of the algorithm.
+        /// code the server uses (<c>ObjectivePlacement</c>, ADR 0002) and judges it locally. That
+        /// keeps the offline practice path alive without a second copy of either.
         /// </summary>
-        public bool ServerPlacesObjectives { get; set; }
+        public bool ServerOwnsObjectives { get; set; }
 
         /// <summary>
         /// Does this client decide when the match is over?
@@ -375,16 +380,18 @@ namespace NV.Game
         /// <summary>
         /// Takes the match phase and clock from the server's bulletin.
         ///
-        /// **This is the seam the rules move across, and right now only two things have crossed it.**
-        /// The server owns the phase transitions and the clock (it counts in fixed ticks, so two
-        /// clients no longer disagree about when the reveal ends); everything else below is still
-        /// resolved locally. Called every frame from <c>MatchSync</c> — the bulletin arrives at 2 Hz
-        /// and carries the clock, so there is no "changed" signal worth subscribing to.
+        /// **This is the seam the rules move across.** The server owns the phase transitions and the
+        /// clock (it counts in fixed ticks, so two clients no longer disagree about when the reveal
+        /// ends), and it owns the objective layer — the keys are applied through
+        /// <see cref="AcceptObjectiveProgress"/> and <see cref="AcceptCarriedKeys"/>. What is still
+        /// resolved locally is combat and the outcome. Called every frame from <c>MatchSync</c> —
+        /// the bulletin arrives at 2 Hz and carries the clock, so there is no "changed" signal worth
+        /// subscribing to.
         ///
-        /// **Keys, escapes and the outcome are deliberately not applied.** The server carries fields
-        /// for them but does not count them yet, so it sends zeros — writing those in would reset a
-        /// HUD that this client had correctly counted to 7, and the symptom would read as the
-        /// objective resetting itself. They start being applied when the server actually judges them.
+        /// **Escapes and the outcome are deliberately not applied.** The server carries fields for
+        /// them but does not count them yet, so it sends zeros — writing those in would reset a HUD
+        /// that this client had correctly counted, and the symptom would read as the objective
+        /// resetting itself. They start being applied when the server actually judges them.
         ///
         /// **<c>Ended</c> is not applied here either.** Ending a match means publishing an outcome,
         /// and that path already exists (<see cref="AcceptOutcome"/>, driven by the room bulletin).
@@ -557,12 +564,51 @@ namespace NV.Game
         }
 
         /// <summary>
+        /// The server's objective progress: how many keys are in, and whether the door is open.
+        ///
+        /// Both are *told*, not reached — the count comes from the match bulletin and the door's
+        /// state from the objective one, and neither is something this client works out.
+        ///
+        /// **A Seeker receives zero and a closed door, by design.** The codec blanks the count and
+        /// omits the door block entirely, so applying what arrives is what keeps the Seeker ignorant
+        /// of the objective's progress. There is no door object on that client to open either.
+        ///
+        /// **No per-key notification.** `TryInsertKey` said "KEY IN 7/10" to whoever inserted, but
+        /// the bulletin does not say *who* did — raising it for everyone would tell each Runner
+        /// something the offline game never told them. The HUD's key slots already show progress
+        /// through <see cref="KeysChanged"/>; the door opening is match-wide news and does notify.
+        /// </summary>
+        public void AcceptObjectiveProgress(int keysInserted, bool doorOpen)
+        {
+            int clamped = Mathf.Clamp(keysInserted, 0, config.keysRequired);
+
+            if (clamped != KeysInserted)
+            {
+                KeysInserted = clamped;
+                KeysChanged?.Invoke(KeysInserted, config.keysRequired);
+            }
+
+            if (!doorOpen || _door == null || _door.IsOpen) return;
+
+            _door.Open();
+            Notify("THE DOOR IS OPEN");
+        }
+
+        /// <summary>
         /// One key into the door. Inserts are serialised through this method, which is what makes
         /// the "two Runners insert the tenth key at the same instant" case a non-event: whichever
         /// call arrives first crosses the threshold, and the second finds the door already open.
         /// </summary>
         public bool TryInsertKey(PlayerAgent agent, EscapeDoor door)
         {
+            // Networked, the server judges this from the `Interact` bit and tells everyone the
+            // count (IG-012b2/b3). Refusing here rather than in the caller keeps the decision in
+            // the one place that decides rules — and `EscapeDoor.Interact` stays a request, which
+            // is what it always was.
+            //
+            // The prompt still appears. What the player may do has not changed; who decides it has.
+            if (ServerOwnsObjectives) return false;
+
             if (Phase != MatchPhase.Playing || agent == null || door == null) return false;
             if (agent.Role != Role.Runner || !agent.InPlay) return false;
             if (door.IsOpen) return false;
@@ -634,7 +680,7 @@ namespace NV.Game
         {
             ClearObjectives();
 
-            if (ServerPlacesObjectives)
+            if (ServerOwnsObjectives)
             {
                 // The bulletin arrives on its own schedule (5 s + on change) and may already be
                 // here. Nothing to do if it is not — AcceptObjectiveState builds when it lands.

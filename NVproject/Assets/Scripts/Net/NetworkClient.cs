@@ -186,6 +186,17 @@ namespace NV.Client.Net
         /// <summary>문 좌표가 이 사본에 실려 왔는가. Seeker 에게는 false 다.</summary>
         public bool HasObjectiveDoor { get; private set; }
 
+        /// <summary>
+        /// 문이 열렸는가. 서버가 삽입된 열쇠 수로 정한다(IG-012b2).
+        ///
+        /// **문이 실려 오지 않은 사본에서는 항상 false 다** — 이 값은 문 블록 안에 있고,
+        /// Seeker 에게는 그 블록이 없다. 열 문이 없는 쪽에 개방 여부가 없는 것이 맞다.
+        ///
+        /// 파괴적으로 읽지 않아도 되는 이유는 전문이 5초마다 같은 값을 다시 싣기 때문이다.
+        /// 문이 열린 틱에는 즉시 한 번 더 온다.
+        /// </summary>
+        public bool ObjectiveDoorOpen { get; private set; }
+
         public event Action WelcomeReceived;
 
         /// 룸 상태가 실제로 바뀌었을 때만 부른다. 전문은 2Hz 로 계속 오지만
@@ -240,6 +251,7 @@ namespace NV.Client.Net
             _participantCount = 0;
             HasObjectiveState = false;
             HasObjectiveDoor = false;
+            ObjectiveDoorOpen = false;
             _objectives.Reset();
             _historyCount = 0;
             _tickAccumulator = 0f;
@@ -516,9 +528,13 @@ namespace NV.Client.Net
                     out var altarDrag,
                     out var door,
                     out var doorYaw,
-                    out _,
+                    out var doorOpen,
                     _keyPoints,
                     _devicePoints);
+
+                // 문 개방은 문 블록 안에 있으므로 Seeker 사본에서는 아예 오지 않는다.
+                // 코덱이 `false` 를 돌려주고, Seeker 에게는 열 문도 없으므로 맞는 값이다.
+                ObjectiveDoorOpen = doorOpen;
 
                 _objectives.Reset();
 
