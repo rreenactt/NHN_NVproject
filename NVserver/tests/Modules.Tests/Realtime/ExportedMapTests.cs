@@ -232,6 +232,62 @@ namespace NV.Modules.Tests.Realtime
             }
         }
 
+        // ==================================================== 실제 맵에 대한 질의
+
+        /// 질의가 돌려준 자리를 서버의 충돌 코드로 검산한다. 합성 격자로는 드러나지
+        /// 않는 것 — 실제 지형에서 후보 목록이 벽에 걸린 셀을 품는 경우 — 를 잡는다.
+        [Theory]
+        [MemberData(nameof(GriddedMaps))]
+        public void 무작위_질의가_돌려준_자리에_플레이어가_들어간다(string file)
+        {
+            var map = Load(file);
+            var halfExtents = MapGridBuilder.StandingHalfExtents();
+            var sequence = new DeterministicSequence(20260804);
+
+            Assert.True(map.HasGrid);
+            Assert.True(map.Grid.FreeFloorCount > 0);
+
+            for (var draw = 0; draw < 500; draw++)
+            {
+                Assert.True(map.Grid.TryRandomFreeFloor(ref sequence, out var feet));
+                Assert.True(
+                    MapGridBuilder.IsFree(feet, halfExtents, map.Collision),
+                    $"질의가 돌려준 {feet} 에서 플레이어 박스가 지형과 겹친다.");
+            }
+        }
+
+        /// 순간이동이 벽 안으로 떨어졌을 때 되돌릴 자리를 찾는 경로다. 스폰마다
+        /// 확인한다 — 스폰은 실제로 사람이 서는 자리이므로 근처에 답이 있어야 한다.
+        [Theory]
+        [MemberData(nameof(GriddedMaps))]
+        public void 스폰_근처에서_가장_가까운_자리를_찾는다(string file)
+        {
+            var map = Load(file);
+            var halfExtents = MapGridBuilder.StandingHalfExtents();
+
+            for (var index = 0; index < map.SpawnCount; index++)
+            {
+                Assert.True(
+                    map.Grid.TryNearestFreeFloor(map.SpawnPosition(index), out var feet),
+                    $"스폰 {index} 근처에서 FreeFloor 를 찾지 못했다.");
+
+                Assert.True(
+                    MapGridBuilder.IsFree(feet, halfExtents, map.Collision),
+                    $"스폰 {index} 근처에서 찾은 {feet} 에 플레이어가 들어가지 않는다.");
+            }
+        }
+
+        /// 격자를 내놓지 않는 맵에서는 `Grid` 가 `null` 이다. 빈 격자를 만들어 주면
+        /// 호출자가 "후보 0개" 와 "격자 없음" 을 구분할 수 없다.
+        [Fact]
+        public void 격자가_없는_맵의_Grid_는_null_이다()
+        {
+            var map = Load("test-room.json");
+
+            Assert.False(map.HasGrid);
+            Assert.Null(map.Grid);
+        }
+
         private static WorldMap Load(string file)
         {
             return MapLoader.Load(FindMapPath(file));

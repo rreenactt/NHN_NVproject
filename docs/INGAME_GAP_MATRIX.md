@@ -141,7 +141,7 @@
 |---|---|---|---|---|
 | R-0.1 | 씬의 맵 이름과 서버 등록 맵이 어긋난다 | `BackroomsMapGenerator.cs:113` → `"backrooms2f"`, `SessionSceneRouter.SceneByMap` 은 `"backrooms"` → `SampleScene` | 로비를 통해 기본 맵으로 방을 만들면 **접속마다 맵 해시 불일치 확정** | **해소** (IG-001) |
 | R-0.2 | `MapData/backrooms.json` 은 레거시 export | 박스 1367개·범위 ±89.6m(56셀×3.2m) vs 현재 씬 지형 736박스·±52.50m(35셀×3m·2층) | 같음 | **해소** (IG-001) |
-| R-0.3 | 서버가 "여기 설 수 있는가" 를 답할 수 없다 | `MapData` 는 AABB 박스 + 스폰 8개만 알았다 | 목표물 배치·피격 순간이동 지점 선정 불가 → R-3.4·R-6.x·R-7.1 전부 차단 | **해소** (IG-002·IG-003), 질의 API 는 IG-004 |
+| R-0.3 | 서버가 "여기 설 수 있는가" 를 답할 수 없다 | `MapData` 는 AABB 박스 + 스폰 8개만 알았다 | 목표물 배치·피격 순간이동 지점 선정 불가 → R-3.4·R-6.x·R-7.1 전부 차단 | **해소** (IG-002·IG-003·IG-004) |
 
 R-0.1·R-0.2 는 `conventions.md` 가 이미 경고한 두 항목("씨드·격자·벽 두께를 바꾸면 export 를
 다시 돌린다", "등록되지 않은 맵 id 는 거절한다")이 겹쳐 걸린 상태였다.
@@ -156,7 +156,14 @@ R-0.1·R-0.2 는 `conventions.md` 가 이미 경고한 두 항목("씨드·격�
 2450셀, `Standable` 583, `FreeFloor` 574, `StairLink` 30. `FreeFloor` 는 **서버 자신의 플레이어
 박스**로 판정되므로(`MapGridBuilder`) 그 플래그가 통과시킨 자리는 시뮬레이션도 통과한다.
 맵 해시는 `3B4B1D41` → `7996AF3A` 로 바뀌었고, 격자를 내놓지 않는 `test-room` 은 `27A9412D` 로
-그대로다. 배치가 쓸 질의 API(`TryRandomPoint` 등)는 IG-004 다.
+그대로다.
+
+**IG-004 로 질의까지 올라갔다.** `WorldMap.Grid` 가 무작위 `FreeFloor` 선택
+(`TryRandomFreeFloor(ref DeterministicSequence, …)`)과 같은 층 최근접 탐색
+(`TryNearestFreeFloor`)을 제공하고, 실제 `backrooms` 격자에서 500회 무작위 질의와 스폰 8곳
+최근접 탐색이 **서버 자신의 충돌 코드로 검산**됐다. 격자가 없는 맵의 `Grid` 는 `null` 이라
+호출자가 "후보 0개" 와 "격자 없음" 을 구분할 수 있다. R-3.4(피격 시 순간이동)·R-6.3(문 배치)·
+R-7.1(장치 배치)이 이제 기술적으로 가능하다.
 
 ---
 

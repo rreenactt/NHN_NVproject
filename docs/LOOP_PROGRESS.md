@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 3)
-현재 이터레이션: 3
-기준 커밋: `0cf64a1`
+최종 갱신: 2026-08-04 (이터레이션 4)
+현재 이터레이션: 4
+기준 커밋: `9f70508`
 
 ## 이 루프가 실제로 하는 일
 
@@ -118,7 +118,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-001 | 맵 이름·등록·export 정합성 복구 | **DONE** | P0 | - | R-0.1, R-0.2 |
 | IG-002 | `MapData` 격자 스키마 + 해시 + `DeterministicSequence` | **DONE** | P0 | IG-001 | R-0.3 |
 | IG-003 | 클라이언트 격자 export (`MapExport`·`INetworkMapSource`) | **DONE** | P0 | IG-002 | R-0.3 |
-| IG-004 | 서버 `MapGrid` 질의 + 테스트 | TODO | P0 | IG-003 | R-0.3 |
+| IG-004 | 서버 `MapGrid` 질의 + 테스트 | **DONE** | P0 | IG-003 | R-0.3 |
 | IG-005 | `MatchConstants` 분리 (`Shared`) + `GameConfig` 프로퍼티 대체 | TODO | P1 | IG-004 | R-1.x 전반 |
 | IG-006 | 서버 매치 단계·시계 (`Match.cs`) | TODO | P1 | IG-005 | R-1.3, R-1.4, R-1.6 |
 | IG-007 | 승리 조건 판정 | **BLOCKED** | P1 | IG-006 | R-1.5, R-6.6 |
@@ -313,14 +313,53 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
     (레거시 포함), 검증 없이 `DONE` 을 적을 수 없어 테스트도 같은 단위에 들어간다.
 
 ### IG-004 — 서버 `MapGrid` 질의 + 테스트
-- 상태: TODO
-- 계획: `Shared/Collision/MapGrid.cs` — `TryRandomPoint(ref seq, …)`,
-  `TryNearestFreeFloor(pos, …)`, `CellToWorld`, `FloorIndexAt`. `structure.md` 8문 표 1번
-  (클라이언트도 같은 계산을 하는가) → `Shared`.
-- 변경 예정 파일: `Shared/Collision/MapGrid.cs`,
-  `tests/Modules.Tests/Simulation/MapGridTests.cs`, `tests/Modules.Tests/Realtime/ExportedMapTests.cs`
-- 검증: `dotnet test` — 무작위 점이 항상 `FreeFloor`, 최근접 탐색이 벽을 반환하지 않음
-- 비고: 프로토콜 변경 없음. 여기까지는 클라이언트 동작 변화가 없어 되돌리기 쉽다.
+- 상태: **DONE** (이터레이션 4, 2026-08-04)
+- 계획: `Shared/Collision/MapGrid.cs` — 무작위 `FreeFloor` 선택과 최근접 탐색.
+  `CellToWorld`·`FloorIndexAt` 은 IG-003 에서 이미 `MapGridData` 에 들어갔다.
+- 변경 파일 (5개):
+  - `Shared/Collision/MapGrid.cs` (신규) — `TryRandomFreeFloor(ref seq, …)`,
+    `TryNearestFreeFloor(pos, …)`, `FreeFloorCount`
+  - `Shared/Collision/MapGridData.cs` — `TryWorldToCell` 추가 (`CellToWorld` 의 역)
+  - `Shared/Collision/WorldMap.cs` — `Grid`·`HasGrid` 노출 (격자 없으면 `null`)
+  - `tests/Modules.Tests/Simulation/MapGridTests.cs` (신규, 12개)
+  - `tests/Modules.Tests/Realtime/ExportedMapTests.cs` — 실제 맵 질의 검산 3개
+  - (+ `MapGrid.cs.meta`)
+- 검증 (전부 실행함):
+
+  | 확인 | 수단 | 결과 |
+  |---|---|---|
+  | 서버 테스트 | `dotnet test` | ✅ **229개 통과**, 실패 0 (214 → 229, +15) |
+  | 서버 경고 0 | `dotnet build` | ✅ 오류 0개 |
+  | 클라이언트 컴파일 | `Assembly-CSharp` | ✅ 오류 0개 |
+  | Unity `Shared` 컴파일 | Refresh + `.meta` 생성 | ✅ `MapGrid.cs.meta` |
+  | **실제 맵 무작위 질의** | `무작위_질의가_돌려준_자리에_플레이어가_들어간다` | ✅ `backrooms` 에서 500회 뽑아 전부 서버 충돌 코드로 검산 |
+  | **실제 맵 최근접 탐색** | `스폰_근처에서_가장_가까운_자리를_찾는다` | ✅ 스폰 8곳 전부에서 찾고, 찾은 자리에 플레이어가 들어간다 |
+  | 재현성 | `같은_씨드는_같은_자리를_고른다` | ✅ 64회 연속 일치 |
+  | **회귀 — 해시 불변** | 기동 로그 | ✅ `backrooms 7996AF3A`, `test-room 27A9412D` — IG-003 과 동일 (질의 계층이라 해시에 영향 없어야 하고, 실제로 없다) |
+
+- **테스트가 결함 하나를 잡았다.** `TryNearestFreeFloor` 를 격자 밖 먼 좌표
+  (`-50, -50`)에서 부르면 시작 셀이 `(-25, -25)` 가 되는데, 링 반지름 상한이 격자
+  크기(35)라 **링이 격자에 닿기 전에 상한에 걸려** "찾지 못했다" 로 끝났다. 주석은
+  "가장자리에서 안쪽으로 링이 자라 들어온다" 고 적어 두었지만 코드가 그렇게 하지
+  않았다. 시작 셀을 격자 안으로 클램프해 고쳤다 — 당겨 놓은 자리가 곧 그 좌표에서
+  가장 가까운 격자 셀이므로 답의 뜻도 달라지지 않는다.
+- 비고:
+  - **`TryRandomFreeFloor` 는 셀 중심을 돌려준다. 지터를 주지 않는다** (AS-7). 클라이언트의
+    같은 함수는 `margin` 0.55 로 셀 안에서 흔들어 열쇠 10개가 격자에 정렬되지 않게 하는데,
+    그 지터는 `FreeFloor` 의 보장 밖이다 — 이 플래그는 셀 **중심**에서 플레이어 박스를
+    검사해 세워진 값이다. 셀 중심에서 벽 내측면까지 1.375m 인데 지터 폭이 0.95m 면 여유가
+    0.425m 로 줄어, 반지름 0.4 인 서버 박스와 0.025m 차이다. 열쇠는 콜라이더가 없어 무해하지만
+    **순간이동 착지점은 플레이어다.** 지터가 필요하면 흔든 뒤 `MapGridBuilder.IsFree` 로 다시
+    검사해야 하고, 그 판단은 배치 태스크(IG-011)의 몫이다.
+  - 후보 목록을 생성 시점에 **월드 좌표로** 만들어 둔다. 셀 인덱스를 저장하면 뽑을 때마다
+    역변환(인덱스 → floor·x·z)이 필요하고 그 식은 `CellIndex` 의 역이라 두 곳에서 어긋날 수 있다.
+    목록의 순서(층 → z → x)가 곧 무작위 선택의 색인이므로 고정되어 있어야 한다.
+  - `TryNearestFreeFloor` 는 **같은 층에서만** 찾는다. 격자 거리로는 바로 위층 셀이 가장
+    가깝지만 그리로 걸어갈 수는 없다.
+  - 격자가 없는 맵의 `WorldMap.Grid` 는 `null` 이다. 빈 `MapGrid` 를 만들어 주면 호출자가
+    "후보 0개" 와 "격자 없음" 을 구분할 수 없다.
+  - `MathF.Floor` 를 `TryWorldToCell` 에 썼다. `conventions.md` 가 IEEE 754 규정 함수로
+    명시적으로 허용한다. 단순 `(int)` 캐스팅은 음수를 0 쪽으로 절단해 격자 밖에서 셀이 밀린다.
 
 ### IG-005 — `MatchConstants` 분리
 - 상태: TODO
@@ -552,6 +591,7 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 | AS-2 | 매치 시간 480초(8분) | 룰셋 "Match duration 8:00 (tune)", `GameConfig.asset:matchDuration 480`. 기획서 §8 은 "시간 종료" 만 말하고 값을 주지 않는다 | IG-005, IG-006 | 아니오 (AS-1 로 커버) |
 | AS-3 | 역할 리빌 4초, 각종 연출 시간은 `GameConfig.asset` 의 현재 값 | 기획서에 없고 게임플레이 영향이 작은 연출 값 → §6.4 의 "합리적 기본값" | IG-005, IG-006 | 아니오 |
 | AS-4 | `ObjectiveState` 전문 주기 = 변경 즉시 + 5초 | 2Hz 면 8인 룸에서 166B×2×8 ≈ 2.6KB/s 가 더 붙는다. 변경이 드문 블록이므로 낮추는 편이 낫다 | IG-011 | 예 → OQ-7 |
+| AS-7 | `TryRandomFreeFloor` 는 셀 중심을 돌려주고 셀 안에서 지터하지 않는다 | `FreeFloor` 는 셀 중심에서 플레이어 박스를 검사해 세워진 값이라, 지터된 점은 그 보장 밖이다. 클라이언트의 `margin` 0.55(지터 폭 0.95m)를 그대로 쓰면 벽까지 여유가 0.425m 로 줄어 서버 박스 반지름 0.4 와 0.025m 차이다. 열쇠는 콜라이더가 없어 무해하지만 순간이동 착지점은 플레이어다 | IG-011 (배치) | 예 — 열쇠가 3m 격자에 정렬되어 보이는 것이 문제면, 지터 후 `MapGridBuilder.IsFree` 재검사를 IG-011 에서 추가한다 |
 | AS-5 | 장치 조합표(`AddTime`,`FullMapView`,`StopBleeding`,`FreezeAndXray`,`SeekerCameraView`,`Teleport`×2,`FullMapView`,`StopBleeding`)를 그대로 서버로 옮긴다 | 룰셋이 "the mix of effects is a level-design choice" 로 위임하고 `MatchManager.PlaceDevices`(`:644-668`)가 이미 정해 두었다 | IG-011 | 아니오 |
 
 ## 미해결 질문 (OPEN_QUESTIONS)
@@ -570,25 +610,25 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-004 — 서버 `MapGrid` 질의 + 테스트** (P0, IG-003 완료로 해제됨).
+**IG-005 — `MatchConstants` 분리** (P1, IG-004 완료로 해제됨).
 
-**R-0.3 이 사실상 닫혔다.** 서버는 이제 격자를 갖고 있고(`backrooms` 2450셀, `FreeFloor` 574),
-`At`/`Has`/`CellToWorld`/`FloorIndexAt` 로 조회할 수 있다. IG-004 는 그 위에 배치가 실제로 쓰는
-질의를 올린다 — `TryRandomPoint(ref DeterministicSequence, …)`, `TryNearestFreeFloor(pos, …)`.
+**P0 네 개가 전부 끝났다.** 선행 차단 요소 3건이 닫히고 서버가 배치에 필요한 지형 지식을
+갖췄다 — 격자 2450셀, `FreeFloor` 574, 무작위·최근접 질의가 실제 맵에서 검산됨.
+
+여기까지는 **프로토콜과 클라이언트 동작을 건드리지 않았다.** 되돌리기 쉬운 구간이 끝나고,
+IG-005 부터 매치 규칙 이관이 시작된다.
 
 BLOCKED 5건(IG-007, IG-013, IG-016, IG-017, IG-020)은 OQ-1·2·3·4·5·6 의 답을 기다린다.
-나머지 12개는 의존 순서대로 진행 가능하다.
+나머지 11개는 의존 순서대로 진행 가능하다.
 
-**IG-004 진행 시 주의**
+**IG-005 진행 시 주의**
 
-1. **원시연산은 이미 있다.** `MapGridData` 에 `At`/`Has`/`CellIndex`/`CellToWorld`/`FloorIndexAt`,
-   `MapGridBuilder` 에 `IsFree`/`StandingHalfExtents`. IG-004 는 그것을 조합하는 것이고 새로
-   계산하지 않는다. 특히 `CellIndex`·`CellToWorld` 식을 다시 적지 않는다.
-2. `TryRandomPoint` 는 `DeterministicSequence` 를 `ref` 로 받는다. 값으로 받으면 호출자의 수열이
-   진행하지 않아 **같은 점이 계속 나온다** — 목표물이 한 자리에 겹치는 증상이다.
-3. 후보가 없을 때 무한 루프에 빠지지 않게 한다. `FreeFloor` 셀 목록을 먼저 모아 그중에서
-   뽑는 방식이면 시도 횟수 상한이 필요 없다.
-4. 격자가 **없는** 맵(`test-room`)에서 질의가 어떻게 답하는지 정해 둔다 — `false` 를 돌려주고
-   호출자가 거절하게 한다. 조용히 원점을 돌려주면 목표물이 전부 (0,0,0) 에 생긴다.
-5. `Depenetrate` 가 밀어내지 않는 것을 확인할 때는 발밑을 `SkinWidth` 만큼 올린다
-   (IG-003 이 찾은 float 왕복 함정, `conventions.md` §시뮬레이션).
+1. **`GameConfig` 의 공유 필드는 삭제하고 `MatchConstants` 를 읽는 프로퍼티로 대체한다.**
+   두 벌을 남기면 서버가 480초로, 클라이언트 HUD 가 에셋의 옛 값으로 세는 상태가 된다 —
+   증상은 "타이머가 서로 다르게 흐른다" 이고 원인을 찾기 어렵다.
+2. `GameConfig.asset` 은 **자기 사본을 들고 있다.** `.cs` 의 기본값을 바꿔도 에셋은 옛 값을
+   유지한다(`NVproject/CLAUDE.md`). 필드를 프로퍼티로 바꾸면 직렬화 대상에서 빠지므로 에셋의
+   해당 줄은 무시되지만, 에셋에서 그 줄을 지우는 것까지 확인해야 헷갈리지 않는다.
+3. 세 갈래 분류는 IG-005 상세의 표를 따른다. 애매하면 기준은 하나다 — **클라이언트가 그 값으로
+   무언가를 계산해 화면에 그려야 하는가.** 그렇다면 `Shared`, 판정만이면 `RealtimeConstants`.
+4. 이 태스크는 프로토콜을 바꾸지 않는다. `ProtocolInfo.Version` 은 IG-008 에서 3 이 된다.

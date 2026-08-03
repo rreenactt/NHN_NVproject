@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using NV.Shared.Simulation;
 
@@ -115,6 +116,33 @@ namespace NV.Shared.Collision
                 OriginX + ((x + 0.5f) * CellSize),
                 floor * FloorHeight,
                 OriginZ + ((z + 0.5f) * CellSize));
+        }
+
+        /// 월드 좌표가 어느 셀인가. 그 셀이 걸을 수 있는 곳인지는 보지 않는다.
+        ///
+        /// 범위를 벗어나면 `false` 이고, 그때도 `floor`/`x`/`z` 에는 계산된 값이 들어간다 —
+        /// 호출자가 경계를 클램프해 쓰는 경우가 있다.
+        ///
+        /// `CellToWorld` 의 역이다. 두 식이 갈리면 "가장 가까운 자리" 탐색이 엉뚱한 셀에서
+        /// 시작하고, 증상은 순간이동이 가끔 벽 쪽으로 붙는 것으로만 나타난다.
+        public bool TryWorldToCell(Vector3 world, out int floor, out int x, out int z)
+        {
+            floor = FloorIndexAt(world.Y);
+
+            if (CellSize <= 0f)
+            {
+                x = 0;
+                z = 0;
+                return false;
+            }
+
+            // MathF.Floor 는 IEEE 754 가 결과를 규정하므로 결정성에 안전하다
+            // (`conventions.md` §시뮬레이션). 단순 (int) 캐스팅은 음수를 0 쪽으로
+            // 절단해 격자 밖 좌표에서 셀 하나가 밀린다.
+            x = (int)MathF.Floor((world.X - OriginX) / CellSize);
+            z = (int)MathF.Floor((world.Z - OriginZ) / CellSize);
+
+            return InBounds(floor, x, z);
         }
 
         /// 월드 y 가 몇 층인가. 내림이며 올림하지 않는다.
