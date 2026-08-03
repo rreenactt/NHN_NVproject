@@ -37,6 +37,15 @@ namespace NV.Client.Net.Session
         private uint _startedTick;
         private bool _subscribedToMatch;
 
+        /// 이미 적용한 배치의 특징. 전문은 5초마다 같은 내용으로 다시 오므로, 그때마다
+        /// 목표물을 다시 만들면 초당 오브젝트를 지우고 세우는 일이 반복된다.
+        ///
+        /// 열쇠 수로 판별한다 — 배치가 바뀌는 실질적인 경우는 열쇠가 주워지거나 흘려지는
+        /// 것이고, 그것이 곧 개수 변화다.
+        private int _appliedObjectiveKeys = -1;
+        private bool _appliedObjectiveDoor;
+        private bool _appliedObjectivePlacement;
+
         private void Awake()
         {
             _matchBootstrap = FindFirstObjectByType<MatchBootstrap>();
@@ -76,6 +85,37 @@ namespace NV.Client.Net.Session
             }
 
             ApplyMatchState();
+            ApplyObjectiveState();
+        }
+
+        /// 서버가 배치한 목표물을 매치 레이어에 넘긴다.
+        ///
+        /// 전문은 5초 주기 + 변경 즉시로 온다. 매치가 시작된 뒤에 도착할 수도 있으므로
+        /// (`TryBeginMatch` 가 목표물을 만들지 않고 기다린다) 새 전문이 올 때마다 적용한다.
+        ///
+        /// **문이 실려 오지 않는 것이 정상인 경우가 있다.** 이 클라이언트가 Seeker 라면
+        /// 서버가 그 블록을 빼고 보낸다 — `HasObjectiveDoor` 가 false 이고, 문 오브젝트를
+        /// 만들지 않는 것이 맞다.
+        private void ApplyObjectiveState()
+        {
+            if (_client == null || !_client.HasObjectiveState)
+            {
+                return;
+            }
+
+            // 같은 배치를 매 프레임 다시 만들지 않는다. 전문이 갱신될 때만 적용한다.
+            if (_appliedObjectiveKeys == _client.Objectives.Keys.Count
+                && _appliedObjectiveDoor == _client.HasObjectiveDoor
+                && _appliedObjectivePlacement)
+            {
+                return;
+            }
+
+            _appliedObjectiveKeys = _client.Objectives.Keys.Count;
+            _appliedObjectiveDoor = _client.HasObjectiveDoor;
+            _appliedObjectivePlacement = true;
+
+            MatchManager.Instance.AcceptObjectiveState(_client.Objectives, _client.HasObjectiveDoor);
         }
 
         /// 서버의 매치 전문을 매치 레이어에 옮긴다.
@@ -177,6 +217,11 @@ namespace NV.Client.Net.Session
                     _pendingStart = false;
                     _startedTick = 0u;
 
+                    // 다음 매치는 새 배치를 받는다. 여기서 지우지 않으면 열쇠 수가 우연히
+                    // 같을 때 두 번째 매치가 첫 매치의 목표물을 그대로 쓴다.
+                    _appliedObjectivePlacement = false;
+                    _appliedObjectiveKeys = -1;
+
                     // NV.Game.MatchPhase 로 수식한다. 서버도 이제 자기 매치 단계를
                     // 갖고(NV.Shared.Contracts.Enums.MatchPhase) 두 이름이 겹친다.
                     // 값은 같으며, 통합은 이 컴포넌트가 전문을 받게 될 때(IG-010) 한다.
@@ -217,6 +262,11 @@ namespace NV.Client.Net.Session
 
             match.PlacementSeedOverride = state.PlacementSeed;
             match.ServerPlacesAgents = true;
+
+            // 목표물도 서버가 놓는다. 이 클라이언트는 씨드로 계산하지 않고 전문을 기다린다 —
+            // 씨드 공유가 Seeker 에게 문 좌표를 흘리던 경로였고, 그것을 닫는 것이 이 플래그다.
+            // 씨드를 아직 넘기는 이유는 위 줄이 와이어에 남아 있기 때문이며, 그 제거가 IG-011c3 다.
+            match.ServerPlacesObjectives = true;
 
             // 결과를 판정하는 클라이언트는 방장 하나다. 전원이 각자 판정하면 서로
             // 다른 순간에 매치를 끝내고 결과도 갈린다.

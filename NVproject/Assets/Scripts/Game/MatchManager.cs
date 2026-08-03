@@ -61,6 +61,12 @@ namespace NV.Game
         private System.Random _random;
 
         /// <summary>
+        /// Offline placement scratch. Reused so a restart does not allocate a fresh one, and
+        /// <c>Reset</c> inside the shared placement clears it.
+        /// </summary>
+        private readonly NV.Shared.Simulation.Objectives _placement = new NV.Shared.Simulation.Objectives();
+
+        /// <summary>
         /// Placement randomness. Lazily rebuilt: a plain <see cref="System.Random"/> is managed
         /// state that a domain reload during play wipes without re-running Awake or BeginMatch,
         /// and every level query taking one would then throw for the rest of the session.
@@ -97,6 +103,21 @@ namespace NV.Game
         /// snapshot anyway, and in between the local player visibly snaps twice.
         /// </summary>
         public bool ServerPlacesAgents { get; set; }
+
+        /// <summary>
+        /// The server decides where the objective goes, and this client waits to be told.
+        ///
+        /// **This is what closes the door leak.** Placement used to be computed from a shared seed
+        /// on every client, which put the door's coordinates in the Seeker's process memory — a
+        /// culling layer hides it on screen but the WebGL build is decompilable, so that was never
+        /// a defence. With the server placing it and filtering per role, the Seeker's copy of the
+        /// bulletin simply has no door block in it.
+        ///
+        /// Off (no session), this client places the objective itself by calling the same shared
+        /// code the server uses (<c>ObjectivePlacement</c>, ADR 0002). That keeps the offline
+        /// practice path alive without a second copy of the algorithm.
+        /// </summary>
+        public bool ServerPlacesObjectives { get; set; }
 
         /// <summary>
         /// Does this client decide when the match is over?
@@ -572,9 +593,25 @@ namespace NV.Game
 
         // ============================================================ placement
 
+        /// <summary>
+        /// Puts the objective in the level.
+        ///
+        /// **Where the coordinates come from is the only thing that differs between online and
+        /// offline.** With a session, the server has already placed everything and this waits for
+        /// the bulletin (<see cref="AcceptObjectiveState"/>). Without one, it calls the same shared
+        /// placement the server calls — one algorithm, two callers (ADR 0002). Building the objects
+        /// is common to both, so a change to how a key looks cannot diverge between the two paths.
+        /// </summary>
         private void PlaceObjectives()
         {
             ClearObjectives();
+
+            if (ServerPlacesObjectives)
+            {
+                // The bulletin arrives on its own schedule (5 s + on change) and may already be
+                // here. Nothing to do if it is not — AcceptObjectiveState builds when it lands.
+                return;
+            }
 
             if (map == null || !map.HasGrid)
             {
@@ -582,162 +619,106 @@ namespace NV.Game
                 return;
             }
 
+            NV.Shared.Collision.MapGrid grid = OfflineGrid();
+            if (grid == null || grid.FreeFloorCount == 0)
+            {
+                Debug.LogWarning("[Match] The level has no walkable grid; nothing can be placed.");
+                return;
+            }
+
+            int seed = PlacementSeedOverride != 0
+                ? PlacementSeedOverride
+                : config.placementSeed != 0
+                    ? config.placementSeed
+                    : Environment.TickCount;
+
+            var sequence = new NV.Shared.Simulation.DeterministicSequence(seed);
+            NV.Shared.Simulation.ObjectivePlacement.PlaceObjectives(_placement, grid, ref sequence);
+
+            BuildObjectiveObjects(_placement, hasDoor: true);
+        }
+
+        /// <summary>
+        /// Takes the objective's coordinates from the server's bulletin.
+        ///
+        /// <paramref name="hasDoor"/> is false on the Seeker's client — the server left the door
+        /// block out of that copy entirely, so there is nothing to build and nothing to hide.
+        /// </summary>
+        public void AcceptObjectiveState(NV.Shared.Simulation.Objectives placement, bool hasDoor)
+        {
+            if (placement == null || !placement.Placed) return;
+
+            // Rebuilt rather than diffed. The bulletin is idempotent and arrives rarely, and the
+            // objects it makes are cheap — a diff would have to match keys by position, which is
+            // exactly the comparison that breaks when two keys share a cell.
+            ClearObjectives();
+            BuildObjectiveObjects(placement, hasDoor);
+        }
+
+        /// <summary>
+        /// Makes the GameObjects for a placement. Shared by the online and offline paths.
+        /// </summary>
+        private void BuildObjectiveObjects(NV.Shared.Simulation.Objectives placement, bool hasDoor)
+        {
             _objectiveRoot = new GameObject("__Objectives").transform;
             _objectiveRoot.SetParent(transform, false);
 
-            // The altar first: it is the only fixed thing here, so everything random has to work
-            // around it rather than the other way round.
-            PlaceChainAltar();
+            ChainAltar.Spawn(ToUnity(placement.AltarPosition), ToUnity(placement.AltarDragPoint), _objectiveRoot);
 
-            // The door next, and everything else keeps its distance, so a key never spawns inside
-            // the doorway and the objective is never trivially short.
-            if (map.TryRandomPoint(Rng, out Vector3 doorPoint))
+            if (hasDoor)
             {
-                float yaw = (float)Rng.NextDouble() * 360f;
-                _door = EscapeDoor.Spawn(doorPoint, Quaternion.Euler(0f, yaw, 0f), _objectiveRoot);
+                float yawDegrees = placement.DoorYaw * Mathf.Rad2Deg;
+                _door = EscapeDoor.Spawn(
+                    ToUnity(placement.DoorPosition),
+                    Quaternion.Euler(0f, yawDegrees, 0f),
+                    _objectiveRoot);
             }
 
-            int keyCount = Mathf.Max(config.keysRequired, config.keysPlaced);
-            for (int i = 0; i < keyCount; i++)
-                if (TryFindSpacedPoint(4f, out Vector3 point))
-                    _keys.Add(KeyPickup.Spawn(point, _objectiveRoot));
+            for (int i = 0; i < placement.Keys.Count; i++)
+                _keys.Add(KeyPickup.Spawn(ToUnity(placement.Keys[i]), _objectiveRoot));
 
-            PlaceDevices();
+            for (int i = 0; i < placement.Devices.Count; i++)
+            {
+                var device = placement.Devices[i];
+
+                MapDevice spawned = MapDevice.Spawn(
+                    (DeviceType)device.Type,
+                    ToUnity(device.Position),
+                    device.Yaw * Mathf.Rad2Deg,
+                    _objectiveRoot);
+
+                DeviceSystem.Instance?.Register(spawned);
+            }
         }
 
         /// <summary>
-        /// The chain's altar, at the middle of the ground floor. Unlike everything else here it
-        /// does *not* move between matches — the Seeker is meant to learn exactly where the third
-        /// shot sends them, and a punishment you cannot predict is only a nuisance.
+        /// The walkability grid for offline placement, built from the level the same way the export
+        /// does — so the offline objective lands where the server would have put it.
         ///
-        /// The literal centre of the grid is inside the stairwell, so this walks outward until it
-        /// finds a standable cell that is clear of it and has a neighbour to stand on.
+        /// <c>MapExport.BuildMapData</c> already fills <c>FreeFloor</c> from the collision boxes,
+        /// which is the one part of this that Unity physics used to answer.
         /// </summary>
-        private void PlaceChainAltar()
+        private NV.Shared.Collision.MapGrid OfflineGrid()
         {
-            int centre = map.GridSize / 2;
-
-            for (int radius = 0; radius < map.GridSize; radius++)
-            {
-                for (int dx = -radius; dx <= radius; dx++)
-                for (int dz = -radius; dz <= radius; dz++)
-                {
-                    if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dz)) != radius) continue;   // ring only
-
-                    int x = centre + dx, z = centre + dz;
-                    if (!IsFreeFloor(x, z)) continue;
-                    if (!TryFindLandingSpot(x, z, out Vector3 dragPoint)) continue;
-
-                    ChainAltar.Spawn(map.CellToWorld(0, x, z), dragPoint, _objectiveRoot);
-                    return;
-                }
-            }
-
-            Debug.LogWarning("[Match] No room for the chain altar; the chain will fall back to walls.");
+            var data = NV.Client.Net.MapExport.BuildMapData(map);
+            return data.HasGrid ? new NV.Shared.Collision.MapGrid(data.Grid) : null;
         }
 
-        private static readonly Vector2Int[] Around =
+        private static Vector3 ToUnity(System.Numerics.Vector3 value)
         {
-            new Vector2Int(1, 0), new Vector2Int(-1, 0), new Vector2Int(0, 1), new Vector2Int(0, -1),
-            new Vector2Int(1, 1), new Vector2Int(1, -1), new Vector2Int(-1, 1), new Vector2Int(-1, -1),
-        };
-
-        /// <summary>Somewhere next door a body can actually stand, for the chain to drop the Seeker on.</summary>
-        private bool TryFindLandingSpot(int x, int z, out Vector3 point)
-        {
-            foreach (Vector2Int offset in Around)
-            {
-                int nx = x + offset.x, nz = z + offset.y;
-                if (!IsFreeFloor(nx, nz)) continue;
-
-                point = map.CellToWorld(0, nx, nz);
-                return true;
-            }
-
-            point = Vector3.zero;
-            return false;
+            return new Vector3(value.X, value.Y, value.Z);
         }
 
-        /// <summary>
-        /// Standable *and* empty. The grid alone is not enough to answer this: the stairwell's
-        /// cells are walkable in the grid while being full of staircase, and the first version of
-        /// the altar dropped the Seeker onto a step every single time — they landed 3.8 m from
-        /// where the chain aimed, because the CharacterController pushed itself out of the geometry
-        /// the moment collision came back on. A capsule the size of a player answers it properly.
-        /// </summary>
-        private bool IsFreeFloor(int x, int z)
-        {
-            if (!map.IsStandable(0, x, z)) return false;
-            if (map.stairwell.Contains(new Vector2Int(x, z))) return false;
-
-            Vector3 feet = map.CellToWorld(0, x, z);
-            return !Physics.CheckCapsule(feet + Vector3.up * 0.35f, feet + Vector3.up * 1.5f, 0.32f,
-                                         ~0, QueryTriggerInteraction.Ignore);
-        }
-
-        /// <summary>
-        /// The device mix. It is a level-design choice by the ruleset, so it is spelled out rather
-        /// than randomised: one of each effect covers the table, and the spare slots go to the
-        /// repeatable ones — a second Add Time would double a one-shot swing, while a second map
-        /// view only saves a walk.
-        /// </summary>
-        private void PlaceDevices()
-        {
-            var mix = new List<DeviceType>
-            {
-                DeviceType.AddTime,
-                DeviceType.FullMapView,
-                DeviceType.StopBleeding,
-                DeviceType.FreezeAndXray,
-                DeviceType.SeekerCameraView,
-                DeviceType.Teleport,
-                DeviceType.Teleport,
-                DeviceType.FullMapView,
-                DeviceType.StopBleeding,
-            };
-
-            int count = Mathf.Clamp(config.deviceCount, 1, mix.Count);
-            for (int i = 0; i < count; i++)
-            {
-                if (!TryFindSpacedPoint(5f, out Vector3 point)) continue;
-
-                float yaw = (float)Rng.NextDouble() * 360f;
-                MapDevice device = MapDevice.Spawn(mix[i], point, yaw, _objectiveRoot);
-                DeviceSystem.Instance?.Register(device);
-            }
-        }
-
-        /// <summary>A random standable point that is not on top of something already placed.</summary>
-        private bool TryFindSpacedPoint(float minSpacing, out Vector3 point)
-        {
-            for (int attempt = 0; attempt < 64; attempt++)
-            {
-                if (!map.TryRandomPoint(Rng, out point)) break;
-                if (IsClearOfPlacements(point, minSpacing)) return true;
-            }
-            return map.TryRandomPoint(Rng, out point);
-        }
-
-        private bool IsClearOfPlacements(Vector3 point, float spacing)
-        {
-            float sqr = spacing * spacing;
-
-            if (_door != null && (point - _door.Position).sqrMagnitude < sqr) return false;
-
-            ChainAltar altar = ChainAltar.Instance;
-            if (altar != null && (point - altar.transform.position).sqrMagnitude < sqr) return false;
-
-            for (int i = 0; i < _keys.Count; i++)
-                if (_keys[i] != null && (point - _keys[i].transform.position).sqrMagnitude < sqr) return false;
-
-            IReadOnlyList<MapDevice> devices = DeviceSystem.Instance != null
-                ? DeviceSystem.Instance.Devices : null;
-            if (devices != null)
-                for (int i = 0; i < devices.Count; i++)
-                    if (devices[i] != null && (point - devices[i].transform.position).sqrMagnitude < sqr) return false;
-
-            return true;
-        }
+        // The placement helpers that used to live here — PlaceChainAltar, TryFindLandingSpot,
+        // IsFreeFloor, PlaceDevices, TryFindSpacedPoint, IsClearOfPlacements — moved into
+        // NV.Shared.Simulation.ObjectivePlacement (ADR 0002). The server calls the same code, so
+        // there is no second copy of the algorithm to drift.
+        //
+        // IsFreeFloor is worth a note: it used Physics.CheckCapsule to reject stairwell cells that
+        // the grid called walkable. The shared version answers the same question with the collision
+        // boxes and the *server's* player box instead, which is both available without Unity physics
+        // and the right size — the old 0.32 m capsule was narrower than the server's 0.4 m box, so
+        // it passed cells the server would have pushed a player out of.
 
         /// <summary>Keys a dead Runner was carrying, dropped where they fell so they stay findable.</summary>
         private void ScatterKeys(int count, Vector3 around)

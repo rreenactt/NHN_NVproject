@@ -90,7 +90,7 @@
 |---|---|---|---|---|---|
 | R-6.1 | §3 열쇠 10개 수집 | `PARTIAL` | `KeyPickup.cs:1-121` (거리 폴링), `MatchManager.cs:455-468` | 필요 | 필요 |
 | R-6.2 | §3·§6 탈출 문에 삽입 | `PARTIAL` | `MatchManager.cs:475-503` | 필요 | 필요 |
-| R-6.3 | §6 문은 랜덤 위치 생성 | `PARTIAL` → **서버가 배치한다**(IG-011a). 좌표를 내려보내는 것은 IG-011b, 클라이언트가 받는 것은 IG-011c | `MatchRules.PlaceObjectives` | 필요 ✅ | 필요 (역할별 필터) |
+| R-6.3 | §6 문은 랜덤 위치 생성 | **`DONE`** (IG-011a·b·c2) — 서버가 배치하고 좌표를 역할별로 걸러 내려보내며 클라이언트가 그것을 받아 그린다 | `ObjectivePlacement`, `WriteObjectiveState`, `MatchManager.AcceptObjectiveState` | 필요 ✅ | 필요 ✅ |
 | R-6.4 | §6 플레이어만 볼 수 있음 | `PARTIAL` | R-2.3 과 같은 구멍 | 필요 | 필요 |
 | R-6.5 | §6 열쇠 10개 삽입 시 개방 | `PARTIAL` | `MatchManager.cs:493-497` | 필요 | 필요 |
 | R-6.6 | §3 2명 이상 탈출 시 승리 | `PARTIAL` | `MatchManager.cs:296-328` (문간 0.8초 유지) | 필요 | 필요 |
@@ -100,7 +100,7 @@
 
 | ID | 기획서 근거 | 현재 상태 | 근거 파일:라인 | 서버 권위 | 동기화 |
 |---|---|---|---|---|---|
-| R-7.1 | §5 장치 8~9개 배치 | `PARTIAL` → **서버가 배치한다**(IG-011a, 효과 6종 전부 + 다회용 중복). 좌표는 IG-011b·c | `MatchRules.PlaceDevices`, `RealtimeConstants.Match.DeviceMix` | 필요 ✅ | 필요 |
+| R-7.1 | §5 장치 8~9개 배치 | **`DONE`** (IG-011a·b·c2) — 효과 6종 전부 + 다회용 중복, 서버가 배치하고 클라이언트가 받는다. 개별 장치 **효과**는 별개(IG-013, OQ-1 차단) | `ObjectivePlacement.PlaceDevices`, `MatchConstants.DeviceMix` | 필요 ✅ | 필요 ✅ |
 | R-7.2 | §5.1 시간 증가 (1회) | `PARTIAL` | `MatchManager.cs:506-510`, `MatchEnums.cs:AddTime` | 필요 | 필요 |
 | R-7.3 | §5.1 전체 위치 공개 (다회) | `PARTIAL` | `MatchMapView.cs`, `MatchEnums.cs:FullMapView` | 발동 판정만 | 필요 |
 | R-7.4 | §5.1 출혈 제거 (1회) | `PARTIAL` | `MatchEnums.cs:StopBleeding` | 필요 | 필요 |

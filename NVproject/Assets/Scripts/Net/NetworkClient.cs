@@ -59,6 +59,16 @@ namespace NV.Client.Net
         private readonly MatchParticipant[] _participants = new MatchParticipant[SnapshotBuffer.MaxEntities];
         private int _participantCount;
 
+        /// 목표물 전문을 역양자화해 담아 두는 곳.
+        ///
+        /// `Objectives` 는 `Shared` 의 타입이고 서버가 배치에 쓰는 것과 같다(ADR 0002).
+        /// 그래서 수신 측이 별도 표현을 만들 필요가 없다 — 온라인이든 오프라인이든
+        /// 매치 레이어는 같은 구조를 받는다.
+        private readonly Objectives _objectives = new Objectives();
+
+        private readonly ObjectivePoint[] _keyPoints = new ObjectivePoint[64];
+        private readonly ObjectiveDevice[] _devicePoints = new ObjectiveDevice[16];
+
         /// 최근 입력 프레임. 손실 대비로 매 메시지에 여러 틱치를 함께 싣는다.
         private readonly InputFrame[] _history = new InputFrame[ProtocolInfo.MaxInputFramesPerMessage];
         private int _historyCount;
@@ -161,6 +171,21 @@ namespace NV.Client.Net
             return _participants[index];
         }
 
+        /// <summary>
+        /// 서버가 배치한 목표물 — 제단·문·열쇠·장치.
+        ///
+        /// **문은 이 클라이언트가 Runner 일 때만 들어 있다.** 서버가 Seeker 사본에서 블록을
+        /// 아예 빼고 보내므로(`WriteObjectiveState`) 여기서 다시 숨길 필요가 없고, 숨길 수도
+        /// 없다 — 오지 않은 좌표를 복원할 방법은 없다. <see cref="HasObjectiveDoor"/> 로
+        /// 문이 실려 왔는지 판단한다.
+        /// </summary>
+        public Objectives Objectives => _objectives;
+
+        public bool HasObjectiveState { get; private set; }
+
+        /// <summary>문 좌표가 이 사본에 실려 왔는가. Seeker 에게는 false 다.</summary>
+        public bool HasObjectiveDoor { get; private set; }
+
         public event Action WelcomeReceived;
 
         /// 룸 상태가 실제로 바뀌었을 때만 부른다. 전문은 2Hz 로 계속 오지만
@@ -213,6 +238,9 @@ namespace NV.Client.Net
             _rosterCount = 0;
             HasMatchState = false;
             _participantCount = 0;
+            HasObjectiveState = false;
+            HasObjectiveDoor = false;
+            _objectives.Reset();
             _historyCount = 0;
             _tickAccumulator = 0f;
             _stateElapsed = 0f;
@@ -394,9 +422,7 @@ namespace NV.Client.Net
                     break;
 
                 case EventKind.ObjectiveState:
-                    // 서버가 이미 목표물 좌표를 보내고 있다. 이 클라이언트는 아직
-                    // PlacementSeed 로 자기 배치를 계산하므로 지금은 받아만 두고 버린다 —
-                    // 적용은 IG-011c 이고, 그때 씨드를 와이어에서 뺄 수 있다.
+                    ReadObjectiveState(payload);
                     break;
 
                 default:
@@ -470,6 +496,78 @@ namespace NV.Client.Net
             MatchState = header;
             _participantCount = count;
             HasMatchState = true;
+        }
+
+        /// 목표물 전문을 받아 역양자화한다.
+        ///
+        /// 서버가 5초 주기 + 변경 즉시로 보낸다. 매 프레임 오는 것이 아니므로 실패했을 때
+        /// 들고 있던 배치를 버리면 안 된다 — 목표물이 최대 5초 동안 사라진다.
+        private void ReadObjectiveState(ReadOnlySpan<byte> payload)
+        {
+            ObjectiveStateHeader header;
+            int keyCount;
+
+            try
+            {
+                keyCount = MessageCodec.ReadObjectiveState(
+                    payload,
+                    out header,
+                    out var altar,
+                    out var altarDrag,
+                    out var door,
+                    out var doorYaw,
+                    out _,
+                    _keyPoints,
+                    _devicePoints);
+
+                _objectives.Reset();
+
+                if (header.HasAltar)
+                {
+                    _objectives.SetAltar(ToVector(altar), ToVector(altarDrag));
+                }
+
+                if (header.HasDoor)
+                {
+                    _objectives.SetDoor(ToVector(door), Quantization.ToYawRadians(doorYaw));
+                }
+
+                for (var index = 0; index < keyCount; index++)
+                {
+                    _objectives.AddKey(ToVector(_keyPoints[index]));
+                }
+
+                for (var index = 0; index < header.DeviceCount; index++)
+                {
+                    var device = _devicePoints[index];
+
+                    _objectives.AddDevice(new DevicePlacement(
+                        device.Type,
+                        new System.Numerics.Vector3(
+                            Quantization.ToMeters(device.X),
+                            Quantization.ToMeters(device.Y),
+                            Quantization.ToMeters(device.Z)),
+                        Quantization.ToYawRadians(device.Yaw)));
+                }
+
+                _objectives.MarkPlaced();
+            }
+            catch (Exception exception) when (exception is InvalidOperationException || exception is ArgumentException)
+            {
+                LastError = exception.Message;
+                return;
+            }
+
+            HasObjectiveDoor = header.HasDoor;
+            HasObjectiveState = true;
+        }
+
+        private static System.Numerics.Vector3 ToVector(ObjectivePoint point)
+        {
+            return new System.Numerics.Vector3(
+                Quantization.ToMeters(point.X),
+                Quantization.ToMeters(point.Y),
+                Quantization.ToMeters(point.Z));
         }
 
         /// 새 전문이 지금 들고 있는 것과 다른가.

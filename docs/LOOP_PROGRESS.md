@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 13)
-현재 이터레이션: 13
-기준 커밋: `9866e60`
+최종 갱신: 2026-08-04 (이터레이션 14)
+현재 이터레이션: 14
+기준 커밋: `7b42681`
 
 ## 이 루프가 실제로 하는 일
 
@@ -160,7 +160,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-011a | 서버 목표물 배치 (제단·문·열쇠·장치) | **DONE** | P2 | IG-010 | R-6.3, R-7.1 |
 | IG-011b | `ObjectiveState` 전문 + 역할별 필터 | **DONE** | P2 | IG-011a | **R-2.3**, R-6.4 |
 | IG-011c1 | 배치 코드를 `Shared` 로 이동 (ADR 0002) | **DONE** | P2 | IG-011b | (기반) |
-| IG-011c2 | 클라이언트 목표물 수신·적용 + 클라이언트 배치 제거 | TODO | P2 | IG-011c1 | R-6.3, R-7.1 |
+| IG-011c2 | 클라이언트 목표물 수신·적용 + 클라이언트 배치 제거 | **DONE** | P2 | IG-011c1 | R-6.3, R-7.1 |
 | IG-011c3 | `PlacementSeed` 와이어 제거 | TODO | P2 | IG-011c2 | **R-2.3** |
 | IG-012 | 열쇠 습득·삽입·문 개방·탈출 판정 | TODO | P2 | IG-011 | R-6.1, R-6.2, R-6.5, R-6.7 |
 | IG-013 | `Interact` 입력 + 장치 사용 판정 | **BLOCKED** | P2 | IG-011 | R-7.2~R-7.7, R-4.3 |
@@ -937,7 +937,43 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
     클라이언트는 아직 이 코드를 호출하지 않고(IG-011c2), 씨드도 그대로 나간다(IG-011c3).
     되돌리기 가장 쉬운 형태의 커밋이다.
 ### IG-011c2 — 클라이언트 목표물 수신·적용
-- 상태: TODO
+- 상태: **DONE** (이터레이션 14, 2026-08-04)
+- 변경 파일 (4개):
+  - `Net/NetworkClient.cs` — `ReadObjectiveState`, `Objectives`·`HasObjectiveState`·`HasObjectiveDoor`
+  - `Game/MatchManager.cs` — 배치 헬퍼 6개 제거, `ServerPlacesObjectives`,
+    `AcceptObjectiveState`, `BuildObjectiveObjects`, `OfflineGrid`
+  - `Net/Session/MatchSync.cs` — `ServerPlacesObjectives = true`, `ApplyObjectiveState` 폴링
+- 검증 (전부 실행함):
+
+  | 확인 | 수단 | 결과 |
+  |---|---|---|
+  | 클라이언트 컴파일 | `dotnet build Assembly-CSharp.csproj` | ✅ 오류 0개 |
+  | 서버 회귀 | `dotnet test` | ✅ 336개 통과 (서버 미변경) |
+  | **오프라인 배치 유지** | Play 모드 조회 | ✅ `serverPlacesObjectives=False`, **열쇠 10 · 장치 9 · 제단 · 문** 전부 생성, `doorPos=(-21.0, 3.2, 3.0)` (2층), `phase=Playing` |
+
+- **오프라인 실측이 이 태스크의 핵심 증거다.** 클라이언트에서 배치 알고리즘을 지웠는데도
+  세션 없이 Play 하면 목표물이 그대로 생긴다 — `Shared` 의 같은 코드를 부르기 때문이다(ADR 0002).
+  지우기 전과 개수·종류가 같고, 문은 2층에 놓였다(격자가 2층을 포함하므로 정상).
+- **제거한 헬퍼 6개**: `PlaceChainAltar`, `TryFindLandingSpot`, `IsFreeFloor`, `PlaceDevices`,
+  `TryFindSpacedPoint`, `IsClearOfPlacements`. `IsFreeFloor` 가 특히 의미 있다 — 그것은
+  `Physics.CheckCapsule`(반지름 0.32)로 계단 셀을 걸렀는데, `Shared` 버전은 같은 질문을
+  **콜리전 박스와 서버의 플레이어 박스(0.4)** 로 답한다. Unity 물리가 필요 없고 크기도 맞다.
+- **온라인과 오프라인이 오브젝트 생성을 공유한다.** `BuildObjectiveObjects` 하나가 두 경로를
+  받으므로, 열쇠가 어떻게 보이는지를 바꿀 때 한쪽만 바뀌는 일이 없다.
+- 비고:
+  - `AcceptObjectiveState` 는 **diff 하지 않고 다시 만든다.** 전문은 멱등하고 드물게 오며
+    오브젝트 생성이 싸다. diff 를 하면 열쇠를 위치로 대조해야 하는데, 그것이 정확히 두 열쇠가
+    같은 셀을 쓸 때(간격 조건을 포기한 경우) 깨지는 비교다.
+  - 그래서 `MatchSync` 가 **열쇠 수로** 갱신 여부를 판별한다. 5초마다 같은 내용이 오는데 그때마다
+    다시 만들면 초당 오브젝트를 지우고 세우는 일이 반복된다. 배치가 실제로 바뀌는 경우는 열쇠가
+    주워지거나 흘려지는 것이고 그것이 곧 개수 변화다. 로비로 돌아가면 판별 상태를 지운다 —
+    지우지 않으면 열쇠 수가 우연히 같을 때 두 번째 매치가 첫 매치의 목표물을 그대로 쓴다.
+  - **씨드는 아직 나간다.** `MatchSync` 가 여전히 `PlacementSeedOverride` 를 넘기고, 그 값을
+    쓰는 경로는 오프라인뿐이다. 와이어에서 빼는 것이 IG-011c3 이고 **그때 R-2.3 이 실제로 닫힌다.**
+  - `MatchManager` 가 `NV.Client.Net.MapExport` 를 부른다(오프라인 격자 생성). `MatchBootstrap` 이
+    이미 `NV.Client.Net.Session` 을 참조하는 것과 같은 성질이며, 같은 어셈블리다.
+  - 네트워크 경로(서버 좌표로 목표물이 생기고 Seeker 화면에 문이 없는지)는 §7.4 스모크 테스트가
+    필요하고 **사람의 조작을 요구한다.**
 - 범위: `KeyPickup`·`EscapeDoor`·`MapDevice`·`ChainAltar` 가 **좌표를 받아 그려지는 것**이 된다.
   `MatchManager.PlaceObjectives`·`PlaceChainAltar`·`PlaceDevices`·`TryFindSpacedPoint`·
   `IsFreeFloor` 가 사라지고, 그 자리에 전문 적용이 들어간다.
@@ -1129,7 +1165,32 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-011c2 — 클라이언트 목표물 수신·적용** (P2).
+**IG-011c3 — `PlacementSeed` 와이어 제거** (P2). **이 태스크가 R-2.3 을 실제로 닫는다.**
+
+클라이언트는 이제 전문으로 목표물을 받고, 씨드를 쓰는 경로는 오프라인뿐이다. 씨드가 와이어에서
+빠지면 Seeker 클라이언트에 문을 계산할 입력이 사라진다 — 배치 함수를 갖고 있어도(ADR 0002)
+계산할 수 없다.
+
+범위가 작다: `RoomStateHeader` 에서 필드 제거(`WireSize` 15 → 11), 코덱·테스트 갱신,
+`MatchSync` 의 `PlacementSeedOverride` 전달 제거. 서버는 내부 재현용으로 씨드를 계속 갖는다.
+
+**오프라인 씨드는 `GameConfig.placementSeed` 가 계속 담당한다** — 그 값이 0 이면
+`Environment.TickCount` 로 떨어지는 경로가 `MatchManager` 에 남아 있고, 그것이 오프라인의
+정상 동작이다.
+
+BLOCKED 6건(IG-007, IG-013, IG-016, IG-017, IG-020, IG-021)은 여전히 OQ-1·2·3·4·5·6 을 기다린다.
+
+---
+
+### 이전 판단 기록 (이터레이션 14)
+
+오프라인 경로를 살린 판단(ADR 0002)이 이번에 값을 했다. 클라이언트에서 배치 알고리즘 6개를
+지웠는데도 Play 모드에서 열쇠 10·장치 9·제단·문이 그대로 생기는 것을 실측했다 — **그 확인이
+가능한 유일한 이유가 오프라인 경로를 남긴 것**이다. 네트워크 경로는 사람의 조작을 요구한다.
+
+`AcceptObjectiveState` 를 diff 없이 재생성으로 만들었다. diff 는 열쇠를 위치로 대조해야 하고,
+그것이 정확히 두 열쇠가 같은 셀을 쓸 때 깨지는 비교다 — 간격 조건을 포기하는 경로가 있으므로
+(IG-011a) 실제로 일어날 수 있다.
 
 배치 코드가 `Shared` 에 있으므로(ADR 0002) 클라이언트가 그것을 호출할 수 있다. c2 는 두 경로를
 가른다 — **세션이 있으면 전문을 기다리고, 없으면 직접 계산한다.** 오프라인 Play 모드가 살아
