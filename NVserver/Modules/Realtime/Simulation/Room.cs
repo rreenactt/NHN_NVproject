@@ -351,13 +351,15 @@ namespace NV.Realtime.Simulation
                 count++;
             }
 
+            // 배치 씨드는 싣지 않는다. 서버는 그것을 계속 갖고 있지만(`_placementSeed`,
+            // 배치를 재현하는 데 쓴다) 클라이언트에 보내면 Seeker 가 문의 좌표를 계산할 수
+            // 있다 — 그것이 이 이관 작업이 닫으려던 구멍이다.
             var header = new RoomStateHeader(
                 Phase,
                 (byte)Volatile.Read(ref _hostPlayerId),
                 _seekerPlayerId,
                 _outcome,
                 _startTick,
-                _placementSeed,
                 (byte)count);
 
             var length = MessageCodec.WriteRoomState(

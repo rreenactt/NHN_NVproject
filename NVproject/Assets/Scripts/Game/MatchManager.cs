@@ -82,17 +82,21 @@ namespace NV.Game
         public EscapeDoor Door => _door;
 
         /// <summary>
-        /// Placement seed handed down by the server, or 0 to use <see cref="GameConfig"/>'s.
+        /// Placement seed for **offline** play, or 0 to use <see cref="GameConfig"/>'s.
         ///
-        /// In a networked match every client has to place the door, the keys and the devices in the
-        /// same spots, and those spots come out of one seeded <see cref="System.Random"/>. Left to
-        /// the config, a seed of 0 falls back to this machine's clock — so each player would get a
-        /// different door. The symptom reads as "somebody is inserting keys into a door that isn't
-        /// there", which does not look like a networking fault at all.
+        /// **The server no longer sends one, and that is the point.** It used to: every client
+        /// received the same seed and computed the door's position from it, which put those
+        /// coordinates in the Seeker's process — a culling layer hides the door on screen but the
+        /// WebGL build is decompilable, so that was never a defence. The server now places the
+        /// objective and sends coordinates filtered per role, so the seed has no reason to travel
+        /// and <see cref="RoomStateHeader"/> no longer carries it.
         ///
-        /// Set instead of writing to the config asset: mutating a ScriptableObject at runtime
-        /// persists it in the editor, and the next offline session would silently reuse the
-        /// last match's seed.
+        /// What is left here is the offline path. Nothing sets it today — offline seeding falls to
+        /// <c>GameConfig.placementSeed</c>, and 0 there means this machine's clock, which is correct
+        /// when there is nobody to agree with. Set it to reproduce a specific layout while testing.
+        ///
+        /// Set this rather than writing to the config asset: mutating a ScriptableObject at runtime
+        /// persists it in the editor, and the next session would silently reuse the last seed.
         /// </summary>
         public int PlacementSeedOverride { get; set; }
 

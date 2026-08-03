@@ -260,12 +260,14 @@ namespace NV.Client.Net.Session
 
             var state = _client.RoomState;
 
-            match.PlacementSeedOverride = state.PlacementSeed;
             match.ServerPlacesAgents = true;
 
-            // 목표물도 서버가 놓는다. 이 클라이언트는 씨드로 계산하지 않고 전문을 기다린다 —
-            // 씨드 공유가 Seeker 에게 문 좌표를 흘리던 경로였고, 그것을 닫는 것이 이 플래그다.
-            // 씨드를 아직 넘기는 이유는 위 줄이 와이어에 남아 있기 때문이며, 그 제거가 IG-011c3 다.
+            // 목표물도 서버가 놓는다. 이 클라이언트는 전문을 기다린다.
+            //
+            // **씨드를 넘기지 않는다. 넘길 씨드가 이제 없다.** 그 값이 와이어에서 빠졌고
+            // (`RoomStateHeader`), 그래서 이 클라이언트에는 문의 좌표를 계산할 입력이 없다 —
+            // 배치 함수를 갖고 있어도(ADR 0002) 계산할 수 없다. 컬링 레이어가 화면에서 가리는
+            // 것과 달리 이것은 디컴파일로 되살릴 수 없다.
             match.ServerPlacesObjectives = true;
 
             // 결과를 판정하는 클라이언트는 방장 하나다. 전원이 각자 판정하면 서로
@@ -285,7 +287,7 @@ namespace NV.Client.Net.Session
 
             Debug.Log(
                 $"[NV] 매치 시작. 틱 {state.StartTick}, Seeker 플레이어 {state.SeekerPlayerId}, " +
-                $"배치 씨드 {state.PlacementSeed}, 판정 {(match.ResolvesOutcome ? "이 클라이언트" : "방장")}");
+                $"판정 {(match.ResolvesOutcome ? "이 클라이언트" : "방장")}, 목표물은 서버 배치");
         }
 
         /// PlayerId 로 참가자를 찾는다. 로컬은 자기 자신, 나머지는 원격 몸이다.

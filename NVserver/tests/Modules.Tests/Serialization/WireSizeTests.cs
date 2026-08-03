@@ -39,9 +39,12 @@ namespace NV.Modules.Tests.Serialization
         }
 
         [Fact]
-        public void 룸_상태_고정부는_15바이트다()
+        /// 15 였다. **배치 씨드 4바이트가 빠졌다** — 그 필드를 받은 Seeker 는 문의 좌표를
+        /// 계산할 수 있었고, 그것이 이 게임의 정보 규칙을 어기는 경로였다. 다시 늘어나면
+        /// 무엇이 실리는지 확인해야 한다.
+        public void 룸_상태_고정부는_11바이트다()
         {
-            Assert.Equal(15, RoomStateHeader.WireSize);
+            Assert.Equal(11, RoomStateHeader.WireSize);
         }
 
         [Fact]
@@ -52,9 +55,9 @@ namespace NV.Modules.Tests.Serialization
 
         /// 세션 수신·송신 버퍼가 이 값보다 커야 한다. 넘으면 접속이 끊긴다.
         [Fact]
-        public void 여덟명_룸_상태_최대는_127바이트다()
+        public void 여덟명_룸_상태_최대는_123바이트다()
         {
-            Assert.Equal(127, MessageCodec.RoomStateMaxWireSize(8));
+            Assert.Equal(123, MessageCodec.RoomStateMaxWireSize(8));
         }
     }
 }

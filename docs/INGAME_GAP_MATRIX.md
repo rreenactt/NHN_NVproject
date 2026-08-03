@@ -40,7 +40,7 @@
 |---|---|---|---|---|---|
 | R-2.1 | §2.1 술래: 총기 사용 | `PARTIAL` | `WeaponController.cs`, `PlayerRoleLoadout.cs` — 탄약이 클라이언트 소유 | 필요 | 필요 |
 | R-2.2 | §2.1 술래: 출혈 흔적 추적 | `PARTIAL` | `BloodTrail.cs`, `MatchLayers.cs` (`SeekerVision` 레이어 11) | 판정 필요 (출혈 상태) / 표현은 클라이언트 | 필요 (`EntityFlags`) |
-| R-2.3 | §2.1 술래: **탈출 문을 볼 수 없음** | `PARTIAL` → **와이어 계약 수준에서 닫혔다**(IG-011b): 문 블록이 Seeker 사본에서 빠지고 좌표 바이트가 남지 않는다. **씨드가 아직 나가므로 실제 누출은 IG-011c 까지 남는다** | `MessageCodec.WriteObjectiveState`, 아직 `RoomStateHeader.PlacementSeed` | 필요 ✅ | 필요 ✅ |
+| R-2.3 | §2.1 술래: **탈출 문을 볼 수 없음** | **`DONE`** (IG-011b·c3) — 두 경로가 모두 닫혔다: 문 블록이 Seeker 사본에서 빠지고(바이트 확인), 배치 씨드가 와이어에서 사라져 좌표를 **계산할 입력도 없다**(`WireSize` 15→11) | `MessageCodec.WriteObjectiveState`, `RoomStateMessage` | 필요 ✅ | 필요 ✅ |
 | R-2.4 | §2.2 플레이어: 무기 없음 | `PARTIAL` | `PlayerRoleLoadout.cs` | 필요 | 필요 |
 | R-2.5 | §2.1 술래: 일부 맵 이벤트 전용 사용 | **모순** — 구현은 술래 장치 사용 금지 | `GameConfig.asset:seekerCanActivateDevices: 0` | — | — |
 
@@ -91,7 +91,7 @@
 | R-6.1 | §3 열쇠 10개 수집 | `PARTIAL` | `KeyPickup.cs:1-121` (거리 폴링), `MatchManager.cs:455-468` | 필요 | 필요 |
 | R-6.2 | §3·§6 탈출 문에 삽입 | `PARTIAL` | `MatchManager.cs:475-503` | 필요 | 필요 |
 | R-6.3 | §6 문은 랜덤 위치 생성 | **`DONE`** (IG-011a·b·c2) — 서버가 배치하고 좌표를 역할별로 걸러 내려보내며 클라이언트가 그것을 받아 그린다 | `ObjectivePlacement`, `WriteObjectiveState`, `MatchManager.AcceptObjectiveState` | 필요 ✅ | 필요 ✅ |
-| R-6.4 | §6 플레이어만 볼 수 있음 | `PARTIAL` | R-2.3 과 같은 구멍 | 필요 | 필요 |
+| R-6.4 | §6 플레이어만 볼 수 있음 | **`DONE`** (IG-011b·c3) — R-2.3 과 같은 경로로 닫혔다 | `WriteObjectiveState`, `RoomStateMessage` | 필요 ✅ | 필요 ✅ |
 | R-6.5 | §6 열쇠 10개 삽입 시 개방 | `PARTIAL` | `MatchManager.cs:493-497` | 필요 | 필요 |
 | R-6.6 | §3 2명 이상 탈출 시 승리 | `PARTIAL` | `MatchManager.cs:296-328` (문간 0.8초 유지) | 필요 | 필요 |
 | R-6.7 | (룰셋) 사망 시 소지 열쇠 흘리기 | `PARTIAL` | `MatchManager.cs:703-722` | 필요 | 필요 |

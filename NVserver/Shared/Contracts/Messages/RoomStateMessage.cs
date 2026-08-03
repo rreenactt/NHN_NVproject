@@ -14,19 +14,35 @@ namespace NV.Shared.Contracts.Messages
     public readonly struct RoomStateHeader
     {
         /// opcode(1) + kind(1) + phase(1) + host(1) + seeker(1) + outcome(1)
-        /// + startTick(4) + placementSeed(4) + playerCount(1)
-        public const int WireSize = 15;
+        /// + startTick(4) + playerCount(1)
+        ///
+        /// 15 였다. 배치 씨드 4바이트가 빠졌다 — 그 필드가 이 게임의 정보 규칙을 어기는
+        /// 경로였다. 자세한 이유는 아래 생성자 주석에 있다.
+        public const int WireSize = 11;
 
         /// 방장이나 Seeker 가 정해지지 않은 상태. 0 은 유효한 PlayerId 라 쓸 수 없다.
         public const byte NoPlayer = 0xFF;
 
+        /// **배치 씨드는 더 이상 여기 없다.**
+        ///
+        /// 있었을 때는 그것이 이 기능의 핵심이었다 — 문·열쇠·장치의 위치를 모든 클라이언트가
+        /// 이 씨드로 계산했고, 씨드가 다르면 플레이어마다 문이 다른 곳에 생겨 증상이 "남이
+        /// 없는 문에 열쇠를 꽂는다" 로 나타났다.
+        ///
+        /// 그 방식이 동시에 이 게임의 정보 규칙을 어겼다. 룰셋은 문이 Runner 에게만 보여야
+        /// 한다고 정하고 클라이언트는 컬링 레이어로 그것을 지키지만, 씨드를 받은 Seeker 의
+        /// 프로세스에는 문의 좌표가 **계산 가능한 형태로** 들어 있었다. WebGL 빌드는
+        /// 디컴파일되므로 카메라 마스크로 막을 수 있는 종류의 정보가 아니다.
+        ///
+        /// 이제 서버가 배치하고 좌표를 역할별로 걸러 내려보낸다(`EventKind.ObjectiveState`).
+        /// 씨드가 와이어에 없으므로, 배치 함수를 가진 클라이언트도(ADR 0002) 문을 계산할
+        /// **입력이 없다.** 막아야 하는 것은 코드가 아니라 입력이었다.
         public RoomStateHeader(
             RoomPhase phase,
             byte hostPlayerId,
             byte seekerPlayerId,
             byte outcome,
             uint startTick,
-            int placementSeed,
             byte playerCount)
         {
             Phase = phase;
@@ -34,7 +50,6 @@ namespace NV.Shared.Contracts.Messages
             SeekerPlayerId = seekerPlayerId;
             Outcome = outcome;
             StartTick = startTick;
-            PlacementSeed = placementSeed;
             PlayerCount = playerCount;
         }
 
@@ -52,13 +67,6 @@ namespace NV.Shared.Contracts.Messages
 
         /// 매치가 시작된 룸 틱. 늦게 상태를 받은 클라이언트가 얼마나 지났는지 안다.
         public uint StartTick { get; }
-
-        /// 목표물 배치 난수의 씨드.
-        ///
-        /// 이 값이 이 메시지에 있는 이유가 이 기능의 핵심이다. 문·열쇠·장치의 위치는
-        /// 클라이언트가 이 씨드로 계산하므로, 씨드가 다르면 플레이어마다 문이 다른 곳에
-        /// 생긴다. 증상은 "남이 없는 문에 열쇠를 꽂는다" 로 나타나 네트워크 문제로 보이지 않는다.
-        public int PlacementSeed { get; }
 
         public byte PlayerCount { get; }
     }

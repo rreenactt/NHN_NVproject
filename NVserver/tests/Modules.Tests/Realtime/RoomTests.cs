@@ -348,9 +348,11 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(0, state.HostPlayerId);
             Assert.True(state.SeekerPlayerId < RealtimeConstants.Rooms.MaxPlayers);
 
-            // 0 이면 클라이언트가 자기 시계로 배치를 만들어 플레이어마다 문이 달라진다.
-            Assert.NotEqual(0, state.PlacementSeed);
             Assert.Equal(1u, state.StartTick);
+
+            // 배치 씨드는 와이어에 없다. 서버는 내부적으로 갖고 있지만(배치 재현용) 보내면
+            // Seeker 가 문의 좌표를 계산할 수 있다. 그 자리가 비었다는 것은 크기로 확인한다.
+            Assert.Equal(11, RoomStateHeader.WireSize);
         }
 
         [Fact]
@@ -429,7 +431,6 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(RoomPhase.Waiting, room.Phase);
             Assert.True(transport.TryLastRoomState(1, out var lobby, out _));
             Assert.Equal(RoomStateHeader.NoPlayer, lobby.SeekerPlayerId);
-            Assert.Equal(0, lobby.PlacementSeed);
         }
 
         [Fact]

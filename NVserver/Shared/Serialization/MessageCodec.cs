@@ -220,7 +220,6 @@ namespace NV.Shared.Serialization
             writer.WriteByte(header.SeekerPlayerId);
             writer.WriteByte(header.Outcome);
             writer.WriteUInt32(header.StartTick);
-            writer.WriteUInt32(unchecked((uint)header.PlacementSeed));
             writer.WriteByte(header.PlayerCount);
 
             for (var index = 0; index < players.Length; index++)
@@ -280,7 +279,6 @@ namespace NV.Shared.Serialization
             var seekerPlayerId = reader.ReadByte();
             var outcome = reader.ReadByte();
             var startTick = reader.ReadUInt32();
-            var placementSeed = unchecked((int)reader.ReadUInt32());
             var playerCount = reader.ReadByte();
 
             if (players.Length < playerCount)
@@ -318,7 +316,6 @@ namespace NV.Shared.Serialization
                 seekerPlayerId,
                 outcome,
                 startTick,
-                placementSeed,
                 playerCount);
 
             return playerCount;

@@ -578,7 +578,6 @@ namespace NV.Client.Net
                 || RoomState.SeekerPlayerId != header.SeekerPlayerId
                 || RoomState.Outcome != header.Outcome
                 || RoomState.StartTick != header.StartTick
-                || RoomState.PlacementSeed != header.PlacementSeed
                 || _rosterCount != count)
             {
                 return true;

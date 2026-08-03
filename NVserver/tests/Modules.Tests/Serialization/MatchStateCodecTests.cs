@@ -183,7 +183,7 @@ namespace NV.Modules.Tests.Serialization
         public void 룸_상태_전문을_매치_전문으로_읽지_않는다()
         {
             var buffer = new byte[MessageCodec.RoomStateMaxWireSize(RealtimeConstants.Rooms.MaxPlayers)];
-            var roomHeader = new RoomStateHeader(RoomPhase.Playing, 0, 0, 0, 1u, 42, 0);
+            var roomHeader = new RoomStateHeader(RoomPhase.Playing, 0, 0, 0, 1u, 0);
 
             var length = MessageCodec.WriteRoomState(
                 buffer,
@@ -207,7 +207,7 @@ namespace NV.Modules.Tests.Serialization
             var buffer = new byte[MessageCodec.RoomStateMaxWireSize(RealtimeConstants.Rooms.MaxPlayers)];
             var length = MessageCodec.WriteRoomState(
                 buffer,
-                new RoomStateHeader(RoomPhase.Waiting, 0, 0, 0, 0u, 1, 0),
+                new RoomStateHeader(RoomPhase.Waiting, 0, 0, 0, 0u, 0),
                 ReadOnlySpan<RoomPlayerEntry>.Empty);
 
             Assert.Equal(

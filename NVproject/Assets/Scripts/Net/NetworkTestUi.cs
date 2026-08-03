@@ -310,8 +310,14 @@ namespace NV.Client.Net
 
                     if (client.RoomState.SeekerPlayerId != RoomStateHeader.NoPlayer)
                     {
+                        // 배치 씨드는 더 이상 와이어에 없다. 목표물이 왔는지와 문이 이 역할에
+                        // 실렸는지를 대신 보여 준다 — Seeker 화면에서 "문 없음" 이 정상이다.
                         _text.Append("Seeker ").Append(client.RoomState.SeekerPlayerId)
-                            .Append("   씨드 ").Append(client.RoomState.PlacementSeed).Append('\n');
+                            .Append("   목표물 ")
+                            .Append(client.HasObjectiveState
+                                ? (client.HasObjectiveDoor ? "수신(문 포함)" : "수신(문 없음)")
+                                : "대기")
+                            .Append('\n');
                     }
                 }
 

@@ -148,7 +148,6 @@ namespace NV.Modules.Tests.Serialization
                 seekerPlayerId: 7,
                 outcome: 0,
                 startTick: 4_000_000_000u,
-                placementSeed: int.MinValue,
                 playerCount: (byte)players.Length);
 
             var buffer = new byte[MessageCodec.RoomStateMaxWireSize(8)];
@@ -165,8 +164,10 @@ namespace NV.Modules.Tests.Serialization
             Assert.Equal(header.SeekerPlayerId, decodedHeader.SeekerPlayerId);
             Assert.Equal(header.StartTick, decodedHeader.StartTick);
 
-            // 씨드가 라운드트립하지 않으면 클라이언트마다 문이 다른 곳에 생긴다.
-            Assert.Equal(header.PlacementSeed, decodedHeader.PlacementSeed);
+            // **배치 씨드가 실리지 않는다.** 고정부 11B 는 opcode·kind·phase·host·seeker·
+            // outcome·startTick(4)·count 이고, 씨드 4바이트가 들어갈 자리가 없다. 그 필드가
+            // 있었을 때는 Seeker 가 문의 좌표를 계산할 수 있었다.
+            Assert.Equal(11, RoomStateHeader.WireSize);
 
             for (var index = 0; index < players.Length; index++)
             {
@@ -184,7 +185,6 @@ namespace NV.Modules.Tests.Serialization
                 RoomStateHeader.NoPlayer,
                 outcome: 0,
                 startTick: 0u,
-                placementSeed: 0,
                 playerCount: 0);
 
             var buffer = new byte[MessageCodec.RoomStateMaxWireSize(8)];
@@ -204,10 +204,10 @@ namespace NV.Modules.Tests.Serialization
             var buffer = new byte[MessageCodec.RoomStateMaxWireSize(8)];
             MessageCodec.WriteRoomState(
                 buffer,
-                new RoomStateHeader(RoomPhase.Waiting, 0, RoomStateHeader.NoPlayer, 0, 0u, 0, 1),
+                new RoomStateHeader(RoomPhase.Waiting, 0, RoomStateHeader.NoPlayer, 0, 0u, 1),
                 new[] { new RoomPlayerEntry(0, "ab") });
 
-            // 고정부 15B 다음이 playerId, 그 다음이 nameLength 다.
+            // 고정부 다음이 playerId, 그 다음이 nameLength 다.
             buffer[RoomStateHeader.WireSize + 1] = 200;
 
             Assert.Throws<InvalidOperationException>(
