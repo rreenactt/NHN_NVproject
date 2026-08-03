@@ -56,12 +56,12 @@
 
 | ID | 기획서 근거 | 현재 상태 | 근거 파일:라인 | 서버 권위 | 동기화 |
 |---|---|---|---|---|---|
-| R-3.1 | §4.1 피격 판정 | `PARTIAL` — **쏜 클라이언트가 판정** | `Bullet.cs` → `SendMessageUpwards("OnHit")` → `PlayerAgent.OnHit` | 필요 | 필요 |
+| R-3.1 | §4.1 피격 판정 | `PARTIAL` — **총알은 서버에서 날아간다**(IG-014a) 그런데 **맞는 판정은 아직 쏜 클라이언트가 한다** | 서버: `Room.StepProjectiles`·`FireWeapons`, `Projectile`. 클라이언트: `Bullet.cs` → `SendMessageUpwards("OnHit")` → `PlayerAgent.OnHit` (→ IG-014b·c 가 닫는다) | 필요 | 필요 |
 | R-3.2 | §4.1 1회 피격 = 출혈 | `PARTIAL` | `MatchManager.cs:415-422` | 필요 | 필요 |
 | R-3.3 | §4.1 2회 피격 = 사망 | `PARTIAL` | `MatchManager.cs:399-413` | 필요 | 필요 |
 | R-3.4 | §4.1 피격 시 랜덤 위치 순간이동 | `PARTIAL` | `MatchManager.cs:436-447` | 필요 | 필요 |
 | R-3.5 | (룰셋) 무적 창 0.75초 | `PARTIAL` | `MatchManager.cs:396`, `GameConfig.asset:hitImmunity 0.75` | 필요 | 불필요 (서버 내부) |
-| R-3.6 | §4.3 탄창 3발 | `PARTIAL` | `WeaponController.cs`, `GameConfig.asset:seekerMagazine 3` | 필요 | 필요 (HUD) |
+| R-3.6 | §4.3 탄창 3발 | **서버 판정 `DONE`** (IG-014a) — 발사마다 차감하고 비면 거부한다. **재장전은 없다**(체인 경로가 OQ-4 에 막혀 있다 → IG-016) | `PlayerEntity.Ammo`, `Room.FireWeapons`, `MatchConstants.SeekerMagazine`·`FireInterval`, `Match.FireIntervalTicks` | **서버** ✅ | HUD 적용은 IG-014c |
 | R-3.7 | §4.3 소진 시 체인 강제이동·3초 행동불가·자동 재장전 | `PARTIAL` | `ChainDrag.cs:1-371`, `ChainAltar.cs` — `NavMesh.CalculatePath` 사용 | 필요 | 필요 |
 
 **R-3.1 이 가장 심각하다.** `Bullet` 은 쏜 사람의 머신에서만 날고 `SendMessageUpwards` 는 그

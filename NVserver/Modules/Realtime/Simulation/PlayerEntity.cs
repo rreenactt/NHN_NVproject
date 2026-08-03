@@ -53,6 +53,16 @@ namespace NV.Realtime.Simulation
         /// 죽으면 떨어뜨려 다시 맵으로 돌아간다(IG-014).
         public int CarriedKeys { get; set; }
 
+        /// 탄창에 남은 탄. 기획서 §4.3 — Seeker 만 쓴다.
+        ///
+        /// 재장전은 아직 없다. 기획서 §4.3 의 재장전은 **체인이 놓아준 뒤** 일어나고, 그 체인
+        /// 견인이 OQ-4 에 걸려 있다(IG-016) — 순서를 임의로 정하면 벌칙의 의미가 달라진다.
+        /// 그래서 지금은 탄창을 비우면 그 매치에서 더 쏠 수 없다.
+        public int Ammo { get; set; }
+
+        /// 다음 발사가 가능한 틱. `NextInsertTick` 과 같은 이유로 매치 시작에 되돌리지 않는다.
+        public uint NextFireTick { get; set; }
+
         /// 열린 문간을 빠져나갔는가. 기획서 §3 의 탈출이다.
         ///
         /// 몸을 지우지 않는다. 스냅샷에 `EntityFlags.Escaped` 로 실려 클라이언트가 감추고

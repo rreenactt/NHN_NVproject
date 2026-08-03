@@ -13,6 +13,24 @@ namespace NV.Shared.Simulation
     /// 판정(policy)은 여기 없다. 입력이 정당한지, 명중을 인정할지는 모듈이 정한다.
     public static class PlayerMovement
     {
+        /// 요·피치가 가리키는 단위 방향.
+        ///
+        /// **여기 있는 이유는 요 규약이 여기 살기 때문이다.** `ApplyHorizontal` 이 전방을
+        /// `(sin yaw, 0, cos yaw)` 로 두고 있고, 그 규약을 다른 파일에서 다시 세우면 한쪽을
+        /// 고칠 때 다른 쪽이 남는다 — 증상은 총알이 옆으로 날아가는 것이다.
+        ///
+        /// 피치는 **음수가 위**다(클라이언트의 카메라 규약). Unity 의
+        /// `Quaternion.Euler(pitch, yaw, 0) * Vector3.forward` 와 같은 값이 나온다.
+        ///
+        /// 사인·코사인은 결정적 다항식으로 계산한다 — `MathF` 는 libm 차이로 갈린다.
+        public static Vector3 Forward(float yaw, float pitch)
+        {
+            DeterministicMath.SinCos(yaw, out var yawSin, out var yawCos);
+            DeterministicMath.SinCos(pitch, out var pitchSin, out var pitchCos);
+
+            return new Vector3(yawSin * pitchCos, -pitchSin, yawCos * pitchCos);
+        }
+
         /// 한 틱 진행한다. deltaTime 을 받지 않는다. 고정 틱 델타만 쓴다.
         public static PlayerState Step(in PlayerState state, in MoveIntent intent, CollisionWorld world)
         {

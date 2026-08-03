@@ -92,7 +92,26 @@ namespace NV.Shared.Simulation
         public const int RunnerHitsToDie = 2;
 
         /// 기획서 §4.3 — 탄창.
+        ///
+        /// 클라이언트의 `WeaponController.magazineSize` 기본값은 8 이지만 `MatchManager` 가
+        /// `SetMagazineSize` 로 이 값을 덮는다. 기획서가 이긴다.
         public const int SeekerMagazine = 3;
+
+        /// 총알 속도(m/s).
+        ///
+        /// 기획서에 없다. 클라이언트의 `Bullet.speed` 기본값이고, **히트스캔이 아니라 실제로
+        /// 날아가는 것이 이 게임의 설계다** — 5m 를 40ms 에 지나므로 근거리에서도 피할 창이
+        /// 있고, 예광탄이 눈에 보인다.
+        public const float BulletSpeed = 120f;
+
+        /// 총알이 스스로 사라지기까지의 시간(초). 120m/s × 3s = 360m 로 맵(179m)을 넘는다.
+        ///
+        /// 맵을 넘는 값인데도 필요한 이유는 **바깥으로 나간 총알**이다. 콜리전 틈으로 빠져나간
+        /// 총알을 지우지 않으면 서버가 그것을 영원히 시뮬레이션한다.
+        public const float BulletLifetime = 3f;
+
+        /// 연사 간격(초). 클라이언트의 `WeaponController.fireCooldown` 이다.
+        public const float FireInterval = 0.15f;
 
         // ================================================================ 체인 (기획서 §4.3)
 

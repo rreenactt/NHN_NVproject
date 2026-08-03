@@ -39,6 +39,19 @@ namespace NV.Realtime.Simulation
         /// 만들기 위해서다(`MatchConstants.EscapeHoldTime`).
         public const int EscapeHoldTicks = (int)(MatchConstants.EscapeHoldTime * SimConstants.TickRate);
 
+        /// 연사 간격(틱). **0.15초 × 30Hz = 4.5 이므로 올려서 5 다(0.167초).**
+        ///
+        /// 내리면(4틱, 0.133초) 서버가 클라이언트보다 빠른 연사를 허용한다 — 오차가 "클라이언트가
+        /// 보내지도 않은 발사를 서버가 받아 준다" 는 방향으로 생기고, 그것은 신뢰 경계를 넓히는
+        /// 쪽이다. 올리면 반대로 서버가 조금 엄격해지고, 증상은 연사가 미세하게 느린 것뿐이다.
+        ///
+        /// **틱으로 나누어지지 않는 간격을 상수로 두면 이 선택이 코드에서 사라진다.** 그래서
+        /// 나눗셈이 아니라 값으로 적었다.
+        public const int FireIntervalTicks = 5;
+
+        /// 총알 수명(틱). 3초 × 30Hz = 90.
+        public const int BulletLifetimeTicks = (int)(MatchConstants.BulletLifetime * SimConstants.TickRate);
+
         private MatchPhase _phase = MatchPhase.Lobby;
         private int _revealTicksRemaining;
         private int _matchTicksRemaining;

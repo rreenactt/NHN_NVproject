@@ -73,6 +73,12 @@ namespace NV.Realtime.Simulation
         /// 내려보내는 것은 다음 태스크(IG-011b)이고, 여기서는 서버가 자기 배치를 갖는다.
         private readonly Objectives _objectives = new();
 
+        /// 날아가는 총알. 슬롯을 재사용하므로 할당이 없다.
+        ///
+        /// 32 는 규칙이 아니라 상한이다. 탄창 3발에 재장전이 없으므로 지금 실제로 도달할 수 있는
+        /// 수는 3 이고, 재장전(IG-016)이 들어와도 수명 90틱 / 간격 5틱 = 18 이 한 사람의 최대다.
+        private readonly Projectile[] _projectiles = new Projectile[32];
+
         private readonly WorldMap _map;
         private readonly NetworkConditionSimulator _network;
         private readonly ILogger _logger;
@@ -167,6 +173,9 @@ namespace NV.Realtime.Simulation
         /// `Objectives` 와 같은 이유로 `internal` 이다. 모듈 밖으로는 나가지 않고, 테스트가
         /// 룸을 돌려 놓고 판정 결과를 확인하는 창구다.
         internal Match Match => _match;
+
+        /// 날아가는 총알. 슬롯 배열이므로 `Active` 를 보고 걸러야 한다.
+        internal Projectile[] Projectiles => _projectiles;
 
         /// 이 매치의 목표물 배치. 틱 루프에서만 조회한다.
         ///
@@ -264,6 +273,12 @@ namespace NV.Realtime.Simulation
                 PickUpKeys();
                 InsertKeys();
                 TickEscapes();
+
+                // 발사는 이동 뒤다 — 이번 틱의 시선으로 쏜다. 총알을 **같은 틱에 진행시키지
+                // 않는다**: 발사한 틱에 4m 를 날아가면 눈앞의 벽이 총구보다 뒤에 있는 경우가
+                // 생기고, 클라이언트의 예광탄은 총구에서 시작한다.
+                StepProjectiles();
+                FireWeapons();
 
                 // **와이어 상태는 판정 뒤에 만든다.** 이동 안에서 만들면 이 틱의 판정이 세운
                 // 플래그가 다음 틱 스냅샷에나 나간다 — 탈출은 33ms 늦게 사라지고, 출혈
@@ -843,6 +858,136 @@ namespace NV.Realtime.Simulation
             }
         }
 
+        /// 발사를 판정한다. 기획서 §4.3 — Seeker 의 3발.
+        ///
+        /// **`Fire` 는 엣지가 아니라 누르고 있는 상태다**(`FirstPersonController.FireHeld`).
+        /// 연사 간격이 그것을 받아 준다 — `NextFireTick` 이 없으면 트리거를 누르고 있는 동안
+        /// 초당 30발이 나간다.
+        ///
+        /// Runner 는 쏘지 않는다. 기획서 §4 의 총은 술래의 것이고, `RunnerHitsToDie` 가 있는
+        /// 것도 맞는 쪽이 Runner 뿐이기 때문이다.
+        private void FireWeapons()
+        {
+            if (_match.Phase != MatchPhase.Playing)
+            {
+                return;
+            }
+
+            foreach (var player in _players.Values)
+            {
+                if ((player.LastInput.Buttons & ButtonFlags.Fire) == 0)
+                {
+                    continue;
+                }
+
+                if (RoleOf(player.PlayerId) != MatchRole.Seeker)
+                {
+                    continue;
+                }
+
+                if (player.Ammo <= 0 || _tick < player.NextFireTick)
+                {
+                    continue;
+                }
+
+                if (!TrySpawnProjectile(player))
+                {
+                    // 슬롯이 없다. 탄을 소비하지 않는 것이 맞다 — 서버 쪽 상한이지
+                    // 규칙이 아니다.
+                    _logger.LogWarning(
+                        "룸 {RoomId}: 총알 슬롯 {Max} 개가 모두 찼다. 발사를 버렸다.",
+                        RoomId,
+                        _projectiles.Length);
+                    continue;
+                }
+
+                player.Ammo--;
+                player.NextFireTick = _tick + (uint)Match.FireIntervalTicks;
+
+                _logger.LogDebug(
+                    "룸 {RoomId} 플레이어 {PlayerId}: 발사. 남은 탄 {Ammo}/{Magazine}.",
+                    RoomId,
+                    player.PlayerId,
+                    player.Ammo,
+                    MatchConstants.SeekerMagazine);
+            }
+        }
+
+        /// 눈높이에서 시선 방향으로 총알 하나를 만든다.
+        ///
+        /// 눈높이에서 쏘는 것이 맞다. 클라이언트는 총구에서 쏘지만 **조준점을 향해** 쏘고
+        /// (`WeaponController.Fire`), 명중 판정은 화면 중심에서 온다 — 즉 실제 판정선은 눈에서
+        /// 나가는 직선이다. 총구 오프셋은 연출이다.
+        private bool TrySpawnProjectile(PlayerEntity player)
+        {
+            for (var index = 0; index < _projectiles.Length; index++)
+            {
+                if (_projectiles[index].Active)
+                {
+                    continue;
+                }
+
+                var eye = player.State.Position
+                    + new Vector3(0f, SimConstants.PlayerHeight * SimConstants.EyeHeightRatio, 0f);
+
+                _projectiles[index] = new Projectile
+                {
+                    OwnerId = player.PlayerId,
+                    Position = eye,
+                    Direction = PlayerMovement.Forward(player.State.Yaw, player.State.Pitch),
+                    TicksLived = 0,
+                    Active = true,
+                };
+
+                return true;
+            }
+
+            return false;
+        }
+
+        /// 총알을 한 틱 진행한다.
+        ///
+        /// **한 틱에 지나간 선분 전체를 검사한다.** 120m/s 는 한 틱에 4m 를 지나므로 도착 지점만
+        /// 보면 벽을 통과한다 — 클라이언트의 `Bullet` 이 스윕 레이캐스트를 쓰는 이유와 같고,
+        /// 그쪽은 그것을 10만 m/s 로 검증했다.
+        ///
+        /// 플레이어 판정은 아직 없다(IG-014b). 지오메트리에 맞으면 사라지는 것까지가 여기다.
+        private void StepProjectiles()
+        {
+            var step = MatchConstants.BulletSpeed * SimConstants.TickDelta;
+
+            for (var index = 0; index < _projectiles.Length; index++)
+            {
+                if (!_projectiles[index].Active)
+                {
+                    continue;
+                }
+
+                ref var projectile = ref _projectiles[index];
+
+                if (_map.Collision.Raycast(projectile.Position, projectile.Direction, step, out var hit))
+                {
+                    _logger.LogDebug(
+                        "룸 {RoomId}: 플레이어 {OwnerId} 의 총알이 지오메트리에 맞았다. 거리 {Distance}.",
+                        RoomId,
+                        projectile.OwnerId,
+                        hit.Distance);
+
+                    projectile.Active = false;
+                    continue;
+                }
+
+                projectile.Position += projectile.Direction * step;
+                projectile.TicksLived++;
+
+                if (projectile.TicksLived >= Match.BulletLifetimeTicks)
+                {
+                    // 콜리전 틈으로 빠져나간 총알을 영원히 시뮬레이션하지 않는다.
+                    projectile.Active = false;
+                }
+            }
+        }
+
         /// 탈출을 판정한다. 기획서 §3 — 열린 문간에 `EscapeHoldTime` 동안 머물면 빠져나간다.
         ///
         /// **문을 만지는 것이 아니라 서 있는 것이다.** 유지 시간이 목표의 마지막 한 걸음을
@@ -1075,6 +1220,13 @@ namespace NV.Realtime.Simulation
             _placementSeed = NextPlacementSeed();
             _outcome = 0;
 
+            // 지난 매치에서 날아가던 총알을 지운다. 남겨 두면 새 매치의 첫 틱에 아무도
+            // 쏘지 않은 총알이 벽에 맞는다.
+            for (var index = 0; index < _projectiles.Length; index++)
+            {
+                _projectiles[index] = default;
+            }
+
             // 매치는 역할 공개부터 시작한다. 이 시점부터 시계는 서버의 것이다.
             _match.Begin();
             _matchStateDirty = true;
@@ -1119,6 +1271,10 @@ namespace NV.Realtime.Simulation
                 // 지난 매치에 빠져나간 사람이 이번 매치를 탈출한 상태로 시작하지 않게 한다.
                 player.Escaped = false;
                 player.EscapeHoldTicks = 0;
+
+                // 탄창은 역할과 무관하게 채운다. 역할은 발사 판정에서 본다 — 여기서 Seeker 만
+                // 채우면 매치 중 역할이 바뀌는 경로가 생길 때 빈 탄창을 든 Seeker 가 나온다.
+                player.Ammo = MatchConstants.SeekerMagazine;
             }
 
             Volatile.Write(ref _phase, (int)RoomPhase.Playing);
