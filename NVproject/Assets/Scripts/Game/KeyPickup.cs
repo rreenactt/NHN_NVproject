@@ -74,6 +74,15 @@ namespace NV.Game
             MatchManager match = MatchManager.Instance;
             if (match == null || match.Phase != MatchPhase.Playing) return;
 
+            // Networked, the server decides who picked this up: it polls the same distance against
+            // the authoritative positions and the key disappears from the objective bulletin, which
+            // is what removes this object. Deciding it here as well is the cheatable seam — a client
+            // that says "I took it" is a client that took every key in the level.
+            //
+            // The offline path keeps the poll. There is no server to ask, and the practice level is
+            // where the Seeker's half of the ruleset gets exercised.
+            if (match.ServerPlacesObjectives) return;
+
             float radius = match.Config.keyPickupRadius;
             var agents = match.Agents;
             for (int i = 0; i < agents.Count; i++)
@@ -83,8 +92,9 @@ namespace NV.Game
 
                 Vector3 delta = agent.FeetPosition - transform.position;
                 // Generous horizontally, tight vertically — the floor above must not vacuum up
-                // keys lying on the floor below.
-                if (Mathf.Abs(delta.y) > 1.6f) continue;
+                // keys lying on the floor below. The number is shared with the server's copy of
+                // this test, so the offline poll and the authoritative one cannot drift apart.
+                if (Mathf.Abs(delta.y) > match.Config.keyPickupHeight) continue;
                 delta.y = 0f;
                 if (delta.sqrMagnitude > radius * radius) continue;
 

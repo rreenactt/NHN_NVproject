@@ -46,6 +46,13 @@ namespace NV.Realtime.Simulation
         /// 스냅샷을 인코딩할 때 합쳐진다(`StateProjection.ToEntityState` 3인자 오버로드).
         public EntityFlags MatchFlags { get; set; }
 
+        /// 이 플레이어가 들고 있는 열쇠 수. 서버가 습득 판정으로 올린다.
+        ///
+        /// `Objectives.Keys` 에서 빠진 열쇠는 반드시 누군가의 이 값으로 들어간다 —
+        /// 둘의 합이 `MatchConstants.KeysPlaced` 에서 삽입된 수를 뺀 값이어야 한다.
+        /// 죽으면 떨어뜨려 다시 맵으로 돌아간다(IG-014).
+        public int CarriedKeys { get; set; }
+
         public uint LastProcessedInputTick { get; private set; }
 
         public bool HasProcessedInput { get; private set; }

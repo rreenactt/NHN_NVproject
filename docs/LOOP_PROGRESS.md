@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 15)
-현재 이터레이션: 15
-기준 커밋: `931d712`
+최종 갱신: 2026-08-04 (이터레이션 17)
+현재 이터레이션: 17
+기준 커밋: `e3b2d69`
 
 ## 이 루프가 실제로 하는 일
 
@@ -106,14 +106,19 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 주기가 다르다(2Hz 가 아니라 5초). 배치는 매치 중 거의 바뀌지 않으므로 2Hz 로 보내면 8인 룸에서
 2.8KB/s 가 더 붙고 그만큼의 정보가 없다. **바뀐 틱에는 즉시 보낸다.**
 
-아직 0 으로 나가는 필드: 장치 `State`(소진·파괴·쿨다운 → IG-013·IG-015), 문 개방 여부(→ IG-012).
+아직 0 으로 나가는 필드: 장치 `State`(소진·파괴·쿨다운 → IG-013·IG-015), 문 개방 여부(→ IG-012b).
+
+**열쇠 목록은 IG-012a 부터 줄어든다.** 주워진 열쇠는 그 틱에 목록에서 빠지고 전문이 즉시 나가므로,
+클라이언트는 개수 변화를 배치 갱신으로 읽어 목표물을 다시 세운다(`MatchSync._appliedObjectiveKeys`).
 
 `MatchState` 는 IG-008 에서 들어왔다. **`RoomState` 와 성격은 같고(전문, 2Hz + 변경 즉시, 멱등)
 본문이 수신자마다 다르다** — Seeker 사본에서는 `keysInserted` 와 모든 `carriedKeys` 가 0 이다.
 필터는 `MessageCodec.WriteMatchState` 안에 있어 호출부가 우회할 수 없다.
 
-아직 서버가 세지 않아 0 으로 나가는 필드: `keysInserted`, `escapes`, `flags`, `hits`,
-`carriedKeys`(→ IG-012·IG-014), `outcome`(→ IG-007). **자리를 잡아 두었으므로 값이 채워질 때
+`carriedKeys` 는 **IG-012a 부터 실제 값이 나간다.** 서버가 습득을 판정하고 그 수를 센다.
+
+아직 서버가 세지 않아 0 으로 나가는 필드: `keysInserted`(→ IG-012b), `escapes`(→ IG-012c),
+`flags`·`hits`(→ IG-014), `outcome`(→ IG-007). **자리를 잡아 두었으므로 값이 채워질 때
 와이어 포맷은 바뀌지 않는다.**
 
 `RoomState` 는 **알림이 아니라 전문**이다 — 2Hz + 변경 즉시, 멱등, 영구 반복. 한 번짜리 알림은
@@ -163,7 +168,9 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-011c1 | 배치 코드를 `Shared` 로 이동 (ADR 0002) | **DONE** | P2 | IG-011b | (기반) |
 | IG-011c2 | 클라이언트 목표물 수신·적용 + 클라이언트 배치 제거 | **DONE** | P2 | IG-011c1 | R-6.3, R-7.1 |
 | IG-011c3 | `PlacementSeed` 와이어 제거 | **DONE** | P2 | IG-011c2 | **R-2.3 ✅** |
-| IG-012 | 열쇠 습득·삽입·문 개방·탈출 판정 | TODO | P2 | IG-011 | R-6.1, R-6.2, R-6.5, R-6.7 |
+| IG-012a | 열쇠 습득 서버 판정 | **DONE** | P2 | IG-011c3 | **R-6.1 ✅** |
+| IG-012b | 열쇠 삽입 + 문 개방 | TODO | P2 | IG-012a | R-6.2, R-6.5 |
+| IG-012c | 탈출 판정 | TODO | P2 | IG-012b | R-6.7 |
 | IG-013 | `Interact` 입력 + 장치 사용 판정 | **BLOCKED** | P2 | IG-011 | R-7.2~R-7.7, R-4.3 |
 | IG-014 | 서버 발사체 + 피격 규칙 + 탄약 | TODO | P2 | IG-009 | R-3.1~R-3.6, R-2.1 |
 | IG-015 | 장치 파괴 (4발) | TODO | P3 | IG-013, IG-014 | R-7.8 |
@@ -697,7 +704,8 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
   | 뺀 것 | 이유 |
   |---|---|
-  | `keysInserted`, `escapes` | 서버가 아직 세지 않아 **0 을 보낸다.** 적용하면 클라이언트가 올바르게 센 값(예: 7)을 0 으로 덮어써 HUD 가 되돌아간다. 증상은 "목표가 스스로 초기화된다" 로 보인다 → IG-012 |
+  | `keysInserted`, `escapes` | 서버가 아직 세지 않아 **0 을 보낸다.** 적용하면 클라이언트가 올바르게 센 값(예: 7)을 0 으로 덮어써 HUD 가 되돌아간다. 증상은 "목표가 스스로 초기화된다" 로 보인다 → IG-012b·IG-012c |
+  | ~~`carriedKeys`~~ | **IG-012a 에서 적용하기 시작했다.** 서버가 습득을 판정하므로 이제 0 이 아니고, 클라이언트의 폴링은 같은 태스크에서 멈췄다 — 덮어쓸 "올바르게 센 값" 이 더 이상 없다 |
   | `outcome` | 같은 이유 + 결과 코드는 IG-007(OQ-2·OQ-6) 이 정한다 |
   | `MatchPhase.Ended` 적용 | 매치를 끝내는 것은 **결과를 발표하는 일**이고 그 경로는 이미 있다(`AcceptOutcome` ← 룸 전문). 단계만 옮기면 결과 없는 결과 화면이 뜬다 |
   | 역할(`MatchRole`) 적용 | 이미 `RoomState.SeekerPlayerId` 경로로 동작한다. 두 경로가 갈리면 원인을 찾기 어렵다 |
@@ -1049,20 +1057,66 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
   넘칠 자리다. 주기는 OQ-7(2Hz vs 5초+변경즉시) 확인 후 결정하되, 기본값 "변경 즉시 + 5초" 로
   진행한다(AS-4).
 
-### IG-012 — 열쇠 습득·삽입·문 개방·탈출 판정
+### IG-012 — 열쇠 습득·삽입·문 개방·탈출 판정 (a/b/c 로 쪼갬)
+- 상태: **분할됨** — IG-012a DONE, IG-012b·IG-012c TODO
+- 기획서 근거: §3, §6
+- 네 판정이 한 태스크에 들어가면 §6.1 의 8파일을 넘는다. 습득만으로 이미 7파일이었다.
+
+### IG-012a — 열쇠 습득 서버 판정
+- 상태: **DONE** (이터레이션 16·17)
+- 기획서 근거: §3 — 열쇠 10개가 Runner 의 목표다
+- 계획(실행됨): 매 틱 거리 폴링을 서버로 옮긴다. 수평 `KeyPickupRadius`, 수직은 새로 올린
+  `KeyPickupHeight`. 습득한 열쇠는 `Objectives.RemoveKeyAt` 로 빠지고 두 전문이 즉시 갱신된다
+  (목표물 — 맵에서 사라졌다, 매치 — 소지 수가 늘었다). 클라이언트는 `ServerPlacesObjectives`
+  면 폴링을 멈추고 전문의 소지 수를 받는다.
+- **범위 조정: `ButtonFlags.Interact` 를 넣지 않았다.** 기획서 §3 은 습득 방식을 정하지 않고,
+  클라이언트가 쓰던 방식은 걸어가면 줍는 거리 폴링이었다(`KeyPickup.Update`). 상호작용 키는
+  삽입(IG-012b)에서 필요하다 — 그쪽은 되돌릴 수 없는 행동이므로 명시적 입력을 받아야 한다.
+- 변경 파일(8): `Shared/Simulation/MatchConstants.cs`(`KeyPickupHeight` 1.6m 추가),
+  `Modules/Realtime/Simulation/PlayerEntity.cs`(`CarriedKeys`),
+  `Modules/Realtime/Simulation/Room.cs`(`PickUpKeys`·`IsWithinPickupRange`, 전문에 소지 수,
+  매치 시작 시 0 으로), `Game/KeyPickup.cs`(서버 권위면 폴링 중단 + 하드코딩 1.6f 제거),
+  `Game/GameConfig.cs`(`keyPickupHeight`), `Game/PlayerAgent.cs`(`SetCarriedKeys`),
+  `Game/MatchManager.cs`(`AcceptCarriedKeys`), `Net/Session/MatchSync.cs`(`ApplyCarriedKeys`)
+  + 신규 `tests/Modules.Tests/Realtime/KeyPickupTests.cs`(9개)
+- **오프라인 경로의 하드코딩된 1.6f 도 함께 없앴다.** 서버에 상수를 올려 두고 클라이언트가 계속
+  literal 을 쓰면 "한 곳에 있다" 가 거짓이 된다 — D-7 의 소문자 프로퍼티(`keyPickupHeight`)로
+  잇는다.
+- 검증:
+  - `dotnet test --filter "FullyQualifiedName~KeyPickupTests"` → **9/9 통과**
+  - `dotnet test` → **345 통과** (Modules 341 + Architecture 4), 실패 0. 이전 336 에서 +9
+  - `dotnet build` → **경고 0, 오류 0**
+  - `dotnet build Assembly-CSharp.csproj` → **오류 0** (경고 2개는 기존 `System.Net.Http` 심 충돌)
+  - **§7.4 스모크는 실행하지 못했다.** 두 화면에서 열쇠가 동시에 사라지고 소지 수가 한쪽만
+    올라가는 것은 사람이 봐야 한다 — 아래 "사람이 해야 하는 검증" 에 적었다.
+- 판정 순서: `Advance` 안에서 **이동 뒤, 매치 시계 앞**. 앞에 두면 이번 틱에 열쇠 위로 걸어간
+  플레이어가 다음 틱까지 줍지 못한다.
+- 열쇠 목록을 **뒤에서부터** 훑는다. `RemoveKeyAt` 이 리스트를 당기므로 앞에서부터 지우면 지운
+  자리의 다음 열쇠를 한 틱 건너뛴다 — 증상이 한 틱 지연뿐이라 찾기 어려운 종류다.
+- 소지 수는 **덮어쓴다**(`SetCarriedKeys`), 더하지 않는다. 전문은 누적이 아니라 현재 값이고,
+  2Hz 로 같은 값이 다시 오므로 더하면 초당 두 개씩 늘어난다. `AddKeys` 는 오프라인 경로에 남는다.
+- 알림("KEY (n carried)")은 `MatchManager.AcceptCarriedKeys` 가 **증가할 때만** 올린다. 전문마다
+  올리면 매치 내내 0.5초에 한 번 뜬다.
+- 비고: `CarryLimit` 은 0(무제한)이므로 상한 검사는 실질적으로 통과만 한다. 그래도 남겨 두었다 —
+  값이 0 이 아니게 되는 날 판정이 아니라 설정만 바뀌어야 한다.
+
+### IG-012b — 열쇠 삽입 + 문 개방
 - 상태: TODO
 - 기획서 근거: §3, §6
-- 계획: 열쇠 습득은 매 틱 거리 폴링 — 수평 `keyPickupRadius`, **수직 1.6m** (`KeyPickup.Update`
-  의 비대칭 허용치를 그대로 옮긴다. 위층이 아래층 열쇠를 빨아들이지 않게 하는 값이다).
-  삽입은 `Interact` + 반경 + `keyInsertInterval` + 소지 확인 — 한 곳에서 직렬화되므로 "두 Runner
-  가 동시에 10번째 열쇠를 넣는" 경우가 자동 해결된다. 탈출은 개방된 문간에서 `escapeHoldTime`
-  유지, 층 차이 2m 초과면 리셋. 클라이언트의 `KeyPickup.Update` 거리 폴링과
-  `MatchManager.TryPickUpKey` 호출을 삭제하고 회전·상하 진동만 남긴다.
-- 변경 예정 파일: `Modules/Realtime/Simulation/MatchRules.cs`, `Match.cs`,
-  `Game/KeyPickup.cs`, `Game/MatchManager.cs`, `tests/Modules.Tests/Realtime/MatchTests.cs`
-- 검증: `dotnet test` + 스모크 (두 클라이언트가 같은 삽입 수를 본다)
-- 비고: `Interact` 비트 자체는 IG-013 에 있으나 그 태스크가 BLOCKED 이므로, 이 태스크에서
-  `ButtonFlags.Interact` 만 먼저 추가한다(장치 사용 판정은 넣지 않는다).
+- 계획: `ButtonFlags.Interact` 를 입력에 추가하고(클라이언트 송신 포함), 문 반경
+  `DoorUseRadius` + `KeyInsertInterval` + 소지 확인으로 삽입을 판정한다. 한 곳에서 직렬화되므로
+  "두 Runner 가 동시에 10번째 열쇠를 넣는" 경우가 자동 해결된다. `MatchState.keysInserted` 와
+  `ObjectiveState` 의 문 개방 여부가 이 태스크에서 실제 값을 갖는다.
+- 주의: `keysInserted` 는 **Seeker 사본에서 0 이어야 한다**(코덱이 이미 그렇게 쓴다). 클라이언트가
+  이 값을 적용하기 시작하면 `MatchSync.ApplyMatchState` 의 "적용하지 않는다" 표(§메시지 카탈로그)
+  도 함께 갱신해야 한다.
+
+### IG-012c — 탈출 판정
+- 상태: TODO
+- 기획서 근거: §3, §6
+- 계획: 개방된 문간에서 `EscapeHoldTime` 유지 → `EntityFlags.Escaped` + `MatchState.escapes`.
+  층 판정 허용치(`MatchManager.TickEscapes` 가 2m 로 하드코딩)를 `MatchConstants` 로 올린다 —
+  `KeyPickupHeight` 와 같은 이유이고 같은 방식이다.
 
 ### IG-013 — `Interact` 입력 + 장치 사용 판정
 - 상태: **BLOCKED** (OQ-1)
@@ -1201,28 +1255,77 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ---
 
+## 사람이 해야 하는 검증 (§7.4 스모크, 누적)
+
+**여기 있는 항목은 하나도 "통과" 로 기록되지 않았다.** MCP 로는 두 번째 클라이언트를 만들 수 없고
+입력도 주입할 수 없다(`NVproject/CLAUDE.md`). 절차는 매번 같다:
+
+1. **Tools ▸ NV ▸ Build and Launch 2 Clients** — 두 클라이언트가 `MainLobby` 로 열린다
+2. 한쪽에서 **방 만들기** → 초대 코드를 다른 쪽에 넣는다
+3. 방장이 **게임 시작**
+
+그때 확인할 것 (태스크별로 쌓인 것):
+
+| 태스크 | 확인할 것 |
+|---|---|
+| IG-001 | 접속 로그에 맵 해시 `일치` 가 뜬다 (불일치 경고가 없다) |
+| IG-006 | 역할 공개가 **서버 틱에** 끝난다 — 프레임레이트가 다른 두 기기에서 같은 순간에 |
+| IG-010 | 두 화면의 단계 전이 시점과 남은 시간이 일치한다 |
+| IG-011c2 | 목표물(제단·열쇠·장치)이 두 화면에서 **같은 자리**에 있다. **Seeker 화면에는 문이 없다** |
+| IG-012a | 한쪽이 열쇠를 밟으면 **두 화면에서 동시에 사라지고**, 소지 수는 밟은 쪽만 오른다. Seeker 화면의 소지 수는 계속 0 이다 |
+
+---
+
 ## 다음 이터레이션
 
-**IG-012 — 열쇠 습득·삽입·문 개방·탈출 판정** (P2).
+**IG-012b — 열쇠 삽입 + 문 개방** (P2).
 
-**IG-011 이 전부 끝났고 R-2.3 이 닫혔다.** 목표물은 서버가 배치하고 좌표가 역할별로 걸러져
-내려오며, 씨드는 와이어에 없다. 그런데 **아직 아무도 열쇠를 줍지 못한다** — 습득·삽입·탈출
-판정이 여전히 클라이언트에 있고(`KeyPickup.Update` 거리 폴링, `MatchManager.TryInsertKey`,
-`TickEscapes`) 서버는 그것을 모른다.
+IG-012a 로 열쇠가 서버에서 주워지고 그 수가 전문에 실린다. **그런데 아직 아무도 넣을 수 없다** —
+`MatchManager.TryInsertKey` 가 여전히 클라이언트에서 판정하고, 서버의 `keysInserted` 는 0 이다.
+그래서 지금 상태는 "주울 수는 있지만 이길 수는 없는" 중간 지점이고, IG-012b 가 그것을 잇는다.
 
-IG-012 가 그것을 옮기면 `MatchState` 전문의 `keysInserted`·`escapes` 가 실제 값을 갖고,
-IG-010 이 일부러 적용하지 않은 그 필드들을 클라이언트가 받게 된다.
+여기서 **`ButtonFlags.Interact` 가 필요해진다.** IG-012a 에서 넣지 않은 이유는 습득에 쓸 곳이
+없었기 때문이다(걸어가면 주워진다). 삽입은 되돌릴 수 없으므로 명시적 입력을 받아야 하고,
+클라이언트 송신(`NetworkBootstrap.Sample`)과 `InputValidator.Sanitize` 까지 함께 건드린다.
 
-**IG-012 도 미리 쪼갠다** — 습득·삽입·개방·탈출은 네 판정이고 `Interact` 입력 비트도 필요하다:
-- **IG-012a** `ButtonFlags.Interact` 추가 + 열쇠 습득(거리 폴링) 서버 판정
-- **IG-012b** 삽입·문 개방 + `MatchState`·`ObjectiveState` 의 해당 필드 채우기
-- **IG-012c** 탈출 판정 + 클라이언트 판정 경로 제거
+파일 수가 8을 넘을 것 같으면 **입력 비트 추가**와 **삽입 판정**을 다시 쪼갠다.
 
 BLOCKED 6건(IG-007, IG-013, IG-016, IG-017, IG-020, IG-021)은 여전히 OQ-1·2·3·4·5·6 을 기다린다.
 **IG-012c 가 끝나면 남은 진행 가능 태스크가 거의 소진되고, OQ 의 답이 없으면 루프가 §10 의
 "남은 태스크가 전부 BLOCKED" 조건에 가까워진다.**
 
 ---
+
+### 이전 판단 기록 (이터레이션 17)
+
+**클라이언트 폴링을 끄는 것만으로는 끝나지 않았다.** `KeyPickup.Update` 에 `return` 하나를
+넣으면 서버가 판정하는 상태가 되지만, 그 순간 HUD 의 소지 수가 0 에 멈춘다 — 그 값을 세던 것이
+방금 끈 폴링이었기 때문이다. 그래서 `MatchState` 의 `carriedKeys` 를 실제로 적용하는 경로
+(`MatchSync.ApplyCarriedKeys` → `MatchManager.AcceptCarriedKeys` → `PlayerAgent.SetCarriedKeys`)
+까지 같은 태스크에 넣었다. **판정을 옮기는 태스크는 그 판정의 결과를 표시하는 경로까지가 범위다.**
+
+`SetCarriedKeys` 를 `AddKeys` 와 따로 둔 것이 그 경로의 핵심이다. 전문은 2Hz 로 같은 값을 다시
+보내는 **현재 상태**이므로, 더하면 초당 두 개씩 늘어난다. 알림도 같은 문제를 갖는다 —
+증가할 때만 올린다.
+
+**`KeyPickupHeight` 를 IG-005 에서 일부러 미뤄 둔 판단이 맞았다.** 그때 값만 옮기면 같은 수가
+`MatchConstants` 와 `KeyPickup.Update` 두 곳에 있는 상태였다. 판정이 올라오는 이 태스크에서
+올리니 옮긴 쪽이 유일한 출처가 됐다.
+
+열쇠 목록을 뒤에서부터 훑는 이유를 주석에 남겼다. 앞에서부터 지우면 `RemoveKeyAt` 이 리스트를
+당겨 다음 열쇠를 한 틱 건너뛴다 — **증상이 "한 틱 늦게 주워진다" 뿐이라 아무도 신고하지 않는다.**
+
+테스트는 열쇠를 **손으로 놓는다**(`Objectives.Reset` + `AddKey`). 배치가 고른 자리까지 걸어가게
+하면 실패했을 때 "습득이 안 된다" 와 "거기까지 못 갔다" 를 구별할 수 없다.
+
+`Assert.True(false, msg)` 는 xUnit 분석기(xUnit2020)가 **빌드 에러로** 막는다. `Assert.Fail` 이
+있는지 확신이 없어 피하려 했는데, 분석기가 있다는 것을 알려 주었다.
+
+### 이전 판단 기록 (이터레이션 16)
+
+이터레이션 16 은 IG-012a 의 조사와 범위 조정으로 끝났다(코드 변경 없음). 조사 결과 **열쇠 습득에
+`Interact` 가 필요 없다**는 것이 확인되어 그 비트를 IG-012b 로 넘겼다. 사용자의 루프 주기 변경
+요청(5분 → 30분 → 10분)도 이 구간에 있었다.
 
 ### 이전 판단 기록 (이터레이션 15)
 

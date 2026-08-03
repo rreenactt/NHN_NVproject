@@ -252,6 +252,10 @@ namespace NV.Realtime.Simulation
                     StepPlayer(player);
                 }
 
+                // 목표물 판정은 이동 **뒤**다. 앞에 두면 이번 틱에 열쇠 위로 걸어간
+                // 플레이어가 다음 틱까지 줍지 못한다.
+                PickUpKeys();
+
                 // 매치 시계는 이동을 처리한 뒤에 올린다. 먼저 올리면 시간이 0 이 된 틱의
                 // 입력이 버려지고, 그 한 틱이 마지막 탈출을 판정하는 틱일 수 있다.
                 var phaseBefore = _match.Phase;
@@ -406,14 +410,18 @@ namespace NV.Realtime.Simulation
             var count = 0;
             foreach (var player in _players.Values)
             {
-                // 열쇠·피격·상태 플래그는 아직 서버가 세지 않는다. 자리를 잡아 두었으므로
-                // 그 판정이 올 때(IG-012·IG-014) 와이어 포맷은 바뀌지 않는다.
+                // 피격 수와 상태 플래그는 아직 서버가 세지 않는다. 자리를 잡아 두었으므로
+                // 그 판정이 올 때(IG-014) 와이어 포맷은 바뀌지 않는다.
+                //
+                // 소지 열쇠는 여기서 바이트로 좁힌다. 상한을 두는 이유는 형식이지 규칙이
+                // 아니다 — 무제한 소지(`CarryLimit` 0)에서도 맵의 열쇠 수가 10 이므로
+                // 넘을 수 없고, 넘었다면 습득 판정이 같은 열쇠를 두 번 센 것이다.
                 _participantBuffer[count] = new MatchParticipant(
                     player.PlayerId,
                     RoleOf(player.PlayerId),
                     0,
                     0,
-                    0);
+                    (byte)Math.Min(player.CarriedKeys, byte.MaxValue));
 
                 count++;
             }
@@ -628,6 +636,91 @@ namespace NV.Realtime.Simulation
             return flags;
         }
 
+        /// 열쇠 습득을 판정한다. 기획서 §3 — Runner 가 열쇠에 다가가면 줍는다.
+        ///
+        /// **상호작용 키가 없는 것이 의도다.** 기획서는 습득 방식을 정하지 않고, 클라이언트가
+        /// 쓰던 방식이 거리 폴링이었다(`KeyPickup.Update`). 열쇠를 지나쳤는데 줍지 못하는
+        /// 편보다 걸어서 줍는 편이 미로에서 덜 답답하다. 삽입은 다르다 — 그쪽은 되돌릴 수
+        /// 없으므로 명시적인 입력을 받는다(IG-012b).
+        ///
+        /// 뒤에서부터 훑는다. `RemoveKeyAt` 이 리스트를 당기므로 앞에서부터 지우면 지운
+        /// 자리의 다음 열쇠를 한 틱 건너뛴다 — 한 틱 뒤에 주워지므로 증상이 거의 없고,
+        /// 그래서 찾기 어려운 종류의 버그다.
+        ///
+        /// 한 틱에 여러 개를 줍는 것을 막지 않는다. 열쇠 간격(`KeySpacing` 4m)이 습득
+        /// 반경(1.4m)보다 넓으므로 겹쳐 놓인 경우에만 일어나고, 그때는 둘 다 주워지는
+        /// 것이 옳다.
+        private void PickUpKeys()
+        {
+            if (!_objectives.Placed || _objectives.Keys.Count == 0)
+            {
+                return;
+            }
+
+            if (_match.Phase != MatchPhase.Playing)
+            {
+                return;
+            }
+
+            for (var index = _objectives.Keys.Count - 1; index >= 0; index--)
+            {
+                var key = _objectives.Keys[index];
+
+                foreach (var player in _players.Values)
+                {
+                    if (RoleOf(player.PlayerId) != MatchRole.Runner)
+                    {
+                        continue;
+                    }
+
+                    if (!IsWithinPickupRange(player.State.Position, key))
+                    {
+                        continue;
+                    }
+
+                    if (MatchConstants.CarryLimit > 0 && player.CarriedKeys >= MatchConstants.CarryLimit)
+                    {
+                        continue;
+                    }
+
+                    player.CarriedKeys++;
+                    _objectives.RemoveKeyAt(index);
+
+                    // 두 전문이 모두 바뀐다 — 맵에서 열쇠가 사라졌고(목표물), 그 사람이
+                    // 든 수가 늘었다(매치). 하나만 즉시 보내면 다른 쪽이 최대 5초 늦는다.
+                    _objectiveStateDirty = true;
+                    _matchStateDirty = true;
+
+                    _logger.LogDebug(
+                        "룸 {RoomId} 플레이어 {PlayerId}: 열쇠를 주웠다. 소지 {Carried}, 남은 {Remaining}.",
+                        RoomId,
+                        player.PlayerId,
+                        player.CarriedKeys,
+                        _objectives.Keys.Count);
+
+                    // 이 열쇠는 사라졌다. 같은 자리의 다른 사람을 볼 필요가 없다.
+                    break;
+                }
+            }
+        }
+
+        /// 발밑끼리 잰다. 수직은 별도 허용치이고 수평보다 크다 —
+        /// 이유는 `MatchConstants.KeyPickupHeight` 에 있다.
+        private static bool IsWithinPickupRange(Vector3 feet, Vector3 key)
+        {
+            var dy = feet.Y - key.Y;
+
+            if (MathF.Abs(dy) > MatchConstants.KeyPickupHeight)
+            {
+                return false;
+            }
+
+            var dx = feet.X - key.X;
+            var dz = feet.Z - key.Z;
+
+            return (dx * dx) + (dz * dz) <= MatchConstants.KeyPickupRadius * MatchConstants.KeyPickupRadius;
+        }
+
         private void Simulate(PlayerEntity player, in InputFrame frame)
         {
             player.State = PlayerMovement.Step(player.State, frame, _map.Collision);
@@ -770,9 +863,8 @@ namespace NV.Realtime.Simulation
             _match.Begin();
             _matchStateDirty = true;
 
-            // 목표물을 서버가 배치한다. 씨드는 같은 값을 클라이언트에도 내려보내고 있어
-            // (아직) 양쪽이 같은 배치를 계산하지만, 그 좌표를 역할별로 걸러 내려보내면
-            // 씨드를 와이어에서 뺄 수 있다 — 그것이 IG-011b 이고 §2.1 의 문 좌표 누출을 닫는다.
+            // 목표물을 서버가 배치한다. 씨드는 서버 안에만 있고 와이어에 없다 — 좌표를
+            // 역할별로 걸러 내려보내므로(IG-011b) Seeker 는 문을 받지도, 계산하지도 못한다.
             var placement = new DeterministicSequence(_placementSeed);
             ObjectivePlacement.PlaceObjectives(_objectives, _map.Grid, ref placement);
 
@@ -798,6 +890,11 @@ namespace NV.Realtime.Simulation
             foreach (var player in _players.Values)
             {
                 player.RespawnAt(_map.SpawnPosition(player.PlayerId), _map.SpawnYaw(player.PlayerId));
+
+                // 지난 매치의 소지 열쇠를 지운다. `RespawnAt` 에 넣지 않는 것은 그 함수가
+                // 피격 순간이동에도 쓰일 예정이기 때문이다(IG-014) — 맞았다고 들고 있던
+                // 열쇠가 사라지면 그것은 배치가 아니라 규칙이다.
+                player.CarriedKeys = 0;
             }
 
             Volatile.Write(ref _phase, (int)RoomPhase.Playing);

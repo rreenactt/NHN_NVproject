@@ -46,6 +46,8 @@ namespace NV.Game
 
         public float keyPickupRadius => MatchConstants.KeyPickupRadius;
 
+        public float keyPickupHeight => MatchConstants.KeyPickupHeight;
+
         public float keyInsertInterval => MatchConstants.KeyInsertInterval;
 
         public float doorUseRadius => MatchConstants.DoorUseRadius;

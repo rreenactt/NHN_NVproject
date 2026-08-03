@@ -50,11 +50,14 @@ namespace NV.Shared.Simulation
         public const int CarryLimit = 0;
 
         /// 열쇠를 집는 수평 거리(m).
-        ///
-        /// 수직 허용치는 여기 없다. 클라이언트가 1.6m 로 하드코딩하고 있고
-        /// (`KeyPickup.Update`), 그 판정이 서버로 옮겨갈 때(IG-012) 함께 올라온다.
-        /// 지금 값만 옮겨 적으면 같은 수가 두 곳에 있는 상태가 된다.
         public const float KeyPickupRadius = 1.4f;
+
+        /// 열쇠를 집는 수직 허용치(m). **수평보다 크고, 그 비대칭이 의도다.**
+        ///
+        /// 층 간격이 3.2m 이므로 이 값이 그보다 작아야 위층이 아래층 열쇠를 빨아들이지
+        /// 않는다. 반대로 수평보다는 커야 계단에서 반 층 높이에 있을 때 집을 수 있다.
+        /// 클라이언트가 하드코딩하던 값을 그대로 옮겼다(`KeyPickup.Update`).
+        public const float KeyPickupHeight = 1.6f;
 
         /// 열쇠 두 개를 연달아 넣는 사이의 간격(초).
         ///

@@ -533,6 +533,30 @@ namespace NV.Game
         }
 
         /// <summary>
+        /// The server's count of what this agent is carrying. Networked, `TryPickUpKey` never runs —
+        /// `KeyPickup` stops polling and the server does the same distance test against the
+        /// authoritative positions, so the count arrives instead of being reached.
+        ///
+        /// The notification is raised here rather than by the caller because it is the same feedback
+        /// `TryPickUpKey` gives, and the local player should not be able to tell which side counted.
+        /// It fires on an *increase* only: the match bulletin repeats at 2 Hz, so reacting to every
+        /// message would print "KEY" twice a second for the rest of the match.
+        ///
+        /// A Seeker's copy of the bulletin carries zeroes for everyone, by design. Applying them is
+        /// correct — a Seeker who knows who is holding nine keys knows who to hunt.
+        /// </summary>
+        public void AcceptCarriedKeys(PlayerAgent agent, int count)
+        {
+            if (agent == null) return;
+
+            int before = agent.CarriedKeys;
+            agent.SetCarriedKeys(count);
+
+            if (agent.CarriedKeys > before && agent.isLocalPlayer)
+                Notify($"KEY  ({agent.CarriedKeys} carried)");
+        }
+
+        /// <summary>
         /// One key into the door. Inserts are serialised through this method, which is what makes
         /// the "two Runners insert the tenth key at the same instant" case a non-event: whichever
         /// call arrives first crosses the threshold, and the second finds the door already open.

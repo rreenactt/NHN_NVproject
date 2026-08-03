@@ -134,6 +134,13 @@ namespace NV.Game
 
         internal void AddKeys(int count) => CarriedKeys = Mathf.Max(0, CarriedKeys + count);
 
+        /// <summary>
+        /// Overwrite the carried count with the server's. Networked, the count is not something this
+        /// client arrives at — it is told, so this sets rather than adds. `AddKeys` stays for the
+        /// offline path, where nobody else is counting.
+        /// </summary>
+        internal void SetCarriedKeys(int count) => CarriedKeys = Mathf.Max(0, count);
+
         internal void MarkEscaped()
         {
             Escaped = true;

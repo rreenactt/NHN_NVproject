@@ -137,6 +137,32 @@ namespace NV.Client.Net.Session
             MatchManager.Instance.AcceptMatchState(
                 state.Phase,
                 MatchStateHeader.FromTenths(state.TimeRemainingTenths));
+
+            ApplyCarriedKeys();
+        }
+
+        /// 누가 열쇠를 몇 개 들고 있는지 서버에서 받는다(IG-012a).
+        ///
+        /// 명단 전체를 훑는다. 로컬만 적용하면 남이 든 열쇠 수가 이 클라이언트에서 영원히
+        /// 0 이고, 그 값은 죽은 Runner 가 열쇠를 흘리는 판정(IG-014)이 서버로 오기 전까지
+        /// 화면에는 안 나와도 `EscapeDoor` 의 프롬프트가 읽는다.
+        ///
+        /// 몸이 아직 없는 참가자는 건너뛴다. 원격 몸은 첫 스냅샷이 와야 생기므로 전문이
+        /// 먼저 도착하는 것이 정상이고, 다음 전문이 0.5초 뒤에 같은 값을 다시 싣고 온다.
+        private void ApplyCarriedKeys()
+        {
+            var count = _client.ParticipantCount;
+
+            for (var index = 0; index < count; index++)
+            {
+                var participant = _client.MatchParticipantAt(index);
+                var agent = FindAgent(participant.PlayerId);
+
+                if (agent != null)
+                {
+                    MatchManager.Instance.AcceptCarriedKeys(agent, participant.CarriedKeys);
+                }
+            }
         }
 
         /// 세션·클라이언트·매치가 모두 준비됐는가.
