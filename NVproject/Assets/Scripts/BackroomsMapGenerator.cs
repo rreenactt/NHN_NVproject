@@ -110,7 +110,23 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
     public int UsedSeed { get; private set; }
 
     /// <inheritdoc />
-    public string MapName => "backrooms2f";
+    ///
+    /// This name is load-bearing in three places at once and they all have to agree:
+    /// it is the export filename (<c>MapData/backrooms.json</c>), the key the server
+    /// registers the map under (<c>Game:Maps</c>), and what
+    /// <c>SessionSceneRouter.SceneByMap</c> looks up to decide that this scene is the
+    /// one to open. Two of those already said "backrooms" while this said
+    /// "backrooms2f", so a room made through the lobby opened this scene, built this
+    /// terrain, and was judged against a stale export of a level that no longer
+    /// exists — a guaranteed map-hash mismatch on every connect, and the only symptom
+    /// was the mismatch warning itself.
+    ///
+    /// Renaming here rather than there is what costs least: the router table and the
+    /// server's default map entry are both already "backrooms".
+    ///
+    /// Changing this string changes the export's destination file. Re-run
+    /// **Tools ▸ NV ▸ Map ▸ Export Map Collision** after touching it.
+    public string MapName => "backrooms";
 
     /// <inheritdoc />
     public IReadOnlyList<Bounds> CollisionBoxes => _collisionBoxes;

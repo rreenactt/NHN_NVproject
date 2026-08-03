@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-03 (부트스트랩)
-현재 이터레이션: 0 (부트스트랩 — 프로덕션 코드 없음)
-기준 커밋: `1817839`
+최종 갱신: 2026-08-04 (이터레이션 1)
+현재 이터레이션: 1
+기준 커밋: `2f83246`
 
 ## 이 루프가 실제로 하는 일
 
@@ -30,6 +30,20 @@
 | 클라이언트 컴파일 검증 | `cd NVproject && dotnet build Assembly-CSharp.csproj` | ✅ **오류 0개**, 경고 2개 (MSB3277 `System.IO.Compression` 참조 통합 — 무해, 기존부터 있음) |
 | 로컬 서버 실행 | `cd NVserver && dotnet run --project Api` | 미실행 (스모크 테스트 태스크에서) |
 | EditMode 테스트 | **없음** | ❌ `com.unity.test-framework` 1.6.0 은 설치되어 있으나 `Assets/**` 에 **asmdef 가 0개**, 테스트 폴더도 없다. 인프라를 만들어야 한다 → IG-018 |
+| 맵 export (Unity MCP) | `Unity_RunCommand` 로 `NV.Client.EditorTools.MapCollisionExporter.Export()` 호출 | ✅ 동작 (이터레이션 1). 씬이 열려 있어야 하고 play 모드가 아니어야 한다 |
+| 맵 export (사람) | **Tools ▸ NV ▸ Map ▸ Export Map Collision** | 같음 |
+
+**MCP 함정 — `Unity_RunCommand` 의 커맨드 어셈블리는 `Shared`(`com.nv.shared`)를 참조하지 않는다.**
+`MapData` 를 이름으로 쓰든 `var` 로 받든 메서드 체인에 끼우든 전부
+`CS0012: The type 'MapData' is defined in an assembly that is not referenced` 로 컴파일 실패한다.
+그래서 MCP 커맨드에서 **맵 해시를 직접 계산할 수 없다**(`ComputeHash()` 의 수신자가 `MapData` 다).
+우회는 `Shared` 타입이 시그니처에 나오지 않는 API 만 쓰는 것 — `INetworkMapSource.MapName`(string),
+`CollisionBoxes`/`ComputeCollision()`(`IReadOnlyList<Bounds>`), `GetSpawns(List<(Vector3,float)>)` 는
+문제없다. 박스 수와 스폰 수로 간접 검증하고, 해시는 서버 기동 로그에서 읽는다.
+
+**MCP 함정 — exporter 의 `Debug.Log` 가 `Unity_GetConsoleLogs` 에 잡히지 않았다.** 박스 수·해시를
+그 로그로 확인하려던 경로가 빈 배열을 돌려주므로, **부작용은 파일시스템에서 확인한다**
+(`NVproject/CLAUDE.md` 가 이미 지시하는 규칙이며 이번에 실제로 필요했다).
 
 **주의 — 새 `.cs` 는 `Assembly-CSharp.csproj` 의 `Compile` 목록에 없다.** 추가 후 첫 빌드는
 자기 namespace 에서 `CS0234` 로 실패한다. `<Compile Include="…" />` 를 넣고 다시 돌린다
@@ -87,7 +101,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 
 | ID | 제목 | 상태 | 우선순위 | 의존 | 요구사항 ID |
 |---|---|---|---|---|---|
-| IG-001 | 맵 이름·등록·export 정합성 복구 | TODO | P0 | - | R-0.1, R-0.2 |
+| IG-001 | 맵 이름·등록·export 정합성 복구 | **DONE** | P0 | - | R-0.1, R-0.2 |
 | IG-002 | `MapData` 격자 스키마 + 해시 + `DeterministicSequence` | TODO | P0 | IG-001 | R-0.3 |
 | IG-003 | 클라이언트 격자 export (`MapExport`·`INetworkMapSource`) | TODO | P0 | IG-002 | R-0.3 |
 | IG-004 | 서버 `MapGrid` 질의 + 테스트 | TODO | P0 | IG-003 | R-0.3 |
@@ -106,6 +120,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-017 | 근접 보이스 시스템 | **BLOCKED** | P3 | - | R-8.1~R-8.3 |
 | IG-018 | Unity EditMode 테스트 인프라 (asmdef) | TODO | P2 | IG-010 | (검증 수단) |
 | IG-019 | 상수 정리·문서 갱신·죽은 경로 제거 | TODO | P4 | 전부 | (정리) |
+| IG-020 | 레거시 맵 파일·스크립트 정리 | **BLOCKED** | P4 | IG-001 | R-0.2 |
 
 **배포 단위 주의:** IG-008 이 `ProtocolInfo.Version` 을 3 으로 올린다. 그 이후 IG-014 까지는
 **서버와 클라이언트를 같은 커밋에 배포**해야 한다 — 구버전 클라이언트는 426 으로 전부 거절되고
@@ -116,7 +131,7 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 ## 태스크 상세
 
 ### IG-001 — 맵 이름·등록·export 정합성 복구
-- 상태: TODO
+- 상태: **DONE** (이터레이션 1, 2026-08-04)
 - 기획서 근거: (선행 차단 요소, R-0.1·R-0.2) — 기획서 항목은 아니지만 인게임 전체를 막는다
 - 문제: `BackroomsMapGenerator.cs:113` 의 `MapName` 이 `"backrooms2f"`, `SessionSceneRouter` 는
   `"backrooms"` → `SampleScene`, `appsettings.json` 에 `backrooms2f` 미등록,
@@ -130,11 +145,43 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
   3. 서버 기동 로그의 `맵 backrooms: … 박스 N개` 가 새 값인지 확인.
   4. **레거시 삭제는 이 태스크에서 하지 않는다** → OQ-5 (확인 대기). `BackroomsMap.cs`,
      `backrooms2f.json`, `arena.json`.
-- 변경 예정 파일: `NVproject/Assets/Scripts/BackroomsMapGenerator.cs`,
-  `NVserver/MapData/backrooms.json` (생성물)
-- 검증: `dotnet test --filter "FullyQualifiedName~ExportedMapTests"` + `dotnet build Assembly-CSharp.csproj`
-  + 두 클라이언트가 `SampleScene` 에서 맵 해시 `일치` 로그
-- 비고: 프로토콜 변경 없음. ADR 0001 이 허용하는 유일한 `SampleScene` 계열 변경이다.
+- 변경 파일 (2개):
+  - `NVproject/Assets/Scripts/BackroomsMapGenerator.cs` — `MapName` `"backrooms2f"` → `"backrooms"`,
+    이 이름이 세 곳(export 파일명 · 서버 등록 키 · 라우터 조회)에서 동시에 하중을 받는다는 설명을 주석으로
+  - `NVserver/MapData/backrooms.json` — export 재실행으로 갱신 (1376줄 삭제, 761줄 추가)
+- 검증 (전부 실행함):
+
+  | 확인 | 명령/수단 | 결과 |
+  |---|---|---|
+  | 씬 전제 | `Unity_RunCommand` 프로브 | `scene=SampleScene`, `isPlaying=False`, `levelComponent=BackroomsMapGenerator`, `MapName=backrooms2f` (변경 전) |
+  | export 실행 | `MapCollisionExporter.Export()` via MCP | 파일 141492B → **70864B** |
+  | export 내용 | PowerShell `ConvertFrom-Json` | `name=backrooms`, **박스 736개**, 스폰 8개, x ±52.50 (=35셀×3m), y −0.20..6.40 (=2층×3.2m) |
+  | 서버 로드 | `dotnet run --project Api` 기동 로그 | `맵 default: backrooms 해시 3B4B1D41 박스 736개 스폰 8개` |
+  | 서버 테스트 | `dotnet test` | ✅ **173개 통과**, 실패 0 (`ExportedMapTests` 가 새 736박스 지형에서 스폰 8개의 겹침·착지·전진통과를 검사) |
+  | 클라이언트 컴파일 | `dotnet build NVproject/Assembly-CSharp.csproj` | ✅ 오류 0개 (경고 2개는 기존 MSB3277) |
+  | export 경로 재현 | `src.ComputeCollision().Count` via MCP | **736**, 스폰 8, `MapName=backrooms` |
+  | **런타임 경로 일치** | Play 모드 진입 후 `src.CollisionBoxes.Count` | **736** — `Generate()` 와 `ComputeCollision()` 이 같은 박스를 낸다 |
+  | 씬 오염 없음 | `git status --short` | `SampleScene.unity` **변경 없음**. 변경은 2개 파일뿐 |
+
+- 결과: 체인이 닫혔다. `default`(클라이언트가 요청하는 map id, `CreateRoomPopup.cs:19`) →
+  `backrooms.json` → `WorldMap.Name = "backrooms"` → 라우터 `"backrooms"` → `SampleScene` →
+  `BackroomsMapGenerator.MapName = "backrooms"` → 해시 대조 대상이 같은 파일. 이전에는 마지막
+  링크가 `"backrooms2f"` 라 끊겨 있었다.
+- 비고:
+  - **런타임과 export 가 다른 경로를 쓴다는 점이 이 태스크의 실질적 위험이었다.** 접속 시
+    클라이언트는 `Generate()` 가 채운 `CollisionBoxes` 로 해시를 계산하고
+    (`NetworkBootstrap.cs:350`), export 는 지오메트리를 만들지 않는 `ComputeCollision()` 을
+    쓴다. 둘이 어긋나면 이름을 고쳐도 해시가 계속 불일치한다. `_collisionOnly` 플래그가 같은
+    `Prepare`/`SolveGrid`/`BuildGeometry` 를 돌며 지오메트리 생성만 건너뛰는 구조이고
+    (`BackroomsMapGenerator.cs:168-181`), **양쪽 다 736 으로 실측해 확인했다.**
+  - `backrooms2f.json` 은 735박스로 남아 있다 — 새 export 보다 1개 적은 것은 나중에 추가된
+    `Ceiling Lid` 가 그 export 에 없었기 때문이다. 이제 확실히 죽은 파일이다 → IG-020.
+  - `match-authority-plan.md` §3 의 "`backrooms2f.json` … 범위 ±43.5m 부근" 은 부정확했다.
+    실측 ±52.50m (35셀 × 3m = 105m). 다른 결론에는 영향이 없다.
+  - **접속 실측(맵 해시 `일치` 로그)은 하지 않았다.** 두 클라이언트를 띄워 로비에서 방을 만들고
+    시작하는 절차는 MCP 로 입력을 주입할 수 없어(`NVproject/CLAUDE.md`) 사람의 조작이 필요하다.
+    세 경로가 모두 736 으로 일치하므로 해시 일치는 확정적이지만, **실측은 IG-010 의 동기화 스모크
+    테스트에서 함께 확인한다.**
 
 ### IG-002 — `MapData` 격자 스키마 + 해시 + `DeterministicSequence`
 - 상태: TODO
@@ -370,6 +417,18 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
   루트 `CLAUDE.md` 의 **"137 tests"** 도 실제 173개로 고친다.
 - 검증: `dotnet build` 경고 0 + 전체 테스트
 
+### IG-020 — 레거시 맵 파일·스크립트 정리
+- 상태: **BLOCKED** (OQ-5)
+- 기획서 근거: (정리, R-0.2)
+- 대상: `NVproject/Assets/Scripts/BackroomsMap.cs`(+`.meta`) — 어느 씬도 참조하지 않고 `MapName` 이
+  `"backrooms"` 라 IG-001 이후 생성기와 이름이 겹친다. `NVserver/MapData/backrooms2f.json` — 등록도
+  참조도 없고 `Ceiling Lid` 이전의 낡은 export 다. `NVserver/MapData/arena.json` — 등록도 참조도 없다.
+- 차단 사유: 삭제는 되돌리기 번거로운 변경이라 확인을 받는다(ADR 0001 보호장치 4, `match-authority-plan.md` §8-1).
+- 비고: **이름이 겹치는 것이 새로 생긴 위험이다.** `BackroomsMap.MapName` 과
+  `BackroomsMapGenerator.MapName` 이 이제 둘 다 `"backrooms"` 이므로, 두 컴포넌트가 한 씬에 있으면
+  `MapExport.FindInScene` 이 `MonoBehaviour` 순회에서 **먼저 걸린 쪽**을 집는다. 지금은 어느 씬도
+  `BackroomsMap` 을 참조하지 않아 실제 문제가 아니지만, 방치하면 나중에 재현하기 어려운 export 사고가 된다.
+
 ---
 
 ## 결정 로그 (DECISIONS)
@@ -399,7 +458,7 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 | OQ-2 | **Runner 전멸이 술래의 즉시 승리인가?** 기획서 §8 은 "2명 미만 탈출 / 시간 종료" 만 말하고 전멸 승리가 없다. 구현에는 `MatchOutcome.SeekerWipedRunners` + `seekerWinsOnWipe: 1` 이 있다 | IG-007 | (a) 즉시 승리 유지 (현재 구현) (b) 기획서대로 제거 — 전멸 후에도 시간 종료를 기다린다 (탈출이 불가능하므로 결과는 같고 대기만 남는다) |
 | OQ-3 | **근접 보이스(§7)의 범위와 기술을 어떻게 정하는가?** 유일한 `NONE` 영역이고 NuGet 금지·모듈 추가 확인 필요 제약에 걸린다 | IG-017 | (a) `DEFERRED` — 인게임 규칙 이관을 먼저 끝낸다 (b) WebRTC(브라우저 기본) + 서버는 시그널링만 (c) 오디오 프레임을 기존 WebSocket 으로 릴레이 |
 | OQ-4 | **체인 드래그의 경로 방식?** 서버에 navmesh 가 없다 | IG-016 | (a) 직선 견인 — 가장 가볍고 연출이 사라진다 (b) **격자 A\*** — `StairLink` 가 층 연결을 답한다, 연출이 거의 같다 (권장) (c) 1 로 시작해 2 로 올린다 |
-| OQ-5 | **레거시 파일을 삭제해도 되는가?** `BackroomsMap.cs`(+`.meta`) — 어느 씬도 참조하지 않음, `MapData/backrooms2f.json`, `MapData/arena.json` — 등록도 참조도 없음 | IG-001 (삭제 부분만) | (a) 삭제 (b) 남긴다 — 이름 통일만 하고 파일은 둔다 |
+| OQ-5 | **레거시 파일을 삭제해도 되는가?** `BackroomsMap.cs`(+`.meta`) — 어느 씬도 참조하지 않음, `MapData/backrooms2f.json`, `MapData/arena.json` — 등록도 참조도 없음. IG-001 이후 `BackroomsMap.MapName` 이 생성기와 **같은 `"backrooms"`** 가 되어 한 씬에 둘이 있으면 export 대상이 순회 순서로 갈린다 | IG-020 | (a) 삭제 (b) 남긴다 — 그러면 `BackroomsMap.MapName` 을 충돌하지 않는 값으로 바꿔 둔다 |
 | OQ-6 | **2인 매치에서 Runner 승리가 불가능한 것이 의도인가?** `escapesToWin` 2, `MinPlayersToStart` 2 → Seeker 1 + Runner 1 이면 탈출 2명을 만들 수 없다 | IG-007 | (a) 최소 인원을 3 으로 올린다 (b) `escapesToWin` 을 인원에 따라 정한다 (c) 의도된 것 — 2인은 개발용 조합일 뿐 |
 | OQ-7 | `ObjectiveState` 전문 주기 — 2Hz 인가 "변경 즉시 + 5초" 인가 | (차단 아님, AS-4 로 진행) | (a) 변경 즉시 + 5초 (권장, AS-4) (b) 2Hz — 대역폭 +2.6KB/s |
 
@@ -407,6 +466,15 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-001 — 맵 이름·등록·export 정합성 복구** (P0, 의존 없음).
-BLOCKED 4건(IG-007, IG-013, IG-016, IG-017)은 OQ-1·2·3·4·6 의 답을 기다린다. 나머지 15개는
-의존 순서대로 진행 가능하다.
+**IG-002 — `MapData` 격자 스키마 + 해시 + `DeterministicSequence`** (P0, IG-001 완료로 해제됨).
+
+IG-001 이 닫히면서 R-0.1·R-0.2 가 해소됐다. 남은 선행 차단 요소는 R-0.3(서버가 "여기 설 수
+있는가" 를 답할 수 없다)이고, IG-002~IG-004 가 그것을 닫는다.
+
+BLOCKED 5건(IG-007, IG-013, IG-016, IG-017, IG-020)은 OQ-1·2·3·4·5·6 의 답을 기다린다.
+나머지 14개는 의존 순서대로 진행 가능하다.
+
+**IG-002 진행 시 주의** — `ComputeHash` 에 격자를 포함시키면 해시가 다시 바뀌므로 export 를 또
+돌려야 한다. IG-003 과 같은 배포 단위로 묶고, IG-001 이 확인한 세 경로(런타임 `Generate()` /
+export `ComputeCollision()` / 서버 파일 로드)가 **격자에 대해서도** 일치하는지 같은 방식으로
+실측한다 — 격자는 박스와 달리 `_collisionOnly` 경로를 아직 지나지 않는다.
