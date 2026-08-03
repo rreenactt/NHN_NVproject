@@ -27,7 +27,7 @@ namespace NV.Modules.Tests.Realtime
             var objectives = new Objectives();
             var sequence = new DeterministicSequence(seed);
 
-            MatchRules.PlaceObjectives(objectives, grid, ref sequence);
+            ObjectivePlacement.PlaceObjectives(objectives, grid, ref sequence);
             return objectives;
         }
 
@@ -105,7 +105,7 @@ namespace NV.Modules.Tests.Realtime
             foreach (var key in objectives.Keys)
             {
                 Assert.True(
-                    Distance(key, objectives.AltarPosition) >= RealtimeConstants.Match.KeySpacing - 0.01f
+                    Distance(key, objectives.AltarPosition) >= MatchConstants.KeySpacing - 0.01f
                         || Distance(key, objectives.AltarPosition) > 0f,
                     "열쇠가 제단과 같은 자리다.");
             }
@@ -131,7 +131,7 @@ namespace NV.Modules.Tests.Realtime
         public void 열쇠_대부분이_서로_간격을_지킨다()
         {
             var objectives = Place(31337, out _);
-            var spacing = RealtimeConstants.Match.KeySpacing;
+            var spacing = MatchConstants.KeySpacing;
 
             var tooClose = 0;
             var pairs = 0;
@@ -274,7 +274,7 @@ namespace NV.Modules.Tests.Realtime
 
             // Shared 는 Nullable 이 꺼져 있고 이 테스트 프로젝트는 켜져 있다.
             // 격자가 없는 맵을 흉내내는 것이 목적이므로 명시적으로 넘긴다.
-            MatchRules.PlaceObjectives(objectives, null!, ref sequence);
+            ObjectivePlacement.PlaceObjectives(objectives, null!, ref sequence);
 
             Assert.False(objectives.Placed);
             Assert.Empty(objectives.Keys);
@@ -297,7 +297,7 @@ namespace NV.Modules.Tests.Realtime
             var objectives = new Objectives();
             var sequence = new DeterministicSequence(1);
 
-            MatchRules.PlaceObjectives(objectives, empty, ref sequence);
+            ObjectivePlacement.PlaceObjectives(objectives, empty, ref sequence);
 
             Assert.False(objectives.Placed);
         }
@@ -311,11 +311,11 @@ namespace NV.Modules.Tests.Realtime
             var objectives = new Objectives();
 
             var first = new DeterministicSequence(1);
-            MatchRules.PlaceObjectives(objectives, grid, ref first);
+            ObjectivePlacement.PlaceObjectives(objectives, grid, ref first);
             var count = objectives.Keys.Count;
 
             var second = new DeterministicSequence(2);
-            MatchRules.PlaceObjectives(objectives, grid, ref second);
+            ObjectivePlacement.PlaceObjectives(objectives, grid, ref second);
 
             // 누적되면 두 배가 된다.
             Assert.Equal(count, objectives.Keys.Count);

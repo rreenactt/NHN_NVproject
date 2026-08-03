@@ -1,14 +1,23 @@
 using System.Numerics;
 using NV.Shared.Collision;
-using NV.Shared.Simulation;
 
-namespace NV.Realtime.Simulation
+namespace NV.Shared.Simulation
 {
-    /// 매치 규칙의 판정. 상태는 갖지 않는다 — 입력을 받아 결과를 돌려준다.
+    /// 목표물 배치. 상태를 갖지 않는다 — 입력을 받아 결과를 채운다.
     ///
-    /// `Match` 와 나누는 기준은 상태 소유다. 그쪽은 단계와 시계를 들고 있고, 여기는 계산만
-    /// 한다. 그래서 테스트가 룸 없이 이 함수들을 직접 부를 수 있다.
-    internal static class MatchRules
+    /// **`Shared` 에 있는 이유는 ADR 0002 다.** 클라이언트가 오프라인 연습에서 같은 배치를
+    /// 계산해야 하고, 알고리즘을 두 벌 두면 씨드나 간격을 바꿀 때 한쪽만 바뀐다 — 증상은
+    /// "오프라인에서는 되는데 네트워크 매치에서만 열쇠가 다른 곳에 있다" 로, 원인을 찾기
+    /// 가장 어려운 형태다.
+    ///
+    /// **코드를 공유해도 정보는 새지 않는다.** 네트워크 매치에서 클라이언트는 이 함수를
+    /// 부르지 않고 전문으로 좌표를 받으며, 씨드가 와이어에 없으므로 Seeker 가 이 코드를
+    /// 갖고 있어도 문을 계산할 입력이 없다. 지금까지의 구멍(R-2.3)은 함수의 위치가 아니라
+    /// **씨드를 공유한 것**에서 왔다.
+    ///
+    /// `Match`(서버)와 나누는 기준은 상태 소유다. 그쪽은 단계와 시계를 들고 있고, 여기는
+    /// 계산만 한다. 그래서 테스트가 룸 없이 이 함수들을 직접 부를 수 있다.
+    public static class ObjectivePlacement
     {
         /// 한 매치의 목표물을 배치한다.
         ///
@@ -127,17 +136,17 @@ namespace NV.Realtime.Simulation
 
             for (var index = 0; index < count; index++)
             {
-                if (TryFindSpacedPoint(objectives, grid, ref sequence, RealtimeConstants.Match.KeySpacing, out var point))
+                if (TryFindSpacedPoint(objectives, grid, ref sequence, MatchConstants.KeySpacing, out var point))
                 {
                     objectives.AddKey(point);
                 }
             }
         }
 
-        /// 기획서 §5 — 장치 8~9개. 조합은 `RealtimeConstants.Match.DeviceMix` 가 정한다.
+        /// 기획서 §5 — 장치 8~9개. 조합은 `MatchConstants.DeviceMix` 가 정한다.
         private static void PlaceDevices(Objectives objectives, MapGrid grid, ref DeterministicSequence sequence)
         {
-            var mix = RealtimeConstants.Match.DeviceMix;
+            var mix = MatchConstants.DeviceMix;
 
             var count = MatchConstants.DeviceCount < mix.Length
                 ? MatchConstants.DeviceCount
@@ -145,7 +154,7 @@ namespace NV.Realtime.Simulation
 
             for (var index = 0; index < count; index++)
             {
-                if (!TryFindSpacedPoint(objectives, grid, ref sequence, RealtimeConstants.Match.DeviceSpacing, out var point))
+                if (!TryFindSpacedPoint(objectives, grid, ref sequence, MatchConstants.DeviceSpacing, out var point))
                 {
                     continue;
                 }
@@ -166,7 +175,7 @@ namespace NV.Realtime.Simulation
             float spacing,
             out Vector3 point)
         {
-            for (var attempt = 0; attempt < RealtimeConstants.Match.PlacementAttempts; attempt++)
+            for (var attempt = 0; attempt < MatchConstants.PlacementAttempts; attempt++)
             {
                 if (!grid.TryRandomFreeFloor(ref sequence, out point))
                 {

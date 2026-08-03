@@ -51,11 +51,11 @@ namespace NV.Realtime.Simulation
             new ObjectivePoint[MatchConstants.KeysPlaced + RealtimeConstants.Rooms.MaxPlayers];
 
         private readonly ObjectiveDevice[] _deviceBuffer =
-            new ObjectiveDevice[RealtimeConstants.Match.DeviceMix.Length];
+            new ObjectiveDevice[MatchConstants.DeviceMix.Length];
 
         private readonly byte[] _objectiveStateBuffer = new byte[MessageCodec.ObjectiveStateMaxWireSize(
             MatchConstants.KeysPlaced + RealtimeConstants.Rooms.MaxPlayers,
-            RealtimeConstants.Match.DeviceMix.Length)];
+            MatchConstants.DeviceMix.Length)];
 
         private readonly bool[] _slots = new bool[RealtimeConstants.Rooms.MaxPlayers];
         private readonly object _slotGate = new();
@@ -772,7 +772,7 @@ namespace NV.Realtime.Simulation
             // (아직) 양쪽이 같은 배치를 계산하지만, 그 좌표를 역할별로 걸러 내려보내면
             // 씨드를 와이어에서 뺄 수 있다 — 그것이 IG-011b 이고 §2.1 의 문 좌표 누출을 닫는다.
             var placement = new DeterministicSequence(_placementSeed);
-            MatchRules.PlaceObjectives(_objectives, _map.Grid, ref placement);
+            ObjectivePlacement.PlaceObjectives(_objectives, _map.Grid, ref placement);
 
             _objectiveStateDirty = true;
 

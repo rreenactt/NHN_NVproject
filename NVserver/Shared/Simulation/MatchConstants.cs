@@ -1,3 +1,5 @@
+using NV.Shared.Contracts.Enums;
+
 namespace NV.Shared.Simulation
 {
     /// 매치 규칙의 고정 파라미터. 이 값들이 유일한 출처다.
@@ -124,5 +126,49 @@ namespace NV.Shared.Simulation
 
         /// 기획서 §5.1 "전체 정지 + 벽 투명화" 가 유지되는 시간(초).
         public const float FreezeDuration = 5f;
+
+        // ================================================================ 배치
+        //
+        // 여기 있는 이유는 ADR 0002 다. 클라이언트가 **오프라인 연습에서** 같은 배치를
+        // 계산하므로 값을 알아야 한다. 네트워크 매치에서는 서버가 계산한 좌표만 내려오고,
+        // 씨드가 와이어에 없으므로 클라이언트가 이 값들을 갖고 있어도 문을 계산할 수 없다.
+        //
+        // 전송 주기는 여기 없다 — 그것은 서버만의 것이고 `RealtimeConstants.Match` 에 있다.
+
+        /// 열쇠끼리, 그리고 이미 놓인 것과 떨어뜨릴 최소 거리(m).
+        ///
+        /// 기획서에 없다. 클라이언트의 배치가 쓰던 값이다 — 열쇠가 문간이나 서로 위에 겹쳐
+        /// 생기면 목표가 우연히 짧아진다.
+        public const float KeySpacing = 4f;
+
+        /// 장치끼리 떨어뜨릴 최소 거리(m). 열쇠보다 크다 — 장치는 부피가 있고 상호작용
+        /// 반경(`DeviceUseRadius` 2.2m)이 겹치면 어느 것을 쓰는지 모호해진다.
+        public const float DeviceSpacing = 5f;
+
+        /// 간격 조건을 만족하는 자리를 찾는 시도 횟수.
+        ///
+        /// 다 쓰면 간격을 포기하고 아무 자리나 쓴다. 무한히 시도하지 않는 이유는 좁은 맵에서
+        /// 조건을 만족하는 자리가 아예 없을 수 있기 때문이다 — 그때 목표물이 하나도 안 생기는
+        /// 것보다 겹쳐서라도 생기는 편이 낫다. 열쇠가 0개면 매치가 성립하지 않는다.
+        public const int PlacementAttempts = 64;
+
+        /// 놓을 장치의 효과 조합. 배열 길이가 곧 최대 장치 수다.
+        ///
+        /// 기획서 §5 는 8~9개를 놓으라고 하고 효과는 6종이므로 남는 자리가 생긴다. 그 자리를
+        /// **다회 사용 효과**에 준다 — 1회용을 두 개 놓으면 그 효과의 총량이 두 배가 되지만,
+        /// 다회용을 두 개 놓으면 걸어가는 거리만 줄어든다. 룰셋이 "the mix of effects is a
+        /// level-design choice" 로 위임한 부분이다.
+        public static readonly MatchDeviceType[] DeviceMix =
+        {
+            MatchDeviceType.AddTime,
+            MatchDeviceType.FullMapView,
+            MatchDeviceType.StopBleeding,
+            MatchDeviceType.FreezeAndXray,
+            MatchDeviceType.SeekerCameraView,
+            MatchDeviceType.Teleport,
+            MatchDeviceType.Teleport,
+            MatchDeviceType.FullMapView,
+            MatchDeviceType.StopBleeding,
+        };
     }
 }

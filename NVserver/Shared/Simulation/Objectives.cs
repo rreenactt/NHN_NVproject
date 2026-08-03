@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using System.Numerics;
 using NV.Shared.Contracts.Enums;
 
-namespace NV.Realtime.Simulation
+namespace NV.Shared.Simulation
 {
     /// 놓인 장치 하나.
-    internal readonly struct DevicePlacement
+    public readonly struct DevicePlacement
     {
         public DevicePlacement(MatchDeviceType type, Vector3 position, float yaw)
         {
@@ -31,9 +31,13 @@ namespace NV.Realtime.Simulation
     /// 보여야 한다고 정하지만, WebGL 빌드가 디컴파일되는 전제에서 컬링 레이어로 막을 수 있는
     /// 종류의 정보가 아니다. 서버가 배치하고 역할별로 걸러 좌표를 내려보내야 닫힌다.
     ///
-    /// 이 클래스는 **결과만** 담는다. 배치 규칙은 `MatchRules` 에 있고, 좌표를 와이어로
-    /// 내려보내는 것은 그다음 태스크(IG-011b)다 — 지금은 서버 안에만 있다.
-    internal sealed class Objectives
+    /// 이 클래스는 **결과만** 담는다. 배치 규칙은 `ObjectivePlacement` 에 있다.
+    ///
+    /// **`Shared` 에 있는 이유는 ADR 0002 다.** 클라이언트가 오프라인 연습에서 같은 배치를
+    /// 계산하므로 같은 코드를 쓴다. 네트워크 매치에서는 서버가 계산한 좌표만 전문으로
+    /// 내려오고, 씨드가 와이어에 없으므로 이 코드를 가진 Seeker 클라이언트도 문을 계산할
+    /// 수 없다 — 막아야 하는 것은 코드가 아니라 입력이다.
+    public sealed class Objectives
     {
         private readonly List<Vector3> _keys = new();
         private readonly List<DevicePlacement> _devices = new();
