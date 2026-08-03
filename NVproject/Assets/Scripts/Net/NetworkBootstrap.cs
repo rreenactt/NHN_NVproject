@@ -159,6 +159,7 @@ namespace NV.Client.Net
 
             _client.WelcomeReceived += OnWelcome;
             _client.Ended += OnEnded;
+            _client.FireObserved += OnFireObserved;
         }
 
         private void OnDestroy()
@@ -170,6 +171,50 @@ namespace NV.Client.Net
 
             _client.WelcomeReceived -= OnWelcome;
             _client.Ended -= OnEnded;
+            _client.FireObserved -= OnFireObserved;
+        }
+
+        /// 남이 쏜 총알의 예광탄을 그린다(IG-028b2).
+        ///
+        /// **자기 발사는 그리지 않는다.** 로컬 `Bullet` 이 트리거를 당긴 프레임에 이미 예광탄을
+        /// 만들고, 그것이 히트마커·발사음·반동의 타이밍도 함께 만든다. 서버 알림으로 갈아타면
+        /// 자기 사격의 반응이 한 왕복만큼 늦어지는데, §8 이 로컬 연출에 예측을 허용하는 것이
+        /// 정확히 그 이유다. **대가는 히트마커가 서버 판정과 어긋날 수 있다는 것**이고 그것은
+        /// 판정이 아니라 표시다.
+        ///
+        /// **알림의 틱을 써서 앞으로 건너뛰지 않는다.** 늦게 도착한 만큼 총알을 진행시키는 것이
+        /// 정확해 보이지만, **원격 몸은 보간 때문에 100ms 과거에 그려진다** — 예광탄만 현재로
+        /// 당기면 그것을 쏜 몸의 총구와 어긋난다. 원격 표현 전체가 같은 만큼 과거에 있는 편이
+        /// 일관되다. 틱은 그 보정을 원하는 클라이언트를 위해 와이어에 남아 있다.
+        private void OnFireObserved(FireEventMessage fire)
+        {
+            if (!_client.HasWelcome || fire.ShooterId == _client.LocalPlayerId)
+            {
+                return;
+            }
+
+            var origin = new Vector3(
+                Quantization.ToMeters(fire.X),
+                Quantization.ToMeters(fire.Y),
+                Quantization.ToMeters(fire.Z));
+
+            // 방향은 요·피치에서 만든다. 서버가 총알을 만들 때 쓴 것과 **같은 함수**이므로
+            // 예광탄이 실제 탄도와 같은 쪽으로 날아간다.
+            var forward = PlayerMovement.Forward(
+                Quantization.ToYawRadians(fire.Yaw),
+                Quantization.ToPitchRadians(fire.Pitch));
+
+            // 데미지 0. 판정은 서버가 하고 이것은 연출이다 — `Bullet` 의 `OnHit` 는
+            // `MatchManager.ReportHit` 로 가고 그쪽이 `ServerOwnsCombat` 에서 거부한다.
+            // 마스크에서 뷰모델 팔(레이어 8)만 뺀다: 몸에 맞아 멈추는 것은 맞는 표현이다.
+            Bullet.Spawn(
+                origin,
+                new Vector3(forward.X, forward.Y, forward.Z),
+                MatchConstants.BulletSpeed,
+                0f,
+                0f,
+                ~(1 << 8),
+                MatchConstants.BulletLifetime);
         }
 
         private void Update()

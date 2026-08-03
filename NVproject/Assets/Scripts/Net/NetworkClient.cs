@@ -197,6 +197,18 @@ namespace NV.Client.Net
         /// </summary>
         public bool ObjectiveDoorOpen { get; private set; }
 
+        /// <summary>
+        /// 서버가 총알 한 발을 쐈다(ADR 0003).
+        ///
+        /// **이것만 폴링이 아니라 이벤트다.** 다른 전문들은 "지금 상태" 이므로 매 프레임 읽는
+        /// 편이 낫지만(놓친 프레임이 다음 전문으로 메워진다), 발사는 사건이라 **읽을 "현재 값" 이
+        /// 없다.** 폴링하려면 이 클래스가 큐를 들고 소비자가 비워야 하고, 그것은 이벤트를 손으로
+        /// 다시 만드는 것이다.
+        ///
+        /// 수신은 `Update` 안에서 일어나므로(`Receive`) 구독자가 오브젝트를 만들어도 안전하다.
+        /// </summary>
+        public event Action<FireEventMessage> FireObserved;
+
         public event Action WelcomeReceived;
 
         /// 룸 상태가 실제로 바뀌었을 때만 부른다. 전문은 2Hz 로 계속 오지만
@@ -437,6 +449,10 @@ namespace NV.Client.Net
                     ReadObjectiveState(payload);
                     break;
 
+                case EventKind.FireEvent:
+                    ReadFireEvent(payload);
+                    break;
+
                 default:
                     // 모르는 종류. 서버가 앞서 나갔거나 프레임이 손상되었다.
                     break;
@@ -508,6 +524,27 @@ namespace NV.Client.Net
             MatchState = header;
             _participantCount = count;
             HasMatchState = true;
+        }
+
+        /// 발사 알림을 받아 구독자에게 넘긴다.
+        ///
+        /// 실패해도 들고 있는 상태가 없으므로 `LastError` 만 남기고 지나간다 — 알림 하나를
+        /// 잃는 것이 이 메시지의 설계된 실패 모드다(ADR 0003).
+        private void ReadFireEvent(ReadOnlySpan<byte> payload)
+        {
+            FireEventMessage fire;
+
+            try
+            {
+                fire = MessageCodec.ReadFireEvent(payload);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException || exception is ArgumentException)
+            {
+                LastError = exception.Message;
+                return;
+            }
+
+            FireObserved?.Invoke(fire);
         }
 
         /// 목표물 전문을 받아 역양자화한다.
