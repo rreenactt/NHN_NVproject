@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 7)
-현재 이터레이션: 7
-기준 커밋: `41e1ca2`
+최종 갱신: 2026-08-04 (이터레이션 8)
+현재 이터레이션: 8
+기준 커밋: `5a0e8f0`
 
 ## 이 루프가 실제로 하는 일
 
@@ -111,7 +111,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 |---|---|---|---|---|
 | ~~`EventKind.MatchState=2`~~ | — | **완료 (IG-008)** — 위 현존 표로 옮겼다 | — | ✅ |
 | `EventKind.ObjectiveState=3` | S→C | 문(위치·yaw·개방) / 열쇠 위치 목록 / 장치(위치·yaw·타입·상태) / 제단 위치. ≈166B | 서버 | IG-011 |
-| `EntityFlags` 확장 | S→C | `Bleeding=1<<3`, `Seeker=1<<4`, `Escaped=1<<5`, `Frozen=1<<6`. `EntityState` 크기 13B 그대로 | 서버 | IG-009 |
+| ~~`EntityFlags` 확장~~ | — | **완료 (IG-009)** — `Bleeding=8`, `Seeker=16`, `Escaped=32`, `Frozen=64`. `EntityState` 13B 그대로. `Seeker`·`Frozen` 은 실제 값이 나가고 `Bleeding`·`Escaped` 는 0(→ IG-014·IG-012) | 서버 | ✅ |
 
 `MatchPhase`(Lobby/RoleReveal/Playing/Ended)는 **IG-006 에서 이미 `Shared/Contracts/Enums` 에
 들어왔다.** 아직 어떤 프레임에도 실리지 않으며, `MatchState` 전문의 첫 바이트가 될 값이다.
@@ -137,8 +137,9 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-006 | 서버 매치 단계·시계 (`Match.cs`) | **DONE** | P1 | IG-005 | R-1.3, R-1.4, R-1.6 |
 | IG-007 | 승리 조건 판정 | **BLOCKED** | P1 | IG-006 | R-1.5, R-6.6 |
 | IG-008 | `MatchState` 전문 + 역할별 필터 + 프로토콜 3 | **DONE** | P1 | IG-006 | R-1.3~R-1.5, R-9.x |
-| IG-009 | `EntityFlags` 확장 (Bleeding/Seeker/Escaped/Frozen) | TODO | P1 | IG-008 | R-2.2, R-4.1, R-5.1 |
-| IG-010 | 클라이언트 `MatchManager` → 뷰 전환 | TODO | P1 | IG-008 | R-1.3~R-1.5, R-9.x |
+| IG-009 | `EntityFlags` 확장 (Bleeding/Seeker/Escaped/Frozen) | **DONE** | P1 | IG-008 | R-2.2, R-4.1, R-5.1 |
+| IG-010 | 클라이언트 전문 수신·적용 (뷰 전환 1/2) | TODO | P1 | IG-008 | R-1.3, R-1.4, R-9.x |
+| IG-021 | 클라이언트 판정 경로 제거 (뷰 전환 2/2) | **BLOCKED** | P1 | IG-010, IG-007 | R-1.5, R-3.1 |
 | IG-011 | 목표물 배치 서버 이관 + `ObjectiveState` 전문 | TODO | P2 | IG-010 | R-2.3, R-6.3, R-6.4, R-7.1 |
 | IG-012 | 열쇠 습득·삽입·문 개방·탈출 판정 | TODO | P2 | IG-011 | R-6.1, R-6.2, R-6.5, R-6.7 |
 | IG-013 | `Interact` 입력 + 장치 사용 판정 | **BLOCKED** | P2 | IG-011 | R-7.2~R-7.7, R-4.3 |
@@ -578,7 +579,55 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 - 비고: 여기서 프로토콜이 3 이 된다. IG-010 과 같은 배포 단위로 묶는다.
 
 ### IG-009 — `EntityFlags` 확장
-- 상태: TODO
+- 상태: **DONE** (이터레이션 8, 2026-08-04)
+- **`Seeker` 와 `Frozen` 은 지금 실제 값이 있다.** 서버가 Seeker id 와 잠금 여부를 이미
+  알고 있어, 이 태스크는 "자리만 잡는" 커밋이 아니다. `Bleeding`·`Escaped` 는 그 판정이
+  오는 IG-014·IG-012 에서 채워진다.
+- 변경 파일 (5개):
+  - `Shared/Contracts/Enums/EntityFlags.cs` — 4비트 추가 + 두 종류의 소유자 구분을 주석으로
+  - `Shared/Simulation/StateProjection.cs` — `ToEntityState` 3인자 오버로드,
+    `SimulationFlagsOf`/`MatchFlagsOf`
+  - `Modules/Realtime/Simulation/PlayerEntity.cs` — `MatchFlags`
+  - `Modules/Realtime/Simulation/Room.cs` — `MatchFlagsFor` (매 틱 유도)
+  - `tests/…/Simulation/EntityFlagsTests.cs` (신규, 9개)
+  - `tests/…/Realtime/RoomTests.cs` — 통합 검증 6개
+- 검증 (전부 실행함):
+
+  | 확인 | 수단 | 결과 |
+  |---|---|---|
+  | 서버 테스트 | `dotnet test` | ✅ **301개 통과**, 실패 0 (285 → 301, +16) |
+  | 서버 경고 0 | `dotnet build` | ✅ 오류 0개 |
+  | 클라이언트 컴파일 | `Assembly-CSharp` | ✅ 오류 0개 |
+  | 크기 불변 | `플래그를_늘려도_엔티티_크기가_그대로다` | ✅ `EntityState.WireSize` 13B |
+  | 비트 분리 | `이동_비트와_매치_비트가_겹치지_않는다` | ✅ 교집합 없음 |
+  | 비트 값 고정 | `비트_값이_고정되어_있다` | ✅ 1/2/4/8/16/32/64 |
+  | **덮어쓰지 않음** | `매치_비트가_이동_비트를_덮지_않는다` (Room) | ✅ 20틱 후에도 `Alive`·`OnGround` 유지 |
+  | **Seeker 정확히 1명** | `스냅샷에_Seeker_비트가_정확히_한_명에게_실린다` | ✅ |
+  | **Frozen 전원** | `역할_공개_중에는_모든_몸에_Frozen_비트가_실린다` | ✅ 리빌 중 전원, 리빌 후 0명 |
+  | 미판정 비트 침묵 | `아직_판정하지_않는_비트는_실리지_않는다` | ✅ `Bleeding`·`Escaped` 0 |
+  | 재시작 누출 없음 | `로비로_되돌리면_Seeker_비트도_사라진다` | ✅ 두 번째 매치에서도 Seeker 1명 |
+  | 해시 영향 없음 | `매치_비트는_시뮬레이션_상태의_해시를_바꾸지_않는다` | ✅ |
+  | 회귀 — 맵 해시 | 기동 로그 | ✅ `7996AF3A` / `27A9412D` |
+
+- **매치 비트를 `PlayerState` 에 담지 않았다.** 기술적으로는 가능하다 —
+  `PlayerMovement.ResolveCrouch` 가 `state.Flags` 에서 시작해 다른 비트를 보존하는 것을
+  확인했다. 그럼에도 나눈 이유는 `PlayerState` 가 `Shared` 의 **결정적 시뮬레이션 상태**이고
+  `StateHash` 에 들어가기 때문이다. 클라이언트는 출혈·역할·잠금을 예측할 수 없으므로, 그
+  비트가 섞이면 리컨실리에이션의 해시 비교가 **영구히 어긋난다.** 서버는
+  `PlayerEntity.MatchFlags` 에 따로 들고 있다가 인코딩 순간에만 합친다.
+- 비고:
+  - `MatchFlagsFor` 는 **매 틱 유도한다.** 상태로 들고 있다가 갱신을 잊는 것보다, 근거가
+    되는 값(Seeker id, 잠금 여부)에서 매번 계산하는 편이 어긋날 자리가 없다. 로비 복귀 시
+    `_seekerPlayerId` 가 `NoPlayer` 로 돌아가므로 비트도 자동으로 사라진다 — 테스트가 그것을
+    두 번째 매치로 확인한다.
+  - `SimulationFlagsOf` 를 함께 넣었다. **클라이언트가 예측 상태와 비교할 때 매치 비트를
+    빼지 않으면** 서버가 보낸 몸과 자기 예측이 항상 달라 보이고 리컨실리에이션이 매 틱
+    보정한다. 지금 쓰는 곳은 없고 IG-010 이 쓴다.
+  - `Frozen` 이 클라이언트에 필요한 이유: 서버는 잠금을 입력 무력화로 구현하므로, 클라이언트가
+    이 비트를 모르면 자기 입력으로 계속 예측하고 매 틱 되돌려진다 — 증상은 잠긴 동안 화면이
+    떨리는 것이다.
+  - 8비트가 다 찼다(`1<<7` 하나 남음). 더 필요하면 `EntityState` 크기를 늘리는 대신 2Hz
+    전문(`MatchState.Flags`)으로 보내야 한다 — 매 틱 필요한 것만 여기 온다는 기준이 그래서 있다.
 - 계획: `Bleeding=1<<3`, `Seeker=1<<4`, `Escaped=1<<5`, `Frozen=1<<6`. 지금 3비트만 쓰고 5비트가
   남는다. `EntityState` 크기 13B 그대로이고 스냅샷 대역폭도 그대로다. 출혈·역할은 원격 몸의
   표현(피 흔적, 무기 유무)에 **매 틱** 필요하므로 2Hz 전문이 아니라 스냅샷에 있어야 한다.
@@ -587,21 +636,41 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
   `Net/RemotePlayerPuppet.cs`, `tests/Modules.Tests/Serialization/WireSizeTests.cs`
 - 검증: `dotnet test` — `EntityState.WireSize` 가 13 그대로
 
-### IG-010 — 클라이언트 `MatchManager` → 뷰 전환
+### IG-010 — 클라이언트 전문 수신·적용 (뷰 전환 1/2)
 - 상태: TODO
-- 계획: `MatchManager` 가 심판에서 **뷰**로 바뀐다. `AcceptMatchState(in MatchStateMessage)`
-  하나가 단계·시계·역할·카운터를 받아 **기존 이벤트를 그대로 발화**한다 —
-  `PhaseChanged`, `KeysChanged`, `EscapesChanged`, `RolesAssigned`, `MatchEnded`. HUD·
-  `PlayerRoleLoadout`·`GameHudController` 는 그 이벤트를 구독하고 있으므로 **손대지 않는다.**
-  `EvaluateWinConditions`·`ResolvesOutcome`·`MatchSync.OnLocalMatchEnded`·
-  `NetSession.ReportMatchEnd` 제거. `_phaseTimer`/`TimeRemaining` 의 로컬 감소는 **남긴다** —
-  전문이 2Hz 라 그 사이를 메워야 HUD 시계가 튀지 않는다. 전문이 올 때마다 서버 값으로 덮는다.
-- 변경 예정 파일: `Game/MatchManager.cs`, `Net/Session/MatchSync.cs`, `Net/Session/NetSession.cs`,
-  `Net/NetworkClient.cs`
-- 검증: `dotnet build Assembly-CSharp.csproj` + **동기화 스모크 테스트** (로컬 서버 + 2 클라이언트,
-  두 화면의 단계·시계·탈출 수 일치를 관측해 기록)
-- 비고: `MatchManager.cs:350-361` 의 `AcceptOutcome` 주석이 *"규칙이 서버로 오면 이것이 매치가
-  끝나는 유일한 경로가 되고 `EvaluateWinConditions` 는 사라진다"* 고 이미 적어 두었다.
+- **원래 하나였던 태스크를 둘로 쪼갰다** (이터레이션 8 판단). 이유가 둘이다:
+  1. **판정 제거가 지금은 퇴화다.** IG-007(승리 조건)이 OQ-2·OQ-6 으로 BLOCKED 이므로,
+     클라이언트의 `EvaluateWinConditions` 를 없애면 **탈출·전멸 승리를 아무도 판정하지 않고
+     매치가 8분 시간 종료로만 끝난다.** §6.3 이 금지하는 종류의 변경이다.
+  2. **§6.1 준수.** IG-008 이 11개 파일로 8개를 넘겼으므로 이번에는 미리 쪼갠다.
+- 범위: 서버 전문을 **받아서 적용**한다. 기존 판정은 **그대로 둔다** — 서버 값이 덮으므로
+  실질적으로 서버가 이기고, 이중 판정이 남아도 화면은 서버를 따른다.
+  - `NetworkClient` 가 `MatchState` 를 파싱해 보관(`DispatchEvent` 의 자리가 이미 있다)
+  - `MatchSync` 가 그것을 `MatchManager` 에 넘긴다
+  - `MatchManager.AcceptMatchState` 가 단계·시계를 서버 값으로 덮고 **기존 이벤트를 발화**한다
+    (`PhaseChanged`·`KeysChanged`·`EscapesChanged`) — HUD·`PlayerRoleLoadout`·
+    `GameHudController` 는 그 이벤트를 구독하므로 **손대지 않는다**
+  - `_phaseTimer`/`TimeRemaining` 의 로컬 감소는 **남긴다.** 전문이 2Hz 라 그 사이를 메워야
+    HUD 시계가 튀지 않는다
+  - `EntityFlags.Frozen` 을 로컬 예측에 반영하고, 예측 비교에서 `SimulationFlagsOf` 로 매치
+    비트를 걸러낸다(IG-009 가 준비해 둔 것)
+- 검증: `dotnet build Assembly-CSharp.csproj` + **동기화 스모크 테스트** — 로컬 서버 + 2
+  클라이언트로 두 화면의 단계·시계 일치를 관측한다. IG-001 이 미룬 **맵 해시 `일치` 실측도
+  여기서 함께** 한다.
+- 비고: 역할 배정은 이미 `RoomState.SeekerPlayerId` 경로로 동작한다. 전문의 역할을 **중복
+  적용하지 않는다** — 두 경로가 갈리면 원인을 찾기 어렵다.
+
+### IG-021 — 클라이언트 판정 경로 제거 (뷰 전환 2/2)
+- 상태: **BLOCKED** (IG-007 → OQ-2·OQ-6)
+- 범위: `MatchManager.EvaluateWinConditions`·`ResolvesOutcome`,
+  `MatchSync.OnLocalMatchEnded`, `NetSession.ReportMatchEnd`, `ControlKind.EndMatch`(enum 값 3 을
+  비워 두고 주석), 클라이언트의 `NV.Game.MatchPhase`·`Role` → `Shared` 의
+  `MatchPhase`·`MatchRole` 로 대체.
+- 차단 사유: **서버가 결과를 정하기 전에는 제거할 수 없다.** 지금 승패를 판정하는 것은
+  클라이언트뿐이고(방장), 그것을 없애면 매치가 시간 종료로만 끝난다. IG-007 이 서버에 승리
+  조건을 넣은 뒤에 이 제거가 안전해진다.
+  **서버·클라이언트 어느 한쪽만 `ControlKind.EndMatch` 를 제거해도 매치가 끝나지 않는
+  구간이 생기므로, 그 제거는 반드시 한 커밋이어야 한다.**
 
 ### IG-011 — 목표물 배치 서버 이관 + `ObjectiveState` 전문
 - 상태: TODO
@@ -772,7 +841,27 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-009 — `EntityFlags` 확장** (P1) 또는 **IG-010 — 클라이언트 뷰 전환** (P1).
+**IG-010 — 클라이언트 전문 수신·적용** (P1, 뷰 전환 1/2).
+
+**서버가 보내는 것을 클라이언트가 처음으로 쓴다.** 지금까지 여덟 이터레이션은 전부 서버
+쪽이었고, 클라이언트는 `MatchState` 를 받아서 버린다(`DispatchEvent` 의 빈 자리). IG-010 이
+그 자리를 채우면 서버 시계가 HUD 를 움직인다.
+
+**이 태스크의 검증은 제가 완결할 수 없다.** §7.4 스모크 테스트는 두 클라이언트를 띄워 로비에서
+방을 만들고 시작해야 하는데, MCP 로는 입력을 주입할 수 없다(`NVproject/CLAUDE.md`). 컴파일과
+코드 경로까지는 확인할 수 있고, **화면 일치 관측은 사람의 조작이 필요하다** — 그 사실을
+검증 기록에 그대로 적는다. IG-001 이 미룬 맵 해시 `일치` 실측도 같은 절차에 묶여 있다.
+
+BLOCKED 6건(IG-007, IG-013, IG-016, IG-017, IG-020, **IG-021**)은 OQ-1·2·3·4·5·6 의 답을
+기다린다. 나머지 7개는 의존 순서대로 진행 가능하다.
+
+**OQ-2·OQ-6 의 값이 이번에 더 올랐다.** 그 답이 없으면 IG-007 이 막히고, IG-007 이 막히면
+IG-021 도 막힌다 — 즉 **클라이언트에 남은 치팅 가능한 판정(`EvaluateWinConditions`, 히트 판정)을
+제거할 수 없다.** 갭 매트릭스의 R-1.5·R-3.1 이 그 자리다.
+
+---
+
+### 이전 판단 기록 (이터레이션 8)
 
 **서버가 매치 상태를 실제로 내려보내고 있다.** 프로토콜 3, 단계·시계·역할이 2Hz 전문으로
 세션별 인코딩되어 나가고, Seeker 사본에서 열쇠 자리가 지워진다. 클라이언트는 그 전문을

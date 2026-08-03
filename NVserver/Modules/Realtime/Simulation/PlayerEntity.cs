@@ -37,6 +37,15 @@ namespace NV.Realtime.Simulation
         /// 마지막으로 인코딩한 와이어 상태. 스냅샷은 이 값을 그대로 보낸다.
         public EntityState Wire { get; set; }
 
+        /// 매치 판정이 소유하는 플래그 — 출혈·역할·탈출·잠금.
+        ///
+        /// `State.Flags` 와 나누어 둔다. 그쪽은 이동 시뮬레이션의 것이고 클라이언트도
+        /// 예측하지만, 이것은 서버만 아는 판정 결과다. 한 곳에 담으면 `StateHash` 에
+        /// 예측 불가능한 비트가 섞여 리컨실리에이션 비교가 영구히 어긋난다.
+        ///
+        /// 스냅샷을 인코딩할 때 합쳐진다(`StateProjection.ToEntityState` 3인자 오버로드).
+        public EntityFlags MatchFlags { get; set; }
+
         public uint LastProcessedInputTick { get; private set; }
 
         public bool HasProcessedInput { get; private set; }

@@ -798,5 +798,149 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(MatchPhase.Lobby, room.MatchPhase);
             Assert.Equal(0, transport.CountOfEvent(1, EventKind.MatchState));
         }
+
+        // ==================================================== 스냅샷의 매치 플래그
+
+        /// 기획서 §2 — 술래는 정확히 한 명이다. 스냅샷의 몸에 그것이 실려야 원격
+        /// 클라이언트가 무기를 붙일지 판단할 수 있다.
+        [Fact]
+        public void 스냅샷에_Seeker_비트가_정확히_한_명에게_실린다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            Run(room, transport, 1);
+
+            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+            Assert.Equal(2, entities.Length);
+
+            var seekers = 0;
+            foreach (var entity in entities)
+            {
+                if ((entity.Flags & EntityFlags.Seeker) != 0)
+                {
+                    seekers++;
+                }
+            }
+
+            Assert.Equal(1, seekers);
+        }
+
+        /// 잠금을 클라이언트가 모르면 자기 입력으로 계속 예측하고 리컨실리에이션이 매 틱
+        /// 되돌린다 — 증상은 잠긴 동안 화면이 떨리는 것이다.
+        [Fact]
+        public void 역할_공개_중에는_모든_몸에_Frozen_비트가_실린다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room, skipReveal: false);
+            Run(room, transport, 1);
+
+            Assert.Equal(MatchPhase.RoleReveal, room.MatchPhase);
+            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+
+            foreach (var entity in entities)
+            {
+                Assert.True(
+                    (entity.Flags & EntityFlags.Frozen) != 0,
+                    $"플레이어 {entity.Id} 에 Frozen 이 없다.");
+            }
+        }
+
+        [Fact]
+        public void 역할_공개가_끝나면_Frozen_비트가_사라진다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            Run(room, transport, 1);
+
+            Assert.Equal(MatchPhase.Playing, room.MatchPhase);
+            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+
+            foreach (var entity in entities)
+            {
+                Assert.True((entity.Flags & EntityFlags.Frozen) == 0);
+            }
+        }
+
+        /// 매치 비트가 이동 비트를 덮으면 원격 몸이 공중에 뜬 것으로 보인다.
+        [Fact]
+        public void 매치_비트가_이동_비트를_덮지_않는다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+
+            // 바닥에 내려앉을 시간을 준다.
+            Run(room, transport, 20);
+
+            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+
+            foreach (var entity in entities)
+            {
+                Assert.True((entity.Flags & EntityFlags.Alive) != 0, "Alive 가 사라졌다.");
+                Assert.True((entity.Flags & EntityFlags.OnGround) != 0, "OnGround 가 사라졌다.");
+            }
+        }
+
+        /// 아직 서버가 세지 않는 비트는 나가지 않아야 한다. 0 이 아닌 값이 실리면
+        /// 클라이언트가 있지도 않은 출혈을 그린다.
+        [Fact]
+        public void 아직_판정하지_않는_비트는_실리지_않는다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            Run(room, transport, 5);
+
+            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+
+            foreach (var entity in entities)
+            {
+                Assert.True((entity.Flags & EntityFlags.Bleeding) == 0, "출혈은 IG-014 의 것이다.");
+                Assert.True((entity.Flags & EntityFlags.Escaped) == 0, "탈출은 IG-012 의 것이다.");
+            }
+        }
+
+        [Fact]
+        public void 로비로_되돌리면_Seeker_비트도_사라진다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            Run(room, transport, 1);
+
+            room.PostCommand(RoomCommand.EndMatch(1, 1));
+            room.Advance();
+            room.PostCommand(RoomCommand.ReturnToLobby(1));
+            room.Advance();
+            room.PostCommand(RoomCommand.Start(1));
+            RoomFixture.SkipReveal(room);
+
+            var fresh = new RecordingTransport();
+            Run(room, fresh, 1);
+
+            // 두 번째 매치에서도 Seeker 는 정확히 한 명이다. 이전 매치의 비트가 남아
+            // 있으면 두 명이 된다.
+            Assert.True(fresh.TryLastSnapshot(1, out _, out var entities));
+
+            var seekers = 0;
+            foreach (var entity in entities)
+            {
+                if ((entity.Flags & EntityFlags.Seeker) != 0)
+                {
+                    seekers++;
+                }
+            }
+
+            Assert.Equal(1, seekers);
+        }
     }
 }

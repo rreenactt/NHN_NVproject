@@ -475,7 +475,32 @@ namespace NV.Realtime.Simulation
                 }
             }
 
-            player.Wire = StateProjection.ToEntityState(player.PlayerId, player.State);
+            player.MatchFlags = MatchFlagsFor(player);
+            player.Wire = StateProjection.ToEntityState(player.PlayerId, player.State, player.MatchFlags);
+        }
+
+        /// 이 몸에 얹을 매치 판정 비트.
+        ///
+        /// 지금 채울 수 있는 것은 둘이다 — 역할과 이동 잠금. 출혈(`Bleeding`)과
+        /// 탈출(`Escaped`)은 그 판정이 서버로 오는 태스크(IG-014·IG-012)에서 붙는다.
+        ///
+        /// 매 틱 다시 계산한다. 상태로 들고 있다가 갱신을 잊는 것보다, 근거가 되는
+        /// 값(Seeker id, 잠금 여부)에서 매번 유도하는 편이 어긋날 자리가 없다.
+        private EntityFlags MatchFlagsFor(PlayerEntity player)
+        {
+            var flags = EntityFlags.None;
+
+            if (_seekerPlayerId != RoomStateHeader.NoPlayer && player.PlayerId == _seekerPlayerId)
+            {
+                flags |= EntityFlags.Seeker;
+            }
+
+            if (_match.MovementLocked)
+            {
+                flags |= EntityFlags.Frozen;
+            }
+
+            return flags;
         }
 
         private void Simulate(PlayerEntity player, in InputFrame frame)

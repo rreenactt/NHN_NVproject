@@ -17,6 +17,21 @@ namespace NV.Shared.Simulation
     {
         public static EntityState ToEntityState(byte id, in PlayerState state)
         {
+            return ToEntityState(id, state, EntityFlags.None);
+        }
+
+        /// 시뮬레이션 상태에 **매치 판정 비트를 얹어** 와이어로 만든다.
+        ///
+        /// 두 종류의 플래그가 한 바이트에 섞이는 자리가 여기다. `PlayerState.Flags` 는
+        /// 이동이 소유하고(`Alive`·`OnGround`·`Crouching`) 클라이언트도 예측하지만,
+        /// `matchFlags`(`Bleeding`·`Seeker`·`Escaped`·`Frozen`)는 서버만 안다.
+        ///
+        /// **매치 비트를 `PlayerState` 에 담지 않는 이유가 이 분리다.** 그 구조체는
+        /// 결정적 시뮬레이션 상태이고 `StateHash` 에 들어가는데, 클라이언트가 예측할 수
+        /// 없는 비트가 섞이면 리컨실리에이션의 해시 비교가 영구히 어긋난다. 합치는 것은
+        /// 인코딩 순간뿐이고, 그러면 이동 계산은 매치를 모른 채로 남는다.
+        public static EntityState ToEntityState(byte id, in PlayerState state, EntityFlags matchFlags)
+        {
             return new EntityState(
                 id,
                 Quantization.ToFixedPosition(state.Position.X),
@@ -24,8 +39,23 @@ namespace NV.Shared.Simulation
                 Quantization.ToFixedPosition(state.Position.Z),
                 Quantization.ToFixedYaw(state.Yaw),
                 Quantization.ToFixedPitch(state.Pitch),
-                state.Flags,
+                state.Flags | matchFlags,
                 state.Health);
+        }
+
+        /// 이동이 소유하는 비트만 남긴다.
+        ///
+        /// 클라이언트가 서버 스냅샷을 받아 예측 상태와 비교할 때 쓴다. 매치 비트를 빼지
+        /// 않으면 "서버가 보낸 몸" 과 "내가 예측한 몸" 이 항상 달라 보인다.
+        public static EntityFlags SimulationFlagsOf(EntityFlags flags)
+        {
+            return flags & (EntityFlags.Alive | EntityFlags.OnGround | EntityFlags.Crouching);
+        }
+
+        /// 매치 판정이 소유하는 비트만 남긴다.
+        public static EntityFlags MatchFlagsOf(EntityFlags flags)
+        {
+            return flags & (EntityFlags.Bleeding | EntityFlags.Seeker | EntityFlags.Escaped | EntityFlags.Frozen);
         }
 
         public static PlayerState ToPlayerState(in EntityState entity)
