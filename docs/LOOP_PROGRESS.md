@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 4)
-현재 이터레이션: 4
-기준 커밋: `9f70508`
+최종 갱신: 2026-08-04 (이터레이션 5)
+현재 이터레이션: 5
+기준 커밋: `1553dac`
 
 ## 이 루프가 실제로 하는 일
 
@@ -119,7 +119,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-002 | `MapData` 격자 스키마 + 해시 + `DeterministicSequence` | **DONE** | P0 | IG-001 | R-0.3 |
 | IG-003 | 클라이언트 격자 export (`MapExport`·`INetworkMapSource`) | **DONE** | P0 | IG-002 | R-0.3 |
 | IG-004 | 서버 `MapGrid` 질의 + 테스트 | **DONE** | P0 | IG-003 | R-0.3 |
-| IG-005 | `MatchConstants` 분리 (`Shared`) + `GameConfig` 프로퍼티 대체 | TODO | P1 | IG-004 | R-1.x 전반 |
+| IG-005 | `MatchConstants` 분리 (`Shared`) + `GameConfig` 프로퍼티 대체 | **DONE** | P1 | IG-004 | R-1.x 전반 |
 | IG-006 | 서버 매치 단계·시계 (`Match.cs`) | TODO | P1 | IG-005 | R-1.3, R-1.4, R-1.6 |
 | IG-007 | 승리 조건 판정 | **BLOCKED** | P1 | IG-006 | R-1.5, R-6.6 |
 | IG-008 | `MatchState` 전문 + 역할별 필터 + 프로토콜 3 | TODO | P1 | IG-006 | R-1.3~R-1.5, R-9.x |
@@ -362,19 +362,62 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
     명시적으로 허용한다. 단순 `(int)` 캐스팅은 음수를 0 쪽으로 절단해 격자 밖에서 셀이 밀린다.
 
 ### IG-005 — `MatchConstants` 분리
-- 상태: TODO
-- 계획: 상수를 세 갈래로 나눈다. `GameConfig` 의 공유 필드는 **삭제하고** `MatchConstants` 를
-  읽는 프로퍼티로 대체한다 — 두 벌을 남기면 서버가 480초로, 클라이언트 HUD 가 에셋의 옛 값으로
-  세는 상태가 된다.
+- 상태: **DONE** (이터레이션 5, 2026-08-04)
+- 변경 파일 (4개):
+  - `Shared/Simulation/MatchConstants.cs` (신규) — 규칙 수치 25개
+  - `NVproject/Assets/Scripts/Game/GameConfig.cs` — 공유 필드 25개를 `MatchConstants` 를 읽는
+    프로퍼티로 대체, 남는 필드를 성격별로 재분류
+  - `NVproject/Assets/Settings/GameConfig.asset` — Unity 재직렬화로 **40개 → 18개 필드**
+  - `tests/Modules.Tests/Simulation/MatchConstantsTests.cs` (신규, 11개)
+  - (+ `MatchConstants.cs.meta`)
+- 검증 (전부 실행함):
+
+  | 확인 | 수단 | 결과 |
+  |---|---|---|
+  | 서버 테스트 | `dotnet test` | ✅ **240개 통과**, 실패 0 (229 → 240, +11) |
+  | 서버 경고 0 | `dotnet build` | ✅ 오류 0개 |
+  | 클라이언트 컴파일 | `Assembly-CSharp` + `-Editor` | ✅ 둘 다 오류 0개 |
+  | 에셋 정리 | `grep` | ✅ 공유 키(`matchDuration`·`keysRequired`·`seekerMagazine`·`teleportSharedCooldown`·`freezeDuration`·`escapesToWin`) **0건** |
+  | **런타임 실측** | Play 모드에서 `MatchManager` 조회 | ✅ `phase=Playing`, `timeRemaining=478.1` (480 에서 감소 중), `keys=0/10`, `escapes=0/2`, `magazine=3`, `deviceCount=9`, `teleportCd=12` — 전부 프로퍼티 경로. `hitImmunity=0.75`, `xray=0.18` 은 필드 경로 |
+  | 회귀 — 해시 | 기동 로그 | ✅ `7996AF3A` / `27A9412D` 그대로 |
+
+- **런타임 실측이 이 태스크의 핵심 증거다.** 프로퍼티는 직렬화되지 않으므로 전환이 잘못되면
+  값이 조용히 0 이 되고, 증상은 "매치가 즉시 끝난다" 또는 "탄약이 없다" 다. 오프라인 매치가
+  실제로 `Playing` 까지 진행하고 시계가 480 에서 흐르는 것을 확인했다.
+- **계획서 표의 일부는 옮기지 않았다.** 계획은 `hitImmunity`·`deviceDestroyHits`·`dropKeysOnDeath`·
+  `teleportOnHit` 을 `RealtimeConstants.Match` 로 보내는 것이었는데, `RealtimeConstants` 는 서버
+  모듈의 `internal` 이고 **클라이언트가 아직 그 규칙들을 판정하고 있다**(`MatchManager.ReportHit`,
+  `MapDevice.OnHit`, `ScatterKeys`). 지금 옮기면 클라이언트가 자기가 쓰는 값을 읽을 수 없게 된다.
+  각 값은 해당 판정이 실제로 서버로 가는 태스크에서 함께 옮긴다 — `GameConfig` 의 헤더와 주석에
+  그 대응을 적어 두었다:
+
+  | 값 | 함께 옮길 태스크 |
+  |---|---|
+  | `dropKeysOnDeath`, `teleportOnHit`, `hitImmunity`, `deviceDestroyHits` | IG-014 (전투) |
+  | `seekerWinsOnWipe` | IG-007 (승리 조건, OQ-2 차단) |
+  | `seekerCanActivateDevices` | IG-013 (장치, OQ-1 차단) |
+  | `chainAnchorRange` | IG-016 (체인, OQ-4 차단) |
+
+  그래서 이 태스크는 `RealtimeConstants.Match` 를 **만들지 않았다.** 빈 클래스를 미리 두면
+  어디까지 옮겨졌는지 읽어서 알 수 없다.
+- 비고:
+  - **프로퍼티 이름을 소문자로 유지했다.** `config.matchDuration` 이 호출부에서 필드처럼 읽히므로
+    `MatchManager`·HUD·무기·장치의 호출부를 **한 줄도 고치지 않았다.** 이름을 C# 관례대로 바꾸면
+    수십 곳을 고쳐야 하고, 그 변경은 이 태스크의 목적(값의 출처를 하나로 모으기)과 무관한 위험이다.
+  - `KeyPickupHeight`(1.6m)와 탈출 층 허용치(2m)를 `MatchConstants` 에 넣지 않았다. 지금 클라이언트에
+    하드코딩되어 있어(`KeyPickup.Update`, `MatchManager.TickEscapes`) 값만 옮겨 적으면 **같은 수가
+    두 곳에 있는 상태**가 된다. 그 판정이 서버로 가는 IG-012 에서 함께 올린다.
+  - 에셋 정리를 YAML 손편집이 아니라 `EditorUtility.SetDirty` + `AssetDatabase.SaveAssets` 로 했다.
+    Unity 가 직렬화 가능한 필드만 남기므로 옛 줄이 정확히 사라지고, 손으로 지울 때의 실수가 없다.
+  - Play 모드가 `ProjectSettings/EditorBuildSettings.asset` 을 줄바꿈만 바꿔 저장했다(내용 diff 없음).
+    태스크와 무관하므로 되돌렸다.
 
   | 값 | 어디로 | 왜 |
   |---|---|---|
-  | `matchDuration`, `roleRevealDuration`, `keysRequired`, `escapesToWin`, `runnerHitsToDie`, `seekerMagazine`, `doorUseRadius`, `escapeHoldTime`, `keyPickupRadius`, `keyInsertInterval`, `deviceUseRadius`, 쿨다운 전부 | `Shared/Simulation/MatchConstants.cs` | 클라이언트가 HUD·프롬프트·쿨다운을 예측해야 한다. 디컴파일되어도 무해 |
-  | `hitImmunity`, `deviceDestroyHits`, 배치 간격(4m·5m), 장치 조합표, 사망 시 열쇠 처리 | `RealtimeConstants.Match` | 판정이지 표시가 아니다 |
-  | `bloodSpacing`, `bloodLifetime`, `xrayWallAlpha`, `showDoorCompass`, `practiceRunners`, `localRole` | `GameConfig.asset` 유지 | 순수 표현 또는 오프라인 연습 전용 |
-- 변경 예정 파일: `Shared/Simulation/MatchConstants.cs`, `Modules/Realtime/RealtimeConstants.cs`,
-  `NVproject/Assets/Scripts/Game/GameConfig.cs`
-- 검증: `dotnet test` + `dotnet build Assembly-CSharp.csproj`
+  | `matchDuration`, `roleRevealDuration`, `keysRequired`, `keysPlaced`, `carryLimit`, `escapesToWin`, `runnerHitsToDie`, `seekerMagazine`, `doorUseRadius`, `escapeHoldTime`, `keyPickupRadius`, `keyInsertInterval`, `deviceCount`, `deviceUseRadius`, 체인 4개, 장치 쿨다운·지속시간 6개 (총 25개) | `Shared/Simulation/MatchConstants.cs` ✅ | 클라이언트가 HUD·프롬프트·쿨다운을 예측해야 한다. 디컴파일되어도 무해 |
+  | `hitImmunity`, `deviceDestroyHits`, `dropKeysOnDeath`, `teleportOnHit` | `RealtimeConstants.Match` (아직 아님 → IG-014) | 판정이지 표시가 아니다. 다만 클라이언트가 지금도 그 판정을 하고 있어 옮길 수 없다 |
+  | `bloodSpacing`, `bloodLifetime`, `bleed*` 3개, `xrayWallAlpha`, `showDoorCompass`, `localRole`, `practiceRunners`, `practiceRunnerSpeed`, `placementSeed` | `GameConfig.asset` 유지 ✅ | 순수 표현 또는 오프라인 연습 전용 |
+  | `seekerWinsOnWipe`(OQ-2), `seekerCanActivateDevices`(OQ-1), `chainAnchorRange`(OQ-4) | `GameConfig.asset` 유지 | 규칙이 미해결이라 옮길 곳이 아직 정해지지 않았다 |
 
 ### IG-006 — 서버 매치 단계·시계
 - 상태: TODO
@@ -581,6 +624,8 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 | 2026-08-04 | (D-3) 격자 `Cells` 를 `byte[]` 로 두고 base64 로 직렬화 | System.Text.Json 의 기본 동작이라 서버 파싱 코드가 0줄이고, 2450셀이 한 줄에 들어간다. 숫자 배열이면 4배 넘게 커진다. `MapLoaderGridTests` 로 왕복을 실증했다 | — |
 | 2026-08-04 | (D-4) `Grid == null` 이면 맵 해시에 기여하지 않고, 있으면 반드시 포함한다 | 계획서는 "격자를 넣으면 export 를 다시 돌려야 한다" 고 했지만, 없을 때 0 을 섞으면 격자가 아직 없는 기존 파일 전부의 해시가 바뀌어 정보를 늘리지 않는 re-export 를 강요한다. 있으면 반드시 넣어야 하는 이유는 반대다 — 빼면 격자가 어긋난 채 해시가 일치하고, 이동 판정은 격자를 쓰지 않으므로 걸어 다니는 동안 아무 신호도 나지 않는다 | — |
 | 2026-08-04 | (D-5) `FreeFloor` 를 `Physics.CheckCapsule`(r 0.32) 대신 **서버 플레이어 박스**(`PlayerRadius` 0.4)와 서버 충돌 코드로 판정 | 계획서의 캡슐 방식은 두 가지로 틀렸다. 불가능하다 — export 는 지오메트리를 만들지 않는 경로로 돌고 물리 질의는 "아무것도 없음" 을 돌려주므로 모든 셀이 통과한다. 부정확하다 — 0.32 프로브는 0.4 박스가 밀려날 자리를 통과시킨다. 플래그의 뜻이 "서버가 여기 플레이어를 놓아도 밀려나지 않는다" 이므로 판정을 서버 기준으로 두는 것이 정의에 맞다. 계단은 스텝이 콜리전 박스로 export 되므로 그대로 걸러진다 | — |
+| 2026-08-04 | (D-7) `GameConfig` 의 공유 값을 **소문자 프로퍼티**로 노출한다 | `config.matchDuration` 이 호출부에서 필드처럼 읽히므로 `MatchManager`·HUD·무기·장치의 호출부를 한 줄도 고치지 않고 값의 출처만 옮길 수 있다. C# 관례대로 대문자로 바꾸면 수십 곳을 고쳐야 하고 그 변경은 이 태스크의 목적과 무관한 위험이다. 프로퍼티는 직렬화되지 않으므로 에셋이 옛 사본을 들고 있을 수도 없다 | — |
+| 2026-08-04 | (D-8) 판정 전용 값은 `RealtimeConstants.Match` 로 **지금 옮기지 않는다** | `RealtimeConstants` 는 서버 모듈의 `internal` 인데 클라이언트가 아직 그 규칙들을 판정한다(`ReportHit`, `MapDevice.OnHit`, `ScatterKeys`). 지금 옮기면 클라이언트가 자기가 쓰는 값을 읽을 수 없다. 각 값은 해당 판정이 서버로 가는 태스크에서 함께 옮기고, 빈 클래스를 미리 만들지 않는다 — 만들면 어디까지 옮겨졌는지 읽어서 알 수 없다 | — |
 | 2026-08-04 | (D-6) `test-room` 은 격자를 내놓지 않는다 | 계획서는 "방 하나이므로 전부 `FreeFloor`" 라고 했으나 그 맵에는 중앙 플랫폼과 커버 블록 4개가 있어 전부 채우면 블록 안이 걸을 수 있는 곳이 된다. 게다가 그 씬은 매치 규칙을 돌리지 않으므로 배치할 목표물이 없다. 없으면 해시에도 기여하지 않아 `test-room.json` 이 안정적으로 유지된다 | — |
 
 ## 가정 (ASSUMPTIONS)
@@ -610,25 +655,27 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-005 — `MatchConstants` 분리** (P1, IG-004 완료로 해제됨).
+**IG-006 — 서버 매치 단계·시계** (P1, IG-005 완료로 해제됨).
 
-**P0 네 개가 전부 끝났다.** 선행 차단 요소 3건이 닫히고 서버가 배치에 필요한 지형 지식을
-갖췄다 — 격자 2450셀, `FreeFloor` 574, 무작위·최근접 질의가 실제 맵에서 검산됨.
-
-여기까지는 **프로토콜과 클라이언트 동작을 건드리지 않았다.** 되돌리기 쉬운 구간이 끝나고,
-IG-005 부터 매치 규칙 이관이 시작된다.
+**이제 서버가 규칙 수치를 안다.** `MatchConstants` 가 양쪽에 컴파일되고 클라이언트의
+`GameConfig` 는 그것을 읽는 창이 됐다. IG-006 은 그 값으로 **서버가 매치를 진행**시킨다 —
+지금까지는 지형과 상수만 준비했고, 여기서 처음으로 판정이 서버로 넘어온다.
 
 BLOCKED 5건(IG-007, IG-013, IG-016, IG-017, IG-020)은 OQ-1·2·3·4·5·6 의 답을 기다린다.
-나머지 11개는 의존 순서대로 진행 가능하다.
+나머지 10개는 의존 순서대로 진행 가능하다.
 
-**IG-005 진행 시 주의**
+**IG-006 진행 시 주의**
 
-1. **`GameConfig` 의 공유 필드는 삭제하고 `MatchConstants` 를 읽는 프로퍼티로 대체한다.**
-   두 벌을 남기면 서버가 480초로, 클라이언트 HUD 가 에셋의 옛 값으로 세는 상태가 된다 —
-   증상은 "타이머가 서로 다르게 흐른다" 이고 원인을 찾기 어렵다.
-2. `GameConfig.asset` 은 **자기 사본을 들고 있다.** `.cs` 의 기본값을 바꿔도 에셋은 옛 값을
-   유지한다(`NVproject/CLAUDE.md`). 필드를 프로퍼티로 바꾸면 직렬화 대상에서 빠지므로 에셋의
-   해당 줄은 무시되지만, 에셋에서 그 줄을 지우는 것까지 확인해야 헷갈리지 않는다.
-3. 세 갈래 분류는 IG-005 상세의 표를 따른다. 애매하면 기준은 하나다 — **클라이언트가 그 값으로
-   무언가를 계산해 화면에 그려야 하는가.** 그렇다면 `Shared`, 판정만이면 `RealtimeConstants`.
-4. 이 태스크는 프로토콜을 바꾸지 않는다. `ProtocolInfo.Version` 은 IG-008 에서 3 이 된다.
+1. **`RoomPhase` 를 건드리지 않는다.** 룸 생애(Waiting/Playing/Ended)와 매치 진행
+   (RoleReveal/Playing/Ended)은 다른 축이고 `Room.Advance` 가 이미 `Playing` 에서만
+   시뮬레이션한다. 매치 단계는 `RoomPhase.Playing` **안의** 상태다.
+2. **리빌 중 정지는 단계 전이가 아니라 입력 무력화로 구현한다.** `InputValidator.Neutral` 과
+   같은 방식으로 이동 성분만 0 으로 만들고 시선은 남긴다 — `MatchManager.ApplyMovementLocks`
+   의 의도가 그렇고, 시선까지 잠그면 커서가 풀려 게임이 포커스를 잃은 것처럼 보인다.
+3. **시계는 고정 틱으로 센다.** `SimConstants.TickDelta` 만 쓰고 실제 경과 시간을 쓰지 않는다.
+4. **승리 조건은 IG-007 이다.** 이 태스크는 시간이 0 이 되면 단계만 `Ended` 로 옮기고 결과
+   코드는 채우지 않는다. OQ-2·OQ-6 이 풀리지 않은 상태에서 결과를 정하면 추측이 된다.
+5. 새 파일은 `Modules/Realtime/Simulation/Match.cs`(상태·전이)와 `MatchRules.cs`(판정)이고
+   둘 다 `internal` 이다(`structure.md` 8문 표 5·7번).
+6. 이 태스크는 아직 와이어를 바꾸지 않는다 — 서버가 매치를 진행시키지만 그것을 클라이언트에
+   알리는 전문은 IG-008 이다. 그래서 IG-006 만으로는 화면에 변화가 없고, 검증은 서버 테스트로 한다.
