@@ -27,7 +27,7 @@ namespace NV.Client.EditorTools
         /// 저장소 배치는 NHN_NVproject/{NVproject,NVserver} 다.
         private const string RelativeOutputDirectory = "../../NVserver/MapData";
 
-        [MenuItem("Tools/NV Network/Export Map Collision")]
+        [MenuItem("Tools/NV/Map/Export Map Collision", priority = 60)]
         public static void Export()
         {
             var map = MapExport.FindInScene();

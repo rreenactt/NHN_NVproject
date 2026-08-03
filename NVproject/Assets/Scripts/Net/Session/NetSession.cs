@@ -1,4 +1,5 @@
 using System;
+using NV.Client.Config;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using UnityEngine;
@@ -13,7 +14,7 @@ namespace NV.Client.Net.Session
     /// 적용하는 일만 남긴다.
     ///
     /// 이 클래스는 상태 기계와 흐름만 갖는다. 와이어는 `NetworkClient`, HTTP 는
-    /// `RoomApi`, 화면은 `LobbyController` 다. 그 경계를 넘기면 WebGL 에서만 나는
+    /// `RoomApi`, 화면은 `MainLobbyController` 다. 그 경계를 넘기면 WebGL 에서만 나는
     /// 버그가 세션 로직 안으로 들어온다.
     [DefaultExecutionOrder(-120)]
     public sealed class NetSession : MonoBehaviour
@@ -22,13 +23,6 @@ namespace NV.Client.Net.Session
         private static readonly float[] RetryDelays = { 0.5f, 1f, 2f, 4f };
 
         private static NetSession _instance;
-
-        [Header("Server")]
-        [Tooltip("host:port. 로컬 개발 서버는 dotnet run --project Api 의 5202 포트다.")]
-        public string host = "localhost:5202";
-
-        [Tooltip("배포 환경에서는 반드시 켠다. HTTPS 페이지의 ws:// 는 mixed content 로 차단된다.")]
-        public bool secure;
 
         [Tooltip("명단에 보일 이름. 비우면 '플레이어 N' 으로 표시된다.")]
         public string displayName = string.Empty;
@@ -71,6 +65,18 @@ namespace NV.Client.Net.Session
 
         /// <summary>씬에 세션이 있는지. 없을 때 만들지 않는다 — 오프라인 경로가 이것으로 갈린다.</summary>
         public static bool Exists => _instance != null || FindAnyObjectByType<NetSession>() != null;
+
+        /// <summary>지금 붙는 서버. `host:port`.</summary>
+        ///
+        /// 직렬화 필드가 아니다. 예전에는 인스펙터 필드였고, 그래서 접속 대상이 씬 파일
+        /// 안에 굽혀 있었다 — 이 프로젝트의 규칙대로 `.cs` 의 기본값을 고쳐도 저장된
+        /// 씬은 옛 주소를 유지하므로, 환경 애셋과 씬이 조용히 어긋날 수 있었다. 지금은
+        /// 부팅 때 <see cref="NVEnvironment"/> 에서 한 번 받고, 바꾸는 문은
+        /// <see cref="Configure"/> 하나다.
+        public string Host { get; private set; } = NVEnvironment.FallbackHost;
+
+        /// <summary>`wss` / `https` 를 쓰는가.</summary>
+        public bool Secure { get; private set; }
 
         public SessionState State { get; private set; } = SessionState.Idle;
 
@@ -116,6 +122,12 @@ namespace NV.Client.Net.Session
             _instance = this;
             DontDestroyOnLoad(gameObject);
 
+            // 이 빌드가 붙기로 되어 있는 서버. 로비가 저장된 프로필을 적용하면
+            // (`LobbyService.ApplyStoredProfile`) 허용된 환경에서만 그 값이 덮는다.
+            var environment = NVEnvironment.Active;
+            Host = environment.Host;
+            Secure = environment.Secure;
+
             Client = GetComponent<NetworkClient>();
             if (Client == null)
             {
@@ -142,13 +154,46 @@ namespace NV.Client.Net.Session
             }
         }
 
+        /// <summary>지금 서버 주소와 이름을 바꿀 수 있는가.</summary>
+        public bool CanConfigure => State == SessionState.Idle;
+
         // ==================================================== 사용자 행위
+
+        /// 서버 주소와 표시 이름을 바꾼다.
+        ///
+        /// `Idle` 일 때만 받는다. 접속 중에 주소를 바꾸면 자동 재시도(0.5·1·2·4초)가
+        /// 방이 있는 서버가 아니라 새 주소를 두드리고, 그 실패는 화면에서 "방이
+        /// 사라졌다" 로 보인다 — 원인이 설정 변경이라는 단서가 아무 데도 남지 않는다.
+        ///
+        /// 인스펙터 필드를 직접 쓰지 않고 이 문을 통하게 하는 이유가 그 판정 한 줄이다.
+        public bool Configure(string newHost, bool newSecure, string newDisplayName)
+        {
+            if (!CanConfigure)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(newHost))
+            {
+                Host = newHost.Trim();
+            }
+
+            Secure = newSecure;
+            displayName = (newDisplayName ?? string.Empty).Trim();
+
+            StateChanged?.Invoke();
+            return true;
+        }
 
         /// 방을 만들고 바로 들어간다.
         ///
         /// 만든 직후에는 조회하지 않는다. 방금 받은 응답이 그 방의 상태이고,
         /// 한 번 더 물어보면 왕복 하나가 늘어난다.
-        public void CreateAndJoin(string mapId)
+        /// <param name="isPublic">
+        /// 공개 목록에 실을 것인가. 기본은 비공개다 — 노출은 만든 사람이 선택했을 때만
+        /// 일어나야 하고, 인자를 생략한 호출이 방을 공개해 버리면 그 선택이 무의미해진다.
+        /// </param>
+        public void CreateAndJoin(string mapId, bool isPublic = false)
         {
             if (Busy())
             {
@@ -158,8 +203,8 @@ namespace NV.Client.Net.Session
             ClearFailure();
             SetState(SessionState.Creating);
 
-            _api = new RoomApi(host, secure);
-            _pending = StartCoroutine(_api.Create(mapId, OnCreated));
+            _api = new RoomApi(Host, Secure);
+            _pending = StartCoroutine(_api.Create(mapId, isPublic, OnCreated));
         }
 
         /// 코드로 참가한다. 형식은 보내기 전에 여기서 거른다.
@@ -184,6 +229,64 @@ namespace NV.Client.Net.Session
             HostToken = string.Empty;
 
             BeginResolve();
+        }
+
+        /// 서버가 알려 준 방에 참가한다(목록에서 고른 방, 빠른 참가).
+        ///
+        /// `JoinByCode` 와 갈라 놓은 이유는 **초대 코드 형식 검사 때문이다.** 그 검사는
+        /// 사람이 받아 적은 코드의 오타를 요청 전에 잡으려고 있다. 그런데 서버가 목록으로
+        /// 내려준 방 id 는 오타일 수 없고, 그중 정적 개발 룸(`test`)은 4자라 **초대 코드
+        /// 형식을 만족하지 않는다** — 서버는 `Game:StaticRooms` 의 id 를 코드 규칙으로
+        /// 검사하지 않기 때문이다.
+        ///
+        /// 그래서 같은 문으로 보내면 목록에 보이는 방을 눌러도 `InvalidCode` 로 거부된다.
+        /// 그 증상은 "개발용 방에만 못 들어간다" 로 나타나 원인을 찾기 어렵다.
+        ///
+        /// 검사를 없애지는 않는다. 서버의 룸 id 규칙(소문자·숫자·하이픈, 32자)을 그대로
+        /// 본다 — 목록 응답이 망가졌을 때 그것을 그대로 URL 에 실어 보내지 않기 위한 것이다.
+        public void JoinRoomId(string roomId)
+        {
+            if (Busy())
+            {
+                return;
+            }
+
+            var id = (roomId ?? string.Empty).Trim().ToLowerInvariant();
+
+            if (!IsValidRoomId(id))
+            {
+                Fail(SessionFailureKind.InvalidCode);
+                return;
+            }
+
+            Code = id;
+            HostToken = string.Empty;
+
+            BeginResolve();
+        }
+
+        /// 서버의 `RoomRegistry.IsValidRoomId` 와 같은 규칙.
+        ///
+        /// 초대 코드 규칙(`InviteCodeFormat`)보다 넓다. 룸 id 는 초대 코드일 수도 있고
+        /// 설정으로 열어 둔 정적 룸 id 일 수도 있으며, 후자는 코드 알파벳을 만족하지 않는다.
+        private static bool IsValidRoomId(string id)
+        {
+            if (string.IsNullOrEmpty(id) || id.Length > 32)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < id.Length; index++)
+            {
+                var c = id[index];
+
+                if ((c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-')
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// 방장으로서 매치 시작을 요청한다. 자격과 인원은 서버가 다시 본다.
@@ -270,7 +373,7 @@ namespace NV.Client.Net.Session
             ClearFailure();
             SetState(SessionState.Resolving);
 
-            _api = new RoomApi(host, secure);
+            _api = new RoomApi(Host, Secure);
             _pending = StartCoroutine(_api.Probe(Code, OnProbed));
         }
 
@@ -295,7 +398,8 @@ namespace NV.Client.Net.Session
                 0,
                 result.Capacity,
                 RoomStateHeader.NoPlayer,
-                result.MinPlayers);
+                result.MinPlayers,
+                result.IsPublic);
 
             Connect();
         }
@@ -324,7 +428,7 @@ namespace NV.Client.Net.Session
         private void Connect()
         {
             SetState(SessionState.Connecting);
-            Client.Connect(host, Code, secure, interpolationDelay, HostToken, displayName);
+            Client.Connect(Host, Code, Secure, interpolationDelay, HostToken, displayName);
         }
 
         private void Update()

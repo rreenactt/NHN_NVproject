@@ -5,7 +5,7 @@ namespace NV.Client.Net.Session
 {
     /// 세션 단계에 따라 씬을 오간다. 세션 오브젝트에 붙어 씬보다 오래 산다.
     ///
-    /// 로비에서 들어온 경우에만 존재한다(`LobbyController` 가 붙인다). 개발용 씬에서
+    /// 로비에서 들어온 경우에만 존재한다(`MainLobbyController` 가 붙인다). 개발용 씬에서
     /// 바로 시작한 경우에는 돌아갈 로비가 없으므로 이 컴포넌트도 없다 — 있으면
     /// MultiplayerTest 를 열자마자 대기 상태를 보고 로비로 튕겨 버린다.
     ///
@@ -14,7 +14,12 @@ namespace NV.Client.Net.Session
     public sealed class SessionSceneRouter : MonoBehaviour
     {
         /// 로비 씬 이름. 매치가 끝나거나 나가면 여기로 돌아온다.
-        public const string LobbyScene = "Lobby";
+        ///
+        /// `SceneManager.LoadScene` 이 이름으로 찾으므로 이 씬은 **Build Settings 에
+        /// 등록되어 있어야 한다.** 등록을 빠뜨리면 에디터 플레이 중에도 복귀가 실패하고,
+        /// 증상은 매치가 끝난 뒤 아무 일도 일어나지 않는 것으로만 나타난다.
+        /// `Tools ▸ NV ▸ Scene ▸ Create Main Lobby Scene` 이 등록까지 한다.
+        public const string LobbyScene = "MainLobby";
 
         /// 맵 이름 → 씬 이름.
         ///

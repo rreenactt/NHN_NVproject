@@ -8,7 +8,7 @@ namespace NV.Client.EditorTools
 {
     /// 멀티플레이 확인용 씬을 만든다.
     ///
-    /// **Tools ▸ NV Network ▸ Create Multiplayer Test Scene**
+    /// **Tools ▸ NV ▸ Scene ▸ Create Multiplayer Test Scene**
     ///
     /// SampleScene 을 고치지 않고 별도 씬으로 둔다. Backrooms 는 게임이고, 이 씬은
     /// 계측 도구다 — 안개를 걷고, 방을 40m 로 줄이고, 스폰을 링 위에 두어 접속하는 즉시
@@ -25,7 +25,7 @@ namespace NV.Client.EditorTools
     {
         private const string ScenePath = "Assets/Scenes/MultiplayerTest.unity";
 
-        [MenuItem("Tools/NV Network/Create Multiplayer Test Scene")]
+        [MenuItem("Tools/NV/Scene/Create Multiplayer Test Scene", priority = 41)]
         public static void Create()
         {
             if (File.Exists(ScenePath)
@@ -60,7 +60,7 @@ namespace NV.Client.EditorTools
 
             Debug.Log(
                 $"[NV] {ScenePath} 를 만들었다.\n" +
-                "1. Tools ▸ NV Network ▸ Export Map Collision 으로 test-room.json 을 내보낸다.\n" +
+                "1. Tools ▸ NV ▸ Map ▸ Export Map Collision 으로 test-room.json 을 내보낸다.\n" +
                 "2. NVserver/Api/appsettings.Development.json 의 Game:MapPath 를 " +
                 "../MapData/test-room.json 으로 바꾼다.\n" +
                 "3. dotnet run --project Api 로 서버를 띄우고 이 씬에서 Play.\n" +

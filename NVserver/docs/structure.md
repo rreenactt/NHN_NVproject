@@ -129,8 +129,8 @@ NHN_NVproject/
 | `Assets/Scripts/Net/SnapshotBuffer.cs` | 100ms 보간 버퍼 |
 | `Assets/Scripts/Net/RemotePlayerPuppet.cs` | 원격 플레이어 몸. 로컬과 같은 리그·같은 애니메이터를 쓴다 |
 | `Assets/Scripts/Net/BackroomsCollision.cs` | 레벨 생성기 → `MapData`. export 와 런타임 해시가 같은 함수를 쓴다 |
-| `Assets/Editor/MapCollisionExporter.cs` | **Tools ▸ NV Network ▸ Export Map Collision** → `MapData/backrooms.json` |
-| `Assets/Editor/NetworkSetup.cs` | **Tools ▸ NV Network ▸ Setup Networking** |
+| `Assets/Editor/Map/MapCollisionExporter.cs` | **Tools ▸ NV ▸ Map ▸ Export Map Collision** → `MapData/backrooms.json` |
+| `Assets/Editor/BuildManager/*` | **Tools ▸ NV ▸ Build…** / **Environment ▸ …** — 플랫폼·씬·환경을 골라 빌드한다 |
 
 Unity 는 로컬 패키지로 참조한 `Shared/` 안에도 `.meta` 를 만든다. 그 파일들은 커밋한다 — ignore 하면 클론마다 GUID 가 새로 생기고, 나중에 `Shared.asmdef` 를 GUID 로 참조하는 어셈블리가 생겼을 때 참조가 끊어진다. `Shared/` 에 이미 `Shared.asmdef` 와 `package.json` 이 커밋되어 있으므로 같은 취급이다.
 

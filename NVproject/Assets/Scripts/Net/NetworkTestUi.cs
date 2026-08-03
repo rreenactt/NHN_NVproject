@@ -1,4 +1,5 @@
 using System.Text;
+using NV.Client.Config;
 using NV.Client.Net.Session;
 using NV.Shared.Contracts.Messages;
 using UnityEngine;
@@ -6,7 +7,7 @@ using UnityEngine.InputSystem;
 
 namespace NV.Client.Net
 {
-    /// 계측 도구. 제품 UI 는 로비 씬의 `LobbyController` 다.
+    /// 계측 도구. 제품 UI 는 메인 로비 씬의 `MainLobbyController` 다.
     ///
     /// IMGUI 로 그린다. 이 프로젝트는 씬에 아무것도 authoring 하지 않는 쪽을 택했고 —
     /// 몸도 레벨도 코드가 만든다 — 이건 게임 화면이 아니라 개발용 계기판이다.
@@ -35,7 +36,10 @@ namespace NV.Client.Net
         public int hudWidth = 320;
 
         private NetworkBootstrap _bootstrap;
-        private string _host = "localhost:5202";
+
+        /// 이 계측 패널이 두드릴 주소. `Awake` 에서 환경의 값을 받고 여기서 손으로 고친다.
+        private string _host = NVEnvironment.FallbackHost;
+
         private string _name = string.Empty;
 
         /// 설정으로 열어 둔 개발 룸. 코드를 발급받지 않고 바로 붙는다.
@@ -49,6 +53,7 @@ namespace NV.Client.Net
         private void Awake()
         {
             _bootstrap = GetComponent<NetworkBootstrap>();
+            _host = NVEnvironment.Active.Host;
         }
 
         private void Start()
@@ -197,7 +202,11 @@ namespace NV.Client.Net
             {
                 if (GUILayout.Button("참가", GUILayout.Height(26f)))
                 {
-                    Configure().JoinByCode(_code.Trim());
+                    // `JoinByCode` 가 아니다. 그쪽은 초대 코드 형식(6자 이상)을 요구하는데
+                    // 이 계기판이 붙는 정적 개발 룸은 `test` 4자다 — 형식 검사에 걸려
+                    // `InvalidCode` 로 거부된다. `JoinRoomId` 는 서버의 룸 id 규칙만 보므로
+                    // 정적 룸 id 와 초대 코드를 둘 다 받는다.
+                    Configure().JoinRoomId(_code.Trim());
                 }
 
                 if (GUILayout.Button("방 만들기", GUILayout.Height(26f)))
@@ -246,8 +255,11 @@ namespace NV.Client.Net
         private NetSession Configure()
         {
             var session = NetSession.Current;
-            session.host = _host.Trim();
-            session.displayName = _name.Trim();
+
+            // 필드에 직접 쓰지 않고 이 문을 통한다. 세션은 `Idle` 이 아닐 때 거부하며,
+            // 그 판정이 접속 중에 주소가 바뀌어 자동 재시도가 엉뚱한 서버를 두드리는
+            // 것을 막는다. 계측 패널이라고 예외를 두면 그 함정만 여기 남는다.
+            session.Configure(_host.Trim(), NVEnvironment.Active.Secure, _name.Trim());
             return session;
         }
 

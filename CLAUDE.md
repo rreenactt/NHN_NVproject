@@ -45,11 +45,16 @@ Editor menus are the entry points:
 
 | Menu | Does |
 |---|---|
-| **Tools ▸ NV Network ▸ Export Map Collision** | Writes the current scene's level to `NVserver/MapData/{map}.json` |
-| **Tools ▸ NV Network ▸ Build and Launch 2 Clients** | Windows standalone + editor, the fast path to two players |
-| **Tools ▸ NV Network ▸ Create Multiplayer Test Scene** / **Setup Networking** | Regenerates `Assets/Scenes/MultiplayerTest.unity`; wires networking into a scene |
+| **Tools ▸ NV ▸ Build and Launch 2 Clients** | Windows standalone ×2, the fast path to two players. Builds the **Build Settings scene list as-is**, so the players open on `MainLobby` exactly like the real product. Always Windows and always two, whatever the Build Manager's current selection says |
+| **Tools ▸ NV ▸ Build (current selection)** / **Launch Clients (no build)** | Builds whatever platform + environment is currently selected; or just relaunches the last build |
+| **Tools ▸ NV ▸ Environment ▸ Switch / Show Current** | Which server this build (and editor Play) points at. Cycles the assets in `Assets/Settings/Environments/`; `Show` logs the active one |
+| **Tools ▸ NV ▸ Scene ▸ Create Main Lobby Scene** | Generates `Assets/Scenes/MainLobby.unity` — the product entry screen — and puts it at **Build Settings index 0**. Regenerating re-asserts that slot, so the entry scene cannot quietly drift back to `SampleScene` |
+| **Tools ▸ NV ▸ Scene ▸ Create Multiplayer Test Scene** | Regenerates `Assets/Scenes/MultiplayerTest.unity` |
+| **Tools ▸ NV ▸ Map ▸ Export Map Collision** | Writes the current scene's level to `NVserver/MapData/{map}.json` |
 | **Tools ▸ Block Player ▸ Build Block Player** | Rebuilds the player rig from scratch |
 | **Tools ▸ Backrooms ▸ Set Up Match** / **Create Game Config Asset** | Match layer scene object and `Assets/Settings/GameConfig.asset` |
+
+**Which server the client talks to is an asset, not a constant.** `Assets/Settings/Environments/*.asset` (`NVEnvironment`) owns the host, the `wss`/`https` flag, whether the lobby's settings popup may override the address, and whether the match debug keys are allowed. A build bakes the selected one into `Assets/Resources/NVEnvironment.asset` (gitignored — it is a build output); the editor's Play mode reads the same selection out of `EditorPrefs` instead. `PlayerPrefs` keys are namespaced per environment (`nv.{id}.lobby.host`), because they survive a reinstall and a single key means a machine that once talked to `localhost` keeps pointing there after you install a build for a real server — a failure that shows up only as "server unreachable". A build whose environment names a remote host with `secure` off is **refused**: an HTTPS page cannot open `ws://`, and that failure never reproduces locally.
 
 The client's skills (`fps-*`, `unity-mcp-ops`, `game-rules`, …) live in `NVproject/.claude/skills/`, so **a session started at the repo root does not load them** — work Unity tasks from `NVproject/` if you want them.
 
@@ -57,7 +62,7 @@ The client's skills (`fps-*`, `unity-mcp-ops`, `game-rules`, …) live in `NVpro
 
 1. `dotnet run --project Api` — no config edit needed, both maps are registered
 2. Either path:
-   - **Lobby (product flow)** — open `Assets/Scenes/Lobby.unity`, Play, **방 만들기**, hand the code to the second client, host presses **게임 시작**. `SessionSceneRouter` loads the scene that matches the room's map.
+   - **Main lobby (product flow)** — open `Assets/Scenes/MainLobby.unity` (generate it first with **Tools ▸ NV ▸ Scene ▸ Create Main Lobby Scene**), Play, **방 만들기**, hand the code to the second client, host presses **게임 시작**. `SessionSceneRouter` loads the scene that matches the room's map. The active-room list, quick join and the online headcount all ride on `GET /rooms`, which returns **only rooms created as public** — the create-room popup defaults to private, so an untouched room is reachable by invite code alone. Visibility is fixed at creation and `POST /rooms` treats a missing `isPublic` as private, so exposure is always a choice.
    - **Dev dashboard (fast)** — open `Assets/Scenes/MultiplayerTest.unity`, Play, join room `test` (the pre-opened static room) in the panel.
 3. Second client via **Build and Launch 2 Clients**
 

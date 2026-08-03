@@ -362,7 +362,7 @@ namespace NV.Client.Net
             Debug.LogError(
                 $"[NV] 맵 해시 불일치. {detail}. " +
                 "룸의 맵에 맞는 씬을 열었는지, 씨드를 바꾼 뒤 " +
-                "Tools ▸ NV Network ▸ Export Map Collision 을 돌렸는지 확인한다.");
+                "Tools ▸ NV ▸ Map ▸ Export Map Collision 을 돌렸는지 확인한다.");
 
             if (NetSession.Exists)
             {

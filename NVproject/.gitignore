@@ -20,3 +20,9 @@
 
 .DS_Store
 Thumbs.db
+
+# 빌드가 구워 넣는 환경 사본. 정본은 Assets/Settings/Environments/*.asset 이고 그쪽은
+# 커밋한다. 이 사본까지 커밋하면 마지막으로 빌드한 사람의 환경이 남의 에디터 기본값이
+# 되고, 그 사실은 접속해 봐야 보인다.
+/Assets/Resources/NVEnvironment.asset
+/Assets/Resources/NVEnvironment.asset.meta

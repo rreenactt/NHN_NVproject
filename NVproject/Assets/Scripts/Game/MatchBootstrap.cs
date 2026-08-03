@@ -161,7 +161,11 @@ namespace NV.Game
 
         private void Update()
         {
-            if (!debugKeys) return;
+            // Two gates, and both have to hold. `debugKeys` is the scene's own switch;
+            // the environment's is what a shipped build turns off, so nobody has to
+            // remember to clear the field before making one. MatchSync also clears it
+            // whenever a session exists — a networked start owns the seed and the seeker.
+            if (!debugKeys || !NV.Client.Config.NVEnvironment.Active.AllowDebugKeys) return;
 
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null) return;
