@@ -31,6 +31,12 @@ namespace NV.Api.Composition
         /// Tools ▸ NV Network ▸ Export Map Collision 이 이 파일을 만든다.
         private const string DefaultMapPath = "../MapData/backrooms.json";
 
+        /// 브라우저에서 방 만들기·조회를 호출할 수 있게 하는 정책 이름.
+        public const string CorsPolicy = "nv-web";
+
+        /// 허용 오리진 목록. 비어 있으면 전부 허용한다(개발).
+        private const string AllowedOriginsKey = "Cors:AllowedOrigins";
+
         public static IServiceCollection AddModules(this IServiceCollection services, IConfiguration configuration)
         {
             // 맵 로드는 파일 IO 다. 컴포지션 루트가 하고 결과만 넘긴다.
@@ -42,7 +48,33 @@ namespace NV.Api.Composition
                 .GetSection(RealtimeOptions.SectionName)
                 .Bind(options));
 
+            services.AddCors(cors => cors.AddPolicy(CorsPolicy, policy =>
+            {
+                var origins = ReadAllowedOrigins(configuration);
+
+                if (origins.Length == 0)
+                {
+                    policy.AllowAnyOrigin();
+                }
+                else
+                {
+                    policy.WithOrigins(origins);
+                }
+
+                policy.AllowAnyHeader().WithMethods("GET", "POST");
+            }));
+
             return services;
+        }
+
+        /// WebGL 빌드는 브라우저 XHR 로 방 만들기·조회를 호출하므로 CORS 가 필요하다.
+        ///
+        /// WebSocket 은 CORS 적용 대상이 아니라서 지금까지 이 문제가 드러나지 않았다.
+        /// HTTP 조회가 들어오는 순간 처음 나타나고, 증상은 콘솔의 CORS 오류 한 줄과
+        /// 빈 응답이라 서버 쪽을 의심하기 어렵다.
+        public static string[] ReadAllowedOrigins(IConfiguration configuration)
+        {
+            return configuration.GetSection(AllowedOriginsKey).Get<string[]>() ?? Array.Empty<string>();
         }
 
         public static WebApplication MapModules(this WebApplication app)

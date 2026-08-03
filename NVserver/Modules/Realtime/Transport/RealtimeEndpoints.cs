@@ -5,7 +5,10 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
+using NV.Infrastructure.Json;
+using NV.Realtime.Contracts;
 using NV.Realtime.Simulation;
+using NV.Shared.Contracts;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
@@ -19,6 +22,156 @@ namespace NV.Realtime.Transport
         public static void Map(IEndpointRouteBuilder endpoints)
         {
             endpoints.Map("/ws", HandleAsync);
+
+            endpoints.MapPost("/rooms", CreateRoom);
+            endpoints.MapGet("/rooms/{code}", GetRoom);
+            endpoints.MapGet("/rooms", ListRooms);
+        }
+
+        /// 방을 만든다. 코드와 방장 토큰을 돌려준다.
+        ///
+        /// 룸 생성은 레지스트리 수준이라 HTTP 스레드에서 해도 된다. 룸 *상태* 를 바꾸는
+        /// 것과 다르다 — 그쪽은 틱 루프가 소유하므로 `RoomCommand` 를 거친다.
+        private static IResult CreateRoom(CreateRoomRequest? request, RoomRegistry rooms, RoomMaps maps)
+        {
+            var mapId = string.IsNullOrWhiteSpace(request?.Map) ? RoomMaps.DefaultMapId : request!.Map!.Trim();
+
+            if (!rooms.TryCreate(mapId, out var code, out var hostToken, out var error))
+            {
+                return error switch
+                {
+                    RoomCreateError.UnknownMap => Results.Json(
+                        new ErrorResponse("unknownMap"),
+                        JsonDefaults.Options,
+                        statusCode: (int)HttpStatusCode.BadRequest),
+
+                    _ => Results.Json(
+                        new ErrorResponse("roomLimit"),
+                        JsonDefaults.Options,
+                        statusCode: (int)HttpStatusCode.ServiceUnavailable),
+                };
+            }
+
+            var map = maps.ByMapId(mapId)!;
+
+            return Results.Json(
+                new CreateRoomResponse
+                {
+                    Code = code,
+                    HostToken = hostToken,
+                    Map = mapId,
+                    MapName = map.Name,
+                    MapHash = map.Hash,
+                    Capacity = RealtimeConstants.Rooms.MaxPlayers,
+                    MinPlayers = RealtimeConstants.Rooms.MinPlayersToStart,
+                },
+                JsonDefaults.Options,
+                statusCode: (int)HttpStatusCode.Created);
+        }
+
+        /// 참가 전 조회. 상태코드가 접속 가능 여부를, 본문이 현재 상태를 답한다.
+        ///
+        /// 이 엔드포인트가 있는 이유는 브라우저다. WebSocket 핸드셰이크가 거부되면
+        /// 브라우저는 닫힘 코드 1006 하나만 JS 에 주고, 그러면 서버 미기동·버전
+        /// 불일치·없는 방·정원 초과가 화면에서 전부 같은 모습이 된다. 여기서 미리
+        /// 갈라낸다.
+        ///
+        /// 판정은 아니다. `/ws` 가 같은 검사를 다시 하며, 이 응답과 실제 접속 사이에
+        /// 정원이 찰 수 있다.
+        private static IResult GetRoom(string code, HttpRequest request, RoomRegistry rooms)
+        {
+            if (!TryReadVersion(request.Query, out var version) || version != ProtocolInfo.Version)
+            {
+                return Results.Json(
+                    new ErrorResponse("versionMismatch"),
+                    JsonDefaults.Options,
+                    statusCode: (int)HttpStatusCode.UpgradeRequired);
+            }
+
+            var normalized = InviteCodeFormat.Normalize(code);
+
+            // 룸 id 규칙으로 검사한다. 초대 코드 형식(`InviteCodeFormat`)이 아니다.
+            // 정적 룸 id 는 코드 형식을 만족하지 않으므로(`test` 는 4자다) 여기서
+            // 코드 형식을 요구하면 그 룸들을 조회할 수 없다.
+            //
+            // 그래서 코드 오타 중 일부 — 길이가 맞고 제외된 문자만 섞인 경우 —
+            // 는 여기서 404 로 온다. 그 구분은 클라이언트가 입력 칸에서 하며,
+            // 같은 판단을 서버에도 두면 정적 룸 id 에 쓸 수 있는 글자가 조용히 줄어든다.
+            if (!RoomRegistry.IsValidRoomId(normalized))
+            {
+                return Results.Json(
+                    new ErrorResponse("invalidCode"),
+                    JsonDefaults.Options,
+                    statusCode: (int)HttpStatusCode.BadRequest);
+            }
+
+            if (!rooms.TryGetRoom(normalized, out var summary))
+            {
+                // 없는 코드와 만료된 코드를 구분하지 않는다. 서버는 만료된 룸의 흔적을
+                // 남기지 않으며, 남기면 어떤 코드가 존재했는지 알려 주는 창구가 된다.
+                return Results.Json(
+                    new ErrorResponse("unknownCode"),
+                    JsonDefaults.Options,
+                    statusCode: (int)HttpStatusCode.NotFound);
+            }
+
+            var body = new RoomInfoResponse
+            {
+                Code = summary.RoomId,
+                MapName = summary.MapName,
+                MapHash = summary.MapHash,
+                Phase = (byte)summary.Phase,
+                PlayerCount = summary.PlayerCount,
+                Capacity = summary.Capacity,
+                HostPlayerId = summary.HostPlayerId,
+                MinPlayers = RealtimeConstants.Rooms.MinPlayersToStart,
+            };
+
+            if (summary.Phase != RoomPhase.Waiting)
+            {
+                return Results.Json(body, JsonDefaults.Options, statusCode: (int)HttpStatusCode.Conflict);
+            }
+
+            if (summary.IsFull)
+            {
+                return Results.Json(body, JsonDefaults.Options, statusCode: (int)HttpStatusCode.ServiceUnavailable);
+            }
+
+            return Results.Json(body, JsonDefaults.Options);
+        }
+
+        /// 열려 있는 룸 목록. 개발 설정에서만 응답한다.
+        ///
+        /// 초대 코드 모델에서 공개 목록은 기능이 아니라 결함이다. 코드를 아는 사람만
+        /// 들어올 수 있다는 전제가 목록 하나로 사라진다. 서버 상태를 눈으로 볼 수단은
+        /// 개발 중에 필요하므로 설정 뒤에 둔다.
+        private static IResult ListRooms(RoomRegistry rooms, RealtimeOptions options)
+        {
+            if (!options.AllowRoomListing)
+            {
+                return Results.NotFound();
+            }
+
+            var summaries = rooms.ListRooms();
+            var body = new RoomInfoResponse[summaries.Count];
+
+            for (var index = 0; index < summaries.Count; index++)
+            {
+                var summary = summaries[index];
+                body[index] = new RoomInfoResponse
+                {
+                    Code = summary.RoomId,
+                    MapName = summary.MapName,
+                    MapHash = summary.MapHash,
+                    Phase = (byte)summary.Phase,
+                    PlayerCount = summary.PlayerCount,
+                    Capacity = summary.Capacity,
+                    HostPlayerId = summary.HostPlayerId,
+                    MinPlayers = RealtimeConstants.Rooms.MinPlayersToStart,
+                };
+            }
+
+            return Results.Json(body, JsonDefaults.Options);
         }
 
         private static async Task HandleAsync(
