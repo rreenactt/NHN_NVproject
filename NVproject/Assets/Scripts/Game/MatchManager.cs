@@ -325,6 +325,11 @@ namespace NV.Game
         /// </summary>
         private void TickEscapes()
         {
+            // Networked, the server holds the doorway timer in fixed ticks and tells everyone who
+            // got out (IG-012c1/c2). Two clients counting their own hold disagree about the exact
+            // moment, and the moment is the whole point — it is what the Seeker can interrupt.
+            if (ServerOwnsObjectives) return;
+
             if (_door == null || !_door.IsOpen) return;
 
             float radius = config.doorUseRadius;
@@ -592,6 +597,36 @@ namespace NV.Game
 
             _door.Open();
             Notify("THE DOOR IS OPEN");
+        }
+
+        /// <summary>
+        /// The server's escape count. **Both roles receive the real number** — unlike the key
+        /// progress, this one is not filtered: it is what the Seeker has to stop.
+        /// </summary>
+        public void AcceptEscapes(int escapes)
+        {
+            int clamped = Mathf.Max(0, escapes);
+            if (clamped == Escapes) return;
+
+            Escapes = clamped;
+            EscapesChanged?.Invoke(Escapes, config.escapesToWin);
+        }
+
+        /// <summary>
+        /// This agent got out. The server decided it; here it only takes effect on the body.
+        ///
+        /// **The notification carries no count.** It arrives from the snapshot, which runs at the
+        /// tick rate, while <see cref="AcceptEscapes"/> arrives on the 2 Hz bulletin — so at this
+        /// moment the count is up to half a second behind and would read "0/2" for a Runner who
+        /// just left. The HUD's escape counter shows the authoritative number; a transient message
+        /// does not need to duplicate it badly.
+        /// </summary>
+        public void AcceptEscaped(PlayerAgent agent)
+        {
+            if (agent == null || agent.Escaped) return;
+
+            agent.MarkEscaped();
+            Notify($"{agent.displayName} ESCAPED");
         }
 
         /// <summary>

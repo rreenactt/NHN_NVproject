@@ -146,18 +146,20 @@ namespace NV.Client.Net.Session
                 state.KeysInserted,
                 _client.ObjectiveDoorOpen);
 
-            ApplyCarriedKeys();
+            // 탈출 수는 역할과 무관하게 실제 값이 온다 — Seeker 가 막아야 하는 수다.
+            MatchManager.Instance.AcceptEscapes(state.Escapes);
+
+            ApplyParticipants();
         }
 
-        /// 누가 열쇠를 몇 개 들고 있는지 서버에서 받는다(IG-012a).
+        /// 참가자별 상태를 몸에 적용한다 — 소지 열쇠(IG-012a)와 탈출(IG-012c2).
         ///
-        /// 명단 전체를 훑는다. 로컬만 적용하면 남이 든 열쇠 수가 이 클라이언트에서 영원히
-        /// 0 이고, 그 값은 죽은 Runner 가 열쇠를 흘리는 판정(IG-014)이 서버로 오기 전까지
-        /// 화면에는 안 나와도 `EscapeDoor` 의 프롬프트가 읽는다.
+        /// 명단 전체를 훑는다. 로컬만 적용하면 남이 든 열쇠 수와 남의 탈출이 이 클라이언트에서
+        /// 영원히 반영되지 않는다.
         ///
         /// 몸이 아직 없는 참가자는 건너뛴다. 원격 몸은 첫 스냅샷이 와야 생기므로 전문이
         /// 먼저 도착하는 것이 정상이고, 다음 전문이 0.5초 뒤에 같은 값을 다시 싣고 온다.
-        private void ApplyCarriedKeys()
+        private void ApplyParticipants()
         {
             var count = _client.ParticipantCount;
 
@@ -166,10 +168,38 @@ namespace NV.Client.Net.Session
                 var participant = _client.MatchParticipantAt(index);
                 var agent = FindAgent(participant.PlayerId);
 
-                if (agent != null)
+                if (agent == null)
                 {
-                    MatchManager.Instance.AcceptCarriedKeys(agent, participant.CarriedKeys);
+                    continue;
                 }
+
+                MatchManager.Instance.AcceptCarriedKeys(agent, participant.CarriedKeys);
+                ApplyEscaped(participant.PlayerId, agent);
+            }
+        }
+
+        /// 탈출은 **스냅샷의 플래그**로 온다(`EntityFlags.Escaped`).
+        ///
+        /// 매치 전문의 `escapes` 는 몇 명인지만 말하고 누구인지는 말하지 않는다. 몸을 감추려면
+        /// 대상을 알아야 하므로 두 경로를 함께 쓴다 — 수는 전문, 대상은 스냅샷이다.
+        ///
+        /// 보간하지 않은 최신 값을 읽는다(`TryLatest`). 보간은 위치를 위한 것이고, 플래그를
+        /// 섞으면 두 스냅샷 사이에서 켜졌다 꺼졌다 한다.
+        private void ApplyEscaped(byte playerId, PlayerAgent agent)
+        {
+            if (agent.Escaped || _client.Snapshots == null)
+            {
+                return;
+            }
+
+            if (!_client.Snapshots.TryLatest(playerId, out var sample))
+            {
+                return;
+            }
+
+            if ((sample.Flags & NV.Shared.Contracts.Enums.EntityFlags.Escaped) != 0)
+            {
+                MatchManager.Instance.AcceptEscaped(agent);
             }
         }
 
