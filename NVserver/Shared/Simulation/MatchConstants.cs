@@ -68,6 +68,15 @@ namespace NV.Shared.Simulation
         /// 문에서 열쇠를 넣고 탈출할 수 있는 거리(m).
         public const float DoorUseRadius = 2.2f;
 
+        /// 상호작용의 수직 허용치(m). 문과 장치 모두에 쓴다.
+        ///
+        /// 층 간격 3.2m 보다 작아야 위층에서 아래층 문에 열쇠를 넣을 수 없다. 반경(2.2m)보다
+        /// 큰 것은 `KeyPickupHeight` 와 같은 이유다 — 계단 중간에서도 닿아야 한다.
+        ///
+        /// 기획서에 없다. 클라이언트의 `PlayerInteractor.Consider` 가 쓰던 값이고, 그쪽이
+        /// 프롬프트를 띄우는 조건이었으므로 **화면에 보이는 것과 판정이 일치하는 값**이다.
+        public const float InteractHeight = 2.5f;
+
         /// 열린 문간에 머물러야 탈출로 인정되는 시간(초).
         ///
         /// 즉시 탈출이 아닌 이유는 목표의 마지막 한 걸음을 Seeker 가 끊을 수 있는

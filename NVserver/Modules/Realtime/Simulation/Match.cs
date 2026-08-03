@@ -27,11 +27,30 @@ namespace NV.Realtime.Simulation
         /// 역할 공개 길이(틱). 4초 × 30Hz = 120.
         private const int RevealTicks = (int)(MatchConstants.RoleRevealDuration * SimConstants.TickRate);
 
+        /// 열쇠 두 개를 연달아 넣는 사이의 간격(틱). 0.6초 × 30Hz = 18.
+        ///
+        /// 룸의 삽입 판정이 쓴다. 초가 아니라 틱으로 재는 이유는 시계와 같다 — 실수 누적은
+        /// 재적용에서 같은 결과를 주지 않는다.
+        public const int InsertIntervalTicks = (int)(MatchConstants.KeyInsertInterval * SimConstants.TickRate);
+
         private MatchPhase _phase = MatchPhase.Lobby;
         private int _revealTicksRemaining;
         private int _matchTicksRemaining;
 
         public MatchPhase Phase => _phase;
+
+        /// 문에 들어간 열쇠 수. 기획서 §3 의 목표 진행도다.
+        ///
+        /// **Seeker 는 이 값을 몰라야 한다.** 전문을 인코딩할 때 코덱이 Seeker 사본에서
+        /// 0 으로 만든다(`MessageCodec.WriteMatchState`) — 여기서 숨기지 않는 이유는 이것이
+        /// 판정에 쓰이는 실제 값이고, 필터는 나가는 길목에 한 번만 있어야 하기 때문이다.
+        public int KeysInserted { get; private set; }
+
+        /// 문이 열렸는가. **삽입 수에서 유도한다.**
+        ///
+        /// 따로 필드를 두면 "열쇠는 10개인데 문은 닫혀 있다" 가 표현 가능한 상태가 되고,
+        /// 그 상태에 빠지는 경로를 찾는 일이 남는다.
+        public bool DoorOpen => KeysInserted >= MatchConstants.KeysRequired;
 
         /// 매치 시계의 남은 틱. `Playing` 이전에는 전체 길이이고, `Ended` 에서는 0 이다.
         public int MatchTicksRemaining => _matchTicksRemaining;
@@ -65,6 +84,24 @@ namespace NV.Realtime.Simulation
             _phase = MatchPhase.RoleReveal;
             _revealTicksRemaining = RevealTicks;
             _matchTicksRemaining = MatchTicks;
+            KeysInserted = 0;
+        }
+
+        /// 열쇠 하나가 문에 들어갔다. **이 삽입으로 문이 열렸으면 true.**
+        ///
+        /// 이미 열린 문에는 넣을 수 없다. 룸이 먼저 확인하지만 여기서도 막는다 — 열린 뒤에도
+        /// 세면 `KeysInserted` 가 10을 넘고, 그 값이 HUD 의 "10/10" 을 "13/10" 으로 만든다.
+        ///
+        /// 자격(역할·소지·거리·간격)은 룸이 판단한다. 여기는 진행도만 센다.
+        public bool InsertKey()
+        {
+            if (DoorOpen)
+            {
+                return false;
+            }
+
+            KeysInserted++;
+            return DoorOpen;
         }
 
         /// 한 틱 진행한다. 이 틱에 매치가 끝났으면 `true` 다.
@@ -120,6 +157,7 @@ namespace NV.Realtime.Simulation
             _phase = MatchPhase.Lobby;
             _revealTicksRemaining = 0;
             _matchTicksRemaining = 0;
+            KeysInserted = 0;
         }
     }
 }

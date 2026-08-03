@@ -53,6 +53,19 @@ namespace NV.Realtime.Simulation
         /// 죽으면 떨어뜨려 다시 맵으로 돌아간다(IG-014).
         public int CarriedKeys { get; set; }
 
+        /// 이번 틱에 상호작용(E)을 요청했는가.
+        ///
+        /// **엣지다. 한 틱만 산다** — 목표물 판정이 읽고 즉시 지운다. 눌린 상태로 들고 있으면
+        /// 한 번의 키 입력이 삽입 간격마다 계속 발동한다.
+        public bool InteractRequested { get; set; }
+
+        /// 다음 삽입이 가능한 틱. 기획서에 없는 간격이지만 없으면 한 번의 입력으로 열쇠
+        /// 10개가 다 들어간다(`MatchConstants.KeyInsertInterval` 참조).
+        ///
+        /// 매치가 다시 시작될 때 되돌리지 않는다. 틱 카운터는 접속 내내 이어지므로 지난
+        /// 매치에 적힌 값은 언제나 과거다.
+        public uint NextInsertTick { get; set; }
+
         public uint LastProcessedInputTick { get; private set; }
 
         public bool HasProcessedInput { get; private set; }

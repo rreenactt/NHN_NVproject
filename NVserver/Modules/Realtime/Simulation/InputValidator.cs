@@ -24,6 +24,29 @@ namespace NV.Realtime.Simulation
                 frame.Pitch);
         }
 
+        /// 한 번만 발동해야 하는 버튼을 지운다. **반복 적용될 프레임을 저장하기 전에 거친다.**
+        ///
+        /// 새 입력이 없으면 서버는 마지막 입력을 최대 `MaxInputRepeatTicks` 만큼 반복한다
+        /// (`Room.StepPlayer`). 이동은 반복되어야 맞지만 상호작용은 **엣지**다.
+        ///
+        /// **이것은 방어이고, 지금 막고 있는 버그는 없다.** 상호작용 요청을 세우는 곳은 새 입력
+        /// 갈래뿐이므로 반복은 애초에 그 비트를 읽지 않는다. 그 불변식이 두 곳의 협조에
+        /// 의존한다는 것이 여기 있는 이유다 — 반복 갈래가 버튼을 보게 되는 변경이 들어오면
+        /// 조용히 깨지고, 증상은 "열쇠가 저절로 들어간다" 가 된다.
+        ///
+        /// **`Jump` 는 일부러 건드리지 않았다.** 점프도 엣지지만 지금도 반복되고 있고
+        /// (`PlayerMovement.Step` 이 접지 상태로 걸러 대부분 무해하다), 그것을 바꾸는 것은
+        /// 이동 동작을 바꾸는 별개의 변경이다 → IG-025.
+        public static InputFrame WithoutEdgeButtons(in InputFrame frame)
+        {
+            return new InputFrame(
+                frame.Buttons & ~ButtonFlags.Interact,
+                frame.MoveX,
+                frame.MoveZ,
+                frame.Yaw,
+                frame.Pitch);
+        }
+
         /// 마지막 입력의 시선만 유지하고 이동을 비운다.
         /// 입력이 끊긴 뒤에도 계속 달리는 것을 막는다.
         public static InputFrame Neutral(in InputFrame last)

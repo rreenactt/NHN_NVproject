@@ -161,6 +161,12 @@ namespace NV.Realtime.Simulation
 
         public float RevealSecondsRemaining => _match.RevealSecondsRemaining;
 
+        /// 문에 들어간 열쇠 수. **전문과 달리 걸러지지 않은 실제 값이다** — 진단과 테스트용이고,
+        /// 세션으로 나가는 값은 `BroadcastMatchState` 가 역할별로 인코딩한다.
+        public int MatchKeysInserted => _match.KeysInserted;
+
+        public bool MatchDoorOpen => _match.DoorOpen;
+
         /// 이 매치의 목표물 배치. 틱 루프에서만 조회한다.
         ///
         /// 아직 와이어에 실리지 않는다 — 좌표를 역할별로 걸러 내려보내는 전문은 IG-011b 다.
@@ -255,6 +261,7 @@ namespace NV.Realtime.Simulation
                 // 목표물 판정은 이동 **뒤**다. 앞에 두면 이번 틱에 열쇠 위로 걸어간
                 // 플레이어가 다음 틱까지 줍지 못한다.
                 PickUpKeys();
+                InsertKeys();
 
                 // 매치 시계는 이동을 처리한 뒤에 올린다. 먼저 올리면 시간이 0 이 된 틱의
                 // 입력이 버려지고, 그 한 틱이 마지막 탈출을 판정하는 틱일 수 있다.
@@ -429,7 +436,13 @@ namespace NV.Realtime.Simulation
             var header = new MatchStateHeader(
                 _match.Phase,
                 MatchStateHeader.ToTenths(_match.MatchSecondsRemaining),
-                0,
+
+                // Seeker 사본에서는 코덱이 0 으로 만든다. 여기서 거르지 않는 이유는 필터가
+                // 나가는 길목에 한 번만 있어야 하기 때문이다 — 두 곳에 있으면 한 곳을 고칠 때
+                // 다른 곳이 남는다.
+                (byte)_match.KeysInserted,
+
+                // 탈출 수는 아직 서버가 세지 않는다 → IG-012c.
                 0,
                 _outcome,
                 (byte)count);
@@ -520,9 +533,10 @@ namespace NV.Realtime.Simulation
                     ToPoint(_objectives.DoorPosition),
                     Quantization.ToFixedYaw(_objectives.DoorYaw),
 
-                    // 문 개방은 삽입된 열쇠 수로 정해진다. 서버가 그것을 세기 시작하면
-                    // (IG-012) 이 자리가 채워진다.
-                    false,
+                    // 문 개방. **Seeker 사본에는 문 블록 자체가 없으므로 이 값도 실리지
+                    // 않는다** — 별도의 필터가 필요하지 않은 것이 블록을 통째로 빼는 설계의
+                    // 부수 효과다.
+                    _match.DoorOpen,
                     keys,
                     devices,
                     RoleOf(player.PlayerId));
@@ -577,9 +591,25 @@ namespace NV.Realtime.Simulation
                     frame = InputValidator.Neutral(frame);
                 }
 
+                // 상호작용 요청을 여기서 걷는다. 판정은 이동이 끝난 뒤에 한 번 돌므로
+                // (`InsertKeys`) 같은 틱에 여러 프레임을 따라잡아도 요청은 한 번이다 —
+                // 그것이 맞다. 클라이언트는 키를 한 번 눌렀다.
+                if ((frame.Buttons & ButtonFlags.Interact) != 0)
+                {
+                    player.InteractRequested = true;
+                }
+
                 Simulate(player, frame);
 
-                player.LastInput = frame;
+                // 엣지 버튼을 지운 프레임을 저장한다. `LastInput` 은 **반복 적용될 값**이므로
+                // 한 번만 발동해야 하는 비트가 남아 있으면 안 된다.
+                //
+                // 지금 이것이 없어도 삽입은 반복되지 않는다 — 요청을 세우는 곳이 위의 새 입력
+                // 갈래뿐이고, 반복 갈래는 `Simulate` 만 부른다(테스트로 확인했다: 이 줄을
+                // `= frame` 으로 되돌려도 13개가 그대로 통과한다). 남겨 두는 이유는 그 불변식이
+                // 두 곳의 협조에 의존하기 때문이다. 반복 갈래가 언젠가 버튼을 보게 되면 그때
+                // 조용히 깨지고, 증상은 "열쇠가 저절로 들어간다" 가 된다.
+                player.LastInput = InputValidator.WithoutEdgeButtons(frame);
                 player.RepeatCount = 0;
                 applied++;
             }
@@ -702,6 +732,109 @@ namespace NV.Realtime.Simulation
                     break;
                 }
             }
+        }
+
+        /// 열쇠 삽입을 판정한다. 기획서 §3 — 열쇠 `KeysRequired` 개가 들어가면 문이 열린다.
+        ///
+        /// 습득과 달리 **명시적인 입력을 받는다.** 문 앞을 지나가는 것만으로 들고 있던 열쇠가
+        /// 들어가면, 열쇠를 모아 두는 전술(`CarryLimit` 무제한이 만드는 것)이 성립하지 않는다.
+        ///
+        /// **삽입이 한 곳에서 직렬화되는 것이 "두 Runner 가 동시에 10번째 열쇠를 넣는" 경우의
+        /// 답이다.** 먼저 도는 쪽이 문턱을 넘고, 다음 쪽은 `_match.DoorOpen` 에서 걸린다 —
+        /// 열쇠는 소비되지 않는다. 순서는 사전 순이 아니라 딕셔너리 순회 순이지만, 어느 쪽이
+        /// 먼저든 결과가 같으므로(문이 열리고 열쇠 하나가 쓰인다) 판정이 갈리지 않는다.
+        private void InsertKeys()
+        {
+            if (_match.Phase != MatchPhase.Playing || !_objectives.Placed)
+            {
+                return;
+            }
+
+            foreach (var player in _players.Values)
+            {
+                if (!player.InteractRequested)
+                {
+                    continue;
+                }
+
+                // **자격을 보기 전에 지운다.** 엣지는 한 틱만 살아야 하고, 거부된 요청이
+                // 남아 있으면 문 앞에 도착한 순간 예전에 누른 키가 발동한다.
+                player.InteractRequested = false;
+
+                if (_match.DoorOpen)
+                {
+                    continue;
+                }
+
+                if (RoleOf(player.PlayerId) != MatchRole.Runner)
+                {
+                    continue;
+                }
+
+                if (player.CarriedKeys <= 0)
+                {
+                    continue;
+                }
+
+                if (_tick < player.NextInsertTick)
+                {
+                    continue;
+                }
+
+                if (!IsWithinDoorRange(player.State.Position))
+                {
+                    continue;
+                }
+
+                player.CarriedKeys--;
+                player.NextInsertTick = _tick + (uint)Match.InsertIntervalTicks;
+
+                var opened = _match.InsertKey();
+
+                // 소지 수와 삽입 수가 함께 바뀌므로 매치 전문은 항상 즉시 보낸다.
+                _matchStateDirty = true;
+
+                if (opened)
+                {
+                    // 목표물 전문의 문 블록에 개방 여부가 실려 있다. 열린 틱에 보내지 않으면
+                    // 최대 5초 동안 Runner 가 열린 문을 잠긴 것으로 본다.
+                    _objectiveStateDirty = true;
+
+                    _logger.LogInformation(
+                        "룸 {RoomId}: 열쇠 {Required} 개가 들어가 문이 열렸다.",
+                        RoomId,
+                        MatchConstants.KeysRequired);
+                }
+                else
+                {
+                    _logger.LogDebug(
+                        "룸 {RoomId} 플레이어 {PlayerId}: 열쇠를 넣었다. {Inserted}/{Required}.",
+                        RoomId,
+                        player.PlayerId,
+                        _match.KeysInserted,
+                        MatchConstants.KeysRequired);
+                }
+            }
+        }
+
+        /// 문에 닿는가. 수평은 `DoorUseRadius`, 수직은 `InteractHeight` 다.
+        ///
+        /// 수직을 보지 않으면 **위층에서 아래층 문에 열쇠를 넣을 수 있다.** 문은 Runner 에게만
+        /// 보이지만 좌표는 그 클라이언트가 알고 있으므로, 층을 안 보면 벽을 통과해 목표를
+        /// 달성하는 경로가 된다.
+        private bool IsWithinDoorRange(Vector3 feet)
+        {
+            var door = _objectives.DoorPosition;
+
+            if (MathF.Abs(feet.Y - door.Y) > MatchConstants.InteractHeight)
+            {
+                return false;
+            }
+
+            var dx = feet.X - door.X;
+            var dz = feet.Z - door.Z;
+
+            return (dx * dx) + (dz * dz) <= MatchConstants.DoorUseRadius * MatchConstants.DoorUseRadius;
         }
 
         /// 발밑끼리 잰다. 수직은 별도 허용치이고 수평보다 크다 —
@@ -895,6 +1028,10 @@ namespace NV.Realtime.Simulation
                 // 피격 순간이동에도 쓰일 예정이기 때문이다(IG-014) — 맞았다고 들고 있던
                 // 열쇠가 사라지면 그것은 배치가 아니라 규칙이다.
                 player.CarriedKeys = 0;
+
+                // 로비에서 누른 E 가 매치 첫 틱에 발동하지 않게 한다. `NextInsertTick` 은
+                // 되돌리지 않는다 — 틱 카운터가 이어지므로 지난 매치의 값은 항상 과거다.
+                player.InteractRequested = false;
             }
 
             Volatile.Write(ref _phase, (int)RoomPhase.Playing);

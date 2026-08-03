@@ -89,10 +89,10 @@
 | ID | 기획서 근거 | 현재 상태 | 근거 파일:라인 | 서버 권위 | 동기화 |
 |---|---|---|---|---|---|
 | R-6.1 | §3 열쇠 10개 수집 | **`DONE`** (IG-012a) | `Room.cs` `PickUpKeys`·`IsWithinPickupRange`, `PlayerEntity.CarriedKeys`, `MatchConstants.KeyPickupHeight`; 클라이언트는 `KeyPickup.cs` 가 폴링을 멈추고 `MatchSync.ApplyCarriedKeys` 로 받는다 | **서버** ✅ | ✅ `MatchState.carriedKeys` + `ObjectiveState` 열쇠 목록 |
-| R-6.2 | §3·§6 탈출 문에 삽입 | `PARTIAL` | `MatchManager.cs:475-503` | 필요 | 필요 |
+| R-6.2 | §3·§6 탈출 문에 삽입 | **서버 판정 `DONE`** (IG-012b1·b2), 클라이언트 적용 남음 (IG-012b3) | `Room.cs` `InsertKeys`·`IsWithinDoorRange`, `Match.InsertKey`, `ButtonFlags.Interact`, `MatchConstants.InteractHeight`; 로컬 판정 `MatchManager.cs:564` 이 아직 병행한다 | **서버** ✅ | `MatchState.keysInserted` 는 나가고 있고 **아직 적용되지 않는다** |
 | R-6.3 | §6 문은 랜덤 위치 생성 | **`DONE`** (IG-011a·b·c2) — 서버가 배치하고 좌표를 역할별로 걸러 내려보내며 클라이언트가 그것을 받아 그린다 | `ObjectivePlacement`, `WriteObjectiveState`, `MatchManager.AcceptObjectiveState` | 필요 ✅ | 필요 ✅ |
 | R-6.4 | §6 플레이어만 볼 수 있음 | **`DONE`** (IG-011b·c3) — R-2.3 과 같은 경로로 닫혔다 | `WriteObjectiveState`, `RoomStateMessage` | 필요 ✅ | 필요 ✅ |
-| R-6.5 | §6 열쇠 10개 삽입 시 개방 | `PARTIAL` | `MatchManager.cs:493-497` | 필요 | 필요 |
+| R-6.5 | §6 열쇠 10개 삽입 시 개방 | **서버 판정 `DONE`** (IG-012b2), 클라이언트 적용 남음 (IG-012b3) | `Match.DoorOpen`(삽입 수에서 유도), `WriteObjectiveState` 의 `doorOpen` — **문 블록 안에 있어 Seeker 사본에는 실리지 않는다** | **서버** ✅ | `ObjectiveState` 로 나가고 **아직 적용되지 않는다** |
 | R-6.6 | §3 2명 이상 탈출 시 승리 | `PARTIAL` | `MatchManager.cs:296-328` (문간 0.8초 유지) | 필요 | 필요 |
 | R-6.7 | (룰셋) 사망 시 소지 열쇠 흘리기 | `PARTIAL` | `MatchManager.cs:703-722` | 필요 | 필요 |
 
