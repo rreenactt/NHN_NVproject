@@ -590,6 +590,13 @@ namespace NV.Game
         /// </summary>
         public bool TryPickUpKey(PlayerAgent agent, KeyPickup key)
         {
+            // Networked, the server polls the same distance test against the authoritative positions
+            // and the key leaves the objective bulletin (IG-012a). `KeyPickup` already stops calling
+            // this, so today there is no live path in — the refusal is here anyway, because every
+            // other rule refuses in this class and a public method that only *happens* to be
+            // unreachable is one new caller away from being a second judge.
+            if (ServerOwnsObjectives) return false;
+
             if (Phase != MatchPhase.Playing || agent == null || key == null || key.Collected) return false;
             if (agent.Role != Role.Runner || !agent.InPlay || !agent.collectsKeys) return false;
             if (config.carryLimit > 0 && agent.CarriedKeys >= config.carryLimit) return false;
