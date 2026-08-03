@@ -83,6 +83,13 @@ namespace NV.Realtime.Simulation
         /// 수열을 두 용도가 나눠 쓰면 배치가 한 번 더 뽑는 변경이 순간이동 착지점을 바꾼다.
         private DeterministicSequence _hitRandom;
 
+        /// 이 틱에 나갈 발사 알림. **반복하지 않으므로 보낸 뒤 비운다**(ADR 0003).
+        private readonly FireEventMessage[] _pendingFires = new FireEventMessage[32];
+
+        private readonly byte[] _fireEventBuffer = new byte[FireEventMessage.WireSize];
+
+        private int _pendingFireCount;
+
         private readonly WorldMap _map;
         private readonly NetworkConditionSimulator _network;
         private readonly ILogger _logger;
@@ -337,6 +344,10 @@ namespace NV.Realtime.Simulation
             BroadcastRoomState(transport);
             BroadcastMatchState(transport);
             BroadcastObjectiveState(transport);
+
+            // 발사 알림은 전문이 아니다 — 쌓인 것을 내보내고 비운다. 이 틱에 아무도 쏘지
+            // 않았으면 아무것도 나가지 않는다.
+            BroadcastFireEvents(transport);
 
             if (Phase != RoomPhase.Playing)
             {
@@ -910,7 +921,7 @@ namespace NV.Realtime.Simulation
                     continue;
                 }
 
-                if (!TrySpawnProjectile(player))
+                if (!TrySpawnProjectile(player, out var origin))
                 {
                     // 슬롯이 없다. 탄을 소비하지 않는 것이 맞다 — 서버 쪽 상한이지
                     // 규칙이 아니다.
@@ -924,6 +935,10 @@ namespace NV.Realtime.Simulation
                 player.Ammo--;
                 player.NextFireTick = _tick + (uint)Match.FireIntervalTicks;
 
+                // 발사 알림을 쌓아 둔다. `Broadcast` 가 이 틱에 내보내고 반복하지 않는다 —
+                // 이 프로젝트의 유일한 알림이고 근거는 ADR 0003 이다.
+                QueueFireEvent(player, origin);
+
                 _logger.LogDebug(
                     "룸 {RoomId} 플레이어 {PlayerId}: 발사. 남은 탄 {Ammo}/{Magazine}.",
                     RoomId,
@@ -933,13 +948,60 @@ namespace NV.Realtime.Simulation
             }
         }
 
+        /// 이 틱에 나갈 발사 알림을 쌓는다.
+        ///
+        /// **총알의 시작점을 인자로 받는다.** 눈높이를 두 곳에서 따로 계산하면 예광탄이 총알과
+        /// 다른 데서 출발하고, 그 어긋남은 총구 오프셋처럼 보여 원인을 찾기 어렵다.
+        private void QueueFireEvent(PlayerEntity player, Vector3 origin)
+        {
+            if (_pendingFireCount >= _pendingFires.Length)
+            {
+                // 한 틱에 32발이 나가는 경로는 없다(연사 간격이 5틱이다). 넘으면 알림만 잃고
+                // 판정은 그대로 진행된다 — 알림이 버려져도 되는 것이 ADR 0003 의 전제다.
+                return;
+            }
+
+            _pendingFires[_pendingFireCount++] = new FireEventMessage(
+                player.PlayerId,
+                Quantization.ToFixedPosition(origin.X),
+                Quantization.ToFixedPosition(origin.Y),
+                Quantization.ToFixedPosition(origin.Z),
+                Quantization.ToFixedYaw(player.State.Yaw),
+                Quantization.ToFixedPitch(player.State.Pitch),
+                _tick);
+        }
+
+        /// 쌓인 발사 알림을 내보내고 비운다. **반복하지 않는다.**
+        ///
+        /// 역할별 필터가 없다 — 총성이 이미 술래의 위치를 알려 주므로 예광탄을 숨기면
+        /// "소리는 들리는데 궤적이 없는" 상태가 되어 소리의 정보만 줄어든다.
+        private void BroadcastFireEvents(IServerTransport transport)
+        {
+            for (var index = 0; index < _pendingFireCount; index++)
+            {
+                var length = MessageCodec.WriteFireEvent(_fireEventBuffer, _pendingFires[index]);
+
+                foreach (var player in _players.Values)
+                {
+                    transport.TrySend(
+                        player.SessionId,
+                        new ReadOnlySpan<byte>(_fireEventBuffer, 0, length),
+                        Reliability.Reliable);
+                }
+            }
+
+            _pendingFireCount = 0;
+        }
+
         /// 눈높이에서 시선 방향으로 총알 하나를 만든다.
         ///
         /// 눈높이에서 쏘는 것이 맞다. 클라이언트는 총구에서 쏘지만 **조준점을 향해** 쏘고
         /// (`WeaponController.Fire`), 명중 판정은 화면 중심에서 온다 — 즉 실제 판정선은 눈에서
         /// 나가는 직선이다. 총구 오프셋은 연출이다.
-        private bool TrySpawnProjectile(PlayerEntity player)
+        private bool TrySpawnProjectile(PlayerEntity player, out Vector3 origin)
         {
+            origin = default;
+
             for (var index = 0; index < _projectiles.Length; index++)
             {
                 if (_projectiles[index].Active)
@@ -949,6 +1011,8 @@ namespace NV.Realtime.Simulation
 
                 var eye = player.State.Position
                     + new Vector3(0f, SimConstants.PlayerHeight * SimConstants.EyeHeightRatio, 0f);
+
+                origin = eye;
 
                 _projectiles[index] = new Projectile
                 {
@@ -1433,6 +1497,10 @@ namespace NV.Realtime.Simulation
             {
                 _projectiles[index] = default;
             }
+
+            // 아직 나가지 않은 발사 알림도 버린다. 보통 한 틱 안에 나가지만, 남아 있으면
+            // 새 매치의 첫 프레임에 지난 매치의 예광탄이 그려진다.
+            _pendingFireCount = 0;
 
             // 매치는 역할 공개부터 시작한다. 이 시점부터 시계는 서버의 것이다.
             _match.Begin();

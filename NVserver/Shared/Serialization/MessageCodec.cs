@@ -393,6 +393,55 @@ namespace NV.Shared.Serialization
             return writer.BytesWritten;
         }
 
+        /// 발사 알림을 쓴다. **역할별 필터가 없다.**
+        ///
+        /// 총성은 이 게임이 술래의 위치를 알려 주는 장치다(`WeaponAudio` 의 감쇠가 그것을 위해
+        /// 설계됐다). 예광탄은 같은 정보를 눈으로 주는 것이므로 숨길 이유가 없고, 숨기면
+        /// **총성은 들리는데 궤적이 없는** 상태가 된다 — 방향을 알 수 없어 소리의 정보가 줄어든다.
+        public static int WriteFireEvent(Span<byte> destination, in FireEventMessage fire)
+        {
+            var writer = new BitWriter(destination);
+            writer.WriteByte((byte)MessageOpcode.Event);
+            writer.WriteByte((byte)EventKind.FireEvent);
+            writer.WriteByte(fire.ShooterId);
+            writer.WriteInt16(fire.X);
+            writer.WriteInt16(fire.Y);
+            writer.WriteInt16(fire.Z);
+            writer.WriteUInt16(fire.Yaw);
+            writer.WriteInt16(fire.Pitch);
+            writer.WriteUInt32(fire.Tick);
+
+            return writer.BytesWritten;
+        }
+
+        public static FireEventMessage ReadFireEvent(ReadOnlySpan<byte> source)
+        {
+            var reader = new BitReader(source);
+            var opcode = (MessageOpcode)reader.ReadByte();
+            if (opcode != MessageOpcode.Event)
+            {
+                throw new InvalidOperationException($"Event 가 아니다: 0x{(byte)opcode:X2}");
+            }
+
+            var kind = (EventKind)reader.ReadByte();
+            if (kind != EventKind.FireEvent)
+            {
+                throw new InvalidOperationException($"FireEvent 가 아니다: {kind}");
+            }
+
+            // 와이어 순서대로 읽어 한 번에 만든다. 인자 위치로 읽으면 읽는 순서가 코드에서
+            // 보이지 않아 필드를 추가할 때 어긋난다(`ReadObjectiveState` 와 같은 이유).
+            var shooterId = reader.ReadByte();
+            var x = reader.ReadInt16();
+            var y = reader.ReadInt16();
+            var z = reader.ReadInt16();
+            var yaw = reader.ReadUInt16();
+            var pitch = reader.ReadInt16();
+            var tick = reader.ReadUInt32();
+
+            return new FireEventMessage(shooterId, x, y, z, yaw, pitch, tick);
+        }
+
         /// 읽은 참가자 수를 반환한다.
         public static int ReadMatchState(
             ReadOnlySpan<byte> source,
