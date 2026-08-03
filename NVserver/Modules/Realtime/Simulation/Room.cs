@@ -451,17 +451,17 @@ namespace NV.Realtime.Simulation
             var count = 0;
             foreach (var player in _players.Values)
             {
-                // 상태 플래그(`flags`)는 여전히 0 이다. 출혈·탈출·쓰러짐은 **스냅샷의
-                // `EntityFlags`** 로 매 틱 나가므로 2Hz 전문에 같은 정보를 두 번 실을 이유가
-                // 없다 — 실으면 두 경로가 어긋날 자리만 생긴다.
+                // 출혈·탈출·쓰러짐은 여기 싣지 않는다 — **스냅샷의 `EntityFlags`** 로 매 틱
+                // 나가므로 2Hz 전문에 같은 정보를 두 번 실으면 두 경로가 어긋날 자리만 생긴다.
+                // 그 자리에 있던 `flags` 바이트가 그래서 영구히 0 이었고, 이제 탄약이 쓴다.
                 //
-                // 소지 열쇠와 피격 수는 여기서 바이트로 좁힌다. 상한을 두는 이유는 형식이지
-                // 규칙이 아니다 — 무제한 소지(`CarryLimit` 0)에서도 맵의 열쇠 수가 10 이므로
+                // 세 값 모두 여기서 바이트로 좁힌다. 상한을 두는 이유는 형식이지 규칙이
+                // 아니다 — 무제한 소지(`CarryLimit` 0)에서도 맵의 열쇠 수가 10 이므로
                 // 넘을 수 없고, 넘었다면 습득 판정이 같은 열쇠를 두 번 센 것이다.
                 _participantBuffer[count] = new MatchParticipant(
                     player.PlayerId,
                     RoleOf(player.PlayerId),
-                    0,
+                    (byte)Math.Min(player.Ammo, byte.MaxValue),
                     (byte)Math.Min(player.Hits, byte.MaxValue),
                     (byte)Math.Min(player.CarriedKeys, byte.MaxValue));
 

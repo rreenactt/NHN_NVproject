@@ -89,19 +89,19 @@ namespace NV.Shared.Contracts.Messages
     /// 이 전문은 2Hz 다. 2Hz 로 출혈을 받으면 피 흔적이 최대 0.5초 늦게 시작한다.
     public readonly struct MatchParticipant
     {
-        /// playerId(1) + role(1) + flags(1) + hits(1) + carriedKeys(1)
+        /// playerId(1) + role(1) + ammo(1) + hits(1) + carriedKeys(1)
         public const int WireSize = 5;
 
         public MatchParticipant(
             byte playerId,
             MatchRole role,
-            byte flags,
+            byte ammo,
             byte hits,
             byte carriedKeys)
         {
             PlayerId = playerId;
             Role = role;
-            Flags = flags;
+            Ammo = ammo;
             Hits = hits;
             CarriedKeys = carriedKeys;
         }
@@ -110,12 +110,18 @@ namespace NV.Shared.Contracts.Messages
 
         public MatchRole Role { get; }
 
-        /// 매치 상태 비트. 살아 있음·탈출함 같은 것이 여기 온다.
+        /// 탄창에 남은 탄. 기획서 §4.3 — 3발.
         ///
-        /// 아직 열거형을 만들지 않았다. 채울 값이 생기는 것은 탈락과 탈출이 서버 판정이
-        /// 되는 태스크(IG-012)이고, 비어 있는 열거형을 미리 두면 어디까지 왔는지 읽어서
-        /// 알 수 없다. 지금은 항상 0 이 나간다.
-        public byte Flags { get; }
+        /// **이 자리에 `Flags` 가 있었고 한 번도 채워지지 않았다.** 매치 상태 비트를 여기 두려
+        /// 했으나 출혈·탈출·쓰러짐은 전부 **스냅샷의 `EntityFlags`** 로 매 틱 나가야 해서
+        /// (2Hz 로는 몸의 표현이 늦는다) 그쪽으로 갔고, 이 바이트는 영구히 0 이었다.
+        /// 크기를 늘리는 대신 죽은 바이트를 쓴다 — 와이어 크기가 그대로라 프로토콜 버전을
+        /// 다시 올리지 않는다.
+        ///
+        /// **Runner 사본에서는 0 이다.** 술래만 총을 들고(기획서 §2.1) 남은 탄을 정확히 아는
+        /// 것은 Runner 에게 주어지지 않은 정보다 — 총성이 "한 발 줄었다" 를 알려 주는 것이
+        /// 이 게임이 그 정보를 전달하는 방식이다.
+        public byte Ammo { get; }
 
         /// 받은 피격 수. 기획서 §4.1 — 2회면 사망이다.
         public byte Hits { get; }

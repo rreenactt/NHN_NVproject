@@ -12,14 +12,20 @@ namespace NV.Modules.Tests.Serialization
     /// 룰셋은 Seeker 에게 열쇠 진행도를 알리지 않는다. 그것을 클라이언트에서 숨기는
     /// 방식으로는 지킬 수 없으므로(WebGL 빌드는 디컴파일된다) 와이어에서 지워야 하고,
     /// 지워졌는지는 **바이트를 직접 봐서** 확인해야 한다.
+    ///
+    /// **필터가 양방향이다.** 열쇠는 Seeker 사본에서 지워지고, **탄약은 Runner 사본에서**
+    /// 지워진다 — 술래만 총을 들고, 남은 탄을 정확히 아는 것은 Runner 에게 주어지지 않은
+    /// 정보다(총성이 그것을 알려 주는 방식이다).
     public class MatchStateCodecTests
     {
         private static MatchParticipant[] Participants()
         {
             return new[]
             {
-                new MatchParticipant(0, MatchRole.Seeker, 0, 0, 0),
-                new MatchParticipant(1, MatchRole.Runner, 1, 1, 4),
+                // 술래만 탄약을 갖는다. Runner 의 탄약은 언제나 0 이므로 필터를 검사하려면
+                // 술래 쪽에 0 이 아닌 값이 있어야 한다.
+                new MatchParticipant(0, MatchRole.Seeker, 2, 0, 0),
+                new MatchParticipant(1, MatchRole.Runner, 0, 1, 4),
                 new MatchParticipant(2, MatchRole.Runner, 0, 0, 3),
             };
         }
@@ -67,9 +73,51 @@ namespace NV.Modules.Tests.Serialization
             {
                 Assert.Equal(expected[index].PlayerId, read[index].PlayerId);
                 Assert.Equal(expected[index].Role, read[index].Role);
-                Assert.Equal(expected[index].Flags, read[index].Flags);
                 Assert.Equal(expected[index].Hits, read[index].Hits);
                 Assert.Equal(expected[index].CarriedKeys, read[index].CarriedKeys);
+
+                // 탄약은 왕복하지 않는다 — Runner 사본에서 지워지는 것이 규칙이다.
+                Assert.Equal(0, read[index].Ammo);
+            }
+        }
+
+        /// 술래는 자기 탄창을 봐야 한다. HUD 의 탄약 표시가 이 값으로 그려진다.
+        [Fact]
+        public void Seeker_사본에는_탄약이_실린다()
+        {
+            var payload = Write(MatchRole.Seeker);
+            var read = new MatchParticipant[RealtimeConstants.Rooms.MaxPlayers];
+
+            var count = MessageCodec.ReadMatchState(payload, out _, read);
+
+            var found = false;
+            for (var index = 0; index < count; index++)
+            {
+                if (read[index].Role != MatchRole.Seeker)
+                {
+                    continue;
+                }
+
+                found = true;
+                Assert.Equal(2, read[index].Ammo);
+            }
+
+            Assert.True(found, "Seeker 가 전문에 없다.");
+        }
+
+        /// **Runner 사본의 탄약 바이트가 실제로 0 이다.** 읽기가 쓰기의 역이므로 0 이 나오면
+        /// 와이어에 0 이 있다 — 열쇠 필터와 같은 근거다.
+        [Fact]
+        public void Runner_사본에는_탄약이_실리지_않는다()
+        {
+            var payload = Write(MatchRole.Runner);
+            var read = new MatchParticipant[RealtimeConstants.Rooms.MaxPlayers];
+
+            var count = MessageCodec.ReadMatchState(payload, out _, read);
+
+            for (var index = 0; index < count; index++)
+            {
+                Assert.Equal(0, read[index].Ammo);
             }
         }
 
@@ -100,10 +148,15 @@ namespace NV.Modules.Tests.Serialization
             }
         }
 
-        /// 바이트를 직접 비교한다. 열쇠 수 7 과 소지 4·3 이 어디에도 남아 있지 않아야
-        /// 한다 — 다른 필드에 우연히 같은 값이 있을 수 있으므로 위치로 확인한다.
+        /// 바이트를 직접 비교한다. 열쇠 수 7 과 소지 4·3 이 Seeker 사본에, 탄약 2 가 Runner
+        /// 사본에 남아 있지 않아야 한다 — 다른 필드에 우연히 같은 값이 있을 수 있으므로
+        /// 위치로 확인한다.
+        ///
+        /// **필터가 양방향이므로 두 사본이 세 자리에서 다르다** — 열쇠 진행도, 소지 열쇠,
+        /// 그리고 탄약. 그 밖의 바이트가 하나라도 다르면 필터가 건드리면 안 되는 것을 건드린
+        /// 것이다.
         [Fact]
-        public void 두_사본의_바이트가_열쇠_자리에서만_다르다()
+        public void 두_사본의_바이트는_필터_자리에서만_다르다()
         {
             var runner = Write(MatchRole.Runner);
             var seeker = Write(MatchRole.Seeker);
@@ -115,24 +168,30 @@ namespace NV.Modules.Tests.Serialization
             Assert.Equal(7, runner[keysInsertedOffset]);
             Assert.Equal(0, seeker[keysInsertedOffset]);
 
-            // 참가자마다 carriedKeys 는 항목의 마지막 바이트다.
             for (var index = 0; index < 3; index++)
             {
-                var carriedOffset = MatchStateHeader.WireSize
-                    + (index * MatchParticipant.WireSize)
-                    + 4;
+                var entry = MatchStateHeader.WireSize + (index * MatchParticipant.WireSize);
 
-                Assert.Equal(0, seeker[carriedOffset]);
+                // carriedKeys 는 항목의 마지막 바이트, ammo 는 세 번째다.
+                Assert.Equal(0, seeker[entry + 4]);
+                Assert.Equal(0, runner[entry + 2]);
             }
+
+            // 탄약 2 는 Seeker 사본에만 있다. 첫 참가자가 술래다(픽스처).
+            Assert.Equal(2, seeker[MatchStateHeader.WireSize + 2]);
 
             // 그 밖의 바이트는 전부 같아야 한다. 필터가 다른 값을 건드리면 여기서 걸린다.
             for (var offset = 0; offset < runner.Length; offset++)
             {
                 var isKeysInserted = offset == keysInsertedOffset;
-                var isCarried = offset >= MatchStateHeader.WireSize
-                    && (offset - MatchStateHeader.WireSize) % MatchParticipant.WireSize == 4;
+                var participantByte = offset >= MatchStateHeader.WireSize
+                    ? (offset - MatchStateHeader.WireSize) % MatchParticipant.WireSize
+                    : -1;
 
-                if (isKeysInserted || isCarried)
+                var isCarried = participantByte == 4;
+                var isAmmo = participantByte == 2;
+
+                if (isKeysInserted || isCarried || isAmmo)
                 {
                     continue;
                 }

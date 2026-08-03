@@ -174,6 +174,7 @@ namespace NV.Client.Net.Session
                 }
 
                 MatchManager.Instance.AcceptCarriedKeys(agent, participant.CarriedKeys);
+                MatchManager.Instance.AcceptAmmo(agent, participant.Ammo);
                 ApplyBody(participant, agent);
             }
         }

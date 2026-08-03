@@ -364,6 +364,11 @@ namespace NV.Shared.Serialization
 
             var hideKeys = forRole == MatchRole.Seeker;
 
+            // 탄약은 반대 방향으로 걸린다. 술래만 총을 들므로(기획서 §2.1) 남은 탄을 정확히
+            // 아는 것은 Runner 에게 주어지지 않은 정보다 — 총성이 "한 발 줄었다" 를 알려 주는
+            // 것이 이 게임이 그 정보를 전달하는 방식이고, 숫자를 주면 그것을 무료로 넘긴다.
+            var hideAmmo = forRole != MatchRole.Seeker;
+
             var writer = new BitWriter(destination);
             writer.WriteByte((byte)MessageOpcode.Event);
             writer.WriteByte((byte)EventKind.MatchState);
@@ -380,7 +385,7 @@ namespace NV.Shared.Serialization
 
                 writer.WriteByte(participant.PlayerId);
                 writer.WriteByte((byte)participant.Role);
-                writer.WriteByte(participant.Flags);
+                writer.WriteByte(hideAmmo ? (byte)0 : participant.Ammo);
                 writer.WriteByte(participant.Hits);
                 writer.WriteByte(hideKeys ? (byte)0 : participant.CarriedKeys);
             }

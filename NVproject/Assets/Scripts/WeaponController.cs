@@ -230,6 +230,20 @@ public class WeaponController : MonoBehaviour
     }
 
     /// <summary>
+    /// The server's round count. Networked, the magazine is not something this client keeps track of
+    /// — the server decides whether a trigger pull becomes a round (`Room.FireWeapons`) and sends
+    /// what is left, so the HUD has to draw that rather than a local tally.
+    ///
+    /// It only ever *overwrites*. The local `Fire` still decrements as a prediction so the shell
+    /// icons react on the frame the trigger goes down, and the next bulletin corrects it 0.5 s later
+    /// — a shot the server refused shows up as a shell flickering back on.
+    /// </summary>
+    public void AcceptAmmo(int rounds)
+    {
+        _ammo = Mathf.Clamp(rounds, 0, magazineSize);
+    }
+
+    /// <summary>
     /// Full magazine, now, cancelling any reload in progress. A match starts with a full weapon —
     /// without this, whatever was left in the magazine when the last match ended carries over, and
     /// a Seeker can begin a round one round from being chained.

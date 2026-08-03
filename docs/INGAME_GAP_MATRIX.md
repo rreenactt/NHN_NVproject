@@ -137,7 +137,7 @@
 |---|---|---|---|---|---|
 | R-9.1 | §3 열쇠 진행도 표시 (술래에게 숨김) | **`DONE`** (IG-012b3) — 값이 서버에서 오고 **코덱이 Seeker 사본에서 0 으로 만든다.** 트리 재구성은 그대로라 이중으로 막힌다 | `MatchState.keysInserted` → `AcceptObjectiveProgress` → `KeysChanged` → `GameHudController` | **서버** ✅ | ✅ 역할별 필터가 코덱 안에 |
 | R-9.2 | §8 탈출 수 / 남은 시간 | **`DONE`** (IG-010·012c2) | `MatchState` 의 시계와 `escapes` → `AcceptMatchState`·`AcceptEscapes`. 시계는 전문 사이를 로컬 카운트다운으로 메우고 매 전문이 덮어쓴다 | **서버** ✅ | ✅ |
-| R-9.3 | §4.3 탄약 표시 | `PARTIAL` — **탄약 판정은 서버**(IG-014a)인데 **와이어에 탄약 자리가 없어** HUD 가 로컬 `WeaponController` 값을 그린다 | `PlayerEntity.Ammo`(서버) vs `WeaponController._ammo`(HUD). `MatchParticipant` 에 `hits` 는 있고 탄약은 없다 → IG-028 | **서버** ✅ (판정) | ❌ 아직 안 나간다 |
+| R-9.3 | §4.3 탄약 표시 | **`DONE`** (IG-014a + IG-028a) | `PlayerEntity.Ammo` → `MatchParticipant.Ammo`(죽어 있던 `Flags` 바이트를 재사용, 크기·버전 불변) → `MatchManager.AcceptAmmo` → `WeaponController.AcceptAmmo`. **Runner 사본에서는 0 이다** — 술래의 남은 탄은 총성으로만 알려진다 | **서버** ✅ | ✅ 역할별 필터가 **양방향**이다 |
 
 **클라이언트 이벤트 목록이 이미 replication 계약이다** — `PhaseChanged`, `KeysChanged`,
 `EscapesChanged`, `RolesAssigned`, `MatchEnded`, `AgentHit`, `Notified`

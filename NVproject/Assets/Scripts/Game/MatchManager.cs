@@ -558,6 +558,26 @@ namespace NV.Game
             AgentHit?.Invoke(agent, false);
         }
 
+        /// <summary>
+        /// The server's magazine count for this agent (IG-028).
+        ///
+        /// **Only the Seeker's own copy carries a number.** The codec zeroes ammo for every other
+        /// recipient, so applying what arrives is also what keeps a Runner from reading the Seeker's
+        /// magazine — the gunshot is how this game tells them a round was spent.
+        ///
+        /// Silent when the agent has no weapon: a Runner does not carry one, and a zero would
+        /// otherwise be indistinguishable from "empty".
+        /// </summary>
+        public void AcceptAmmo(PlayerAgent agent, int rounds)
+        {
+            if (agent == null || agent.Role != Role.Seeker) return;
+
+            var weapon = agent.GetComponent<WeaponController>();
+            if (weapon == null) return;
+
+            weapon.AcceptAmmo(rounds);
+        }
+
         public void ClearBleeding(PlayerAgent agent)
         {
             if (agent == null) return;

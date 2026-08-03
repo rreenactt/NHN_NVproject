@@ -283,7 +283,7 @@ Kestrel 스레드풀                          GameLoopService
 | `RoomStateHeader` | 11B | opcode·kind·phase·host·seeker·outcome(u8×6), startTick(u32), playerCount(u8) |
 | `RoomPlayerEntry` | 2B + 이름 | playerId(u8), nameLength(u8), ASCII 이름(≤12B) |
 | `MatchStateHeader` | 9B | opcode·kind·phase(u8×3), timeRemainingTenths(u16), keysInserted·escapes·outcome·count(u8×4) |
-| `MatchParticipant` | 5B | playerId·role·flags·hits·carriedKeys(u8×5) |
+| `MatchParticipant` | 5B | playerId·role·**ammo**·hits·carriedKeys(u8×5) |
 | `ObjectiveStateHeader` | 5B | opcode·kind·flags·keyCount·deviceCount(u8×5) |
 | `ObjectivePoint` / `ObjectiveDevice` | 6B / 10B | 양자화 좌표 (+yaw·type·state) |
 
@@ -294,6 +294,8 @@ Kestrel 스레드풀                          GameLoopService
 **세 전문 모두 알림이 아니라 전문이다.** "매치가 시작됐다" 를 한 번 보내지 않고, 지금 상태 전체를 계속 보낸다. 세션 송신 채널은 `Bounded(32, DropOldest)` 라 밀리면 오래된 프레임을 버리는데 — 스냅샷은 다음 틱이 대체하므로 괜찮지만 — 한 번짜리 시작 알림이 그 규칙에 걸리면 그 클라이언트는 로비 화면에 영구히 남는다. 멱등한 전문을 반복하면 ack 와 재전송 장치 없이 수렴한다.
 
 **`MatchState` 와 `ObjectiveState` 는 룸별이 아니라 세션별로 인코딩한다.** 기획서 §2.1 이 술래에게 목표의 위치와 진행도를 숨기므로, 코덱이 Seeker 사본에서 `keysInserted` 와 모든 `carriedKeys` 를 0 으로 만들고 **문 블록을 아예 뺀다**(좌표를 0 으로 채우는 것으로는 부족하다 — 그것도 "문이 있다" 를 알려 준다). 필터가 코덱 안에 있어야 호출부가 우회할 수 없다. 반대로 `escapes` 는 걸러지지 않는다 — 술래가 막아야 하는 수다.
+
+**필터는 양방향이다.** `ammo` 는 반대로 **Runner 사본에서** 지워진다 — 술래만 총을 들고, 남은 탄을 정확히 아는 것은 Runner 에게 주어지지 않은 정보다. 총성이 "한 발 줄었다" 를 알려 주는 것이 이 게임이 그 정보를 전달하는 방식이고, 숫자를 주면 그것을 무료로 넘긴다. **`ammo` 는 영구히 0 이던 `flags` 바이트를 쓴다** — 매치 상태 비트는 전부 매 틱 `EntityFlags` 로 가야 해서 그 자리가 비어 있었고, 크기가 그대로이므로 프로토콜 버전이 올라가지 않았다. 대가는 `WireSizeTests` 가 이 변경을 잡지 못한다는 것이고, 그래서 바이트 위치를 직접 비교하는 테스트가 필터를 못질한다.
 
 **매 틱과 2Hz 를 나누는 기준은 "표현이 즉시 따라가야 하는가" 다.** `EntityFlags`(8비트, 전부 사용)는 원격 몸의 겉모습 — 출혈·탈출·쓰러짐·잠금·역할 — 을 싣고, HUD 가 0.5초 늦어도 되는 수(삽입된 열쇠, 탈출 수, 피격 수)는 전문에 싣는다. 출혈을 전문에 두면 피 흔적이 늦게 시작하고, 열쇠 수를 플래그에 두면 없는 비트를 쓴다.
 
