@@ -47,6 +47,16 @@ namespace NV.Game
             if (match == null || agent == null || !agent.InPlay) return;
             if (match.Phase != MatchPhase.Playing) return;
 
+            // Held by the chain or frozen by a device: no prompt and no use. The design doc calls the
+            // chain penalty "3 seconds **unable to act**" (§4.3) and the freeze device "a global
+            // stop" (§5.1) — using a device is an action, so a penalty that let you keep using them
+            // would be a penalty that only stopped walking.
+            //
+            // The networked path has had this gate since the interact bit was added
+            // (`FirstPersonController` refuses to latch while `MovementLocked`). This is the offline
+            // path catching up: the two disagreed, and the rule says which one was wrong.
+            if (agent.controller != null && agent.controller.MovementLocked) return;
+
             FindTarget(match);
 
             if (_target == null) return;
