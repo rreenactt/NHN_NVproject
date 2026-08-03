@@ -229,13 +229,13 @@ namespace NV.Game
         {
             if (config == null) config = ScriptableObject.CreateInstance<GameConfig>();
 
-            // The server's seed wins. Everything placed below comes out of this one Random, so this
-            // line is what makes two clients see the same door.
-            int seed = PlacementSeedOverride != 0
-                ? PlacementSeedOverride
-                : config.placementSeed != 0
-                    ? config.placementSeed
-                    : Environment.TickCount;
+            // **Resolved once and passed down.** It used to be computed here and again inside
+            // `PlaceObjectives`, and with the default config (`placementSeed` 0) both fell through to
+            // `Environment.TickCount` — which advances between the two reads, so the Random driving
+            // teleports and the sequence placing the objective were seeded from *different* numbers.
+            // Nothing visibly broke because they feed different things, but "one match, one seed" was
+            // not true, and reproducing a layout with `PlacementSeedOverride` only half worked.
+            int seed = ResolvePlacementSeed();
 
             _random = new System.Random(seed);
 
@@ -265,7 +265,7 @@ namespace NV.Game
             // coin-flip match, so the Runners get scattered instead.
             PlaceAgentsAtStart(seeker);
 
-            PlaceObjectives();
+            PlaceObjectives(seed);
 
             RolesAssigned?.Invoke();
             KeysChanged?.Invoke(KeysInserted, config.keysRequired);
@@ -797,7 +797,27 @@ namespace NV.Game
         /// placement the server calls — one algorithm, two callers (ADR 0002). Building the objects
         /// is common to both, so a change to how a key looks cannot diverge between the two paths.
         /// </summary>
-        private void PlaceObjectives()
+        /// <summary>
+        /// Which seed this match's randomness comes from, in priority order: the test override, then
+        /// the config asset, then this machine's clock.
+        ///
+        /// **Call it once per match.** The clock fallback returns a different number every time, so
+        /// two calls in one `BeginMatch` produce two matches' worth of randomness — that is the bug
+        /// this method exists to make unrepresentable.
+        ///
+        /// Networked, none of this reaches the objective: the server places it and sends coordinates
+        /// (IG-011). This seeds the *offline* layout and, in both modes, the local Random behind the
+        /// practice runners and the key scatter.
+        /// </summary>
+        private int ResolvePlacementSeed()
+        {
+            if (PlacementSeedOverride != 0) return PlacementSeedOverride;
+            if (config != null && config.placementSeed != 0) return config.placementSeed;
+
+            return Environment.TickCount;
+        }
+
+        private void PlaceObjectives(int seed)
         {
             ClearObjectives();
 
@@ -820,12 +840,6 @@ namespace NV.Game
                 Debug.LogWarning("[Match] The level has no walkable grid; nothing can be placed.");
                 return;
             }
-
-            int seed = PlacementSeedOverride != 0
-                ? PlacementSeedOverride
-                : config.placementSeed != 0
-                    ? config.placementSeed
-                    : Environment.TickCount;
 
             var sequence = new NV.Shared.Simulation.DeterministicSequence(seed);
             NV.Shared.Simulation.ObjectivePlacement.PlaceObjectives(_placement, grid, ref sequence);
