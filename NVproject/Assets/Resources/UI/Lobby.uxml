@@ -1,0 +1,77 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!--
+        Backrooms Escape — lobby.
+
+        Two screens in one tree. #home is the entry: make a room, or type a code. #room is the
+        inside of a room: the code to hand out, who is here, and the host's start button. The
+        controller shows exactly one of them, because the two are never both true.
+
+        Nothing here is role-specific, so nothing has to be removed from the tree the way the
+        in-game HUD removes the other side's panel. The lobby is the one screen both sides share.
+    -->
+    <ui:VisualElement name="lobby-root" class="lobby-root">
+        <ui:VisualElement name="scanlines" class="scanlines" />
+
+        <ui:VisualElement name="frame" class="frame">
+            <ui:Label name="brand" class="brand" text="BACKROOMS ESCAPE" />
+            <ui:Label name="brand-sub" class="brand-sub" text="LEVEL 0 · ACCESS TERMINAL" />
+
+            <!-- ============================================ 첫 화면 -->
+            <ui:VisualElement name="home" class="screen">
+                <ui:Label class="field-label" text="SERVER" />
+                <ui:TextField name="host" class="field" value="localhost:5202" />
+
+                <ui:Label class="field-label" text="NAME" />
+                <ui:TextField name="name" class="field" />
+
+                <ui:VisualElement class="row">
+                    <ui:VisualElement class="col">
+                        <ui:Label class="field-label" text="MAP" />
+                        <ui:TextField name="map" class="field" value="default" />
+                    </ui:VisualElement>
+                    <ui:Button name="create" class="button button-primary" text="방 만들기" />
+                </ui:VisualElement>
+
+                <ui:VisualElement class="divider">
+                    <ui:Label class="divider-text" text="또는" />
+                </ui:VisualElement>
+
+                <ui:Label class="field-label" text="INVITE CODE" />
+                <ui:TextField name="code" class="field field-code" max-length="16" />
+                <ui:Label name="code-hint" class="hint" />
+                <ui:Button name="join" class="button" text="코드로 참가" />
+            </ui:VisualElement>
+
+            <!-- ============================================ 방 안 -->
+            <ui:VisualElement name="room" class="screen">
+                <ui:Label class="field-label" text="INVITE CODE" />
+                <ui:Label name="room-code" class="room-code" text="------" />
+
+                <ui:VisualElement class="row">
+                    <ui:Button name="copy-code" class="button button-small" text="코드 복사" />
+                    <ui:Button name="copy-link" class="button button-small" text="링크 복사" />
+                </ui:VisualElement>
+                <ui:Label name="copy-result" class="hint" />
+
+                <ui:Label name="room-map" class="meta" />
+
+                <ui:Label class="field-label" text="PLAYERS" />
+                <ui:VisualElement name="roster" class="roster" />
+
+                <ui:Label name="room-note" class="hint" />
+
+                <ui:VisualElement class="row">
+                    <ui:Button name="start" class="button button-primary" text="게임 시작" />
+                    <ui:Button name="leave" class="button" text="나가기" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- ============================================ 상태 -->
+            <ui:VisualElement name="status" class="status">
+                <ui:Label name="status-line" class="status-line" />
+                <ui:Label name="status-action" class="status-action" />
+                <ui:Button name="retry" class="button button-small" text="다시 시도" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

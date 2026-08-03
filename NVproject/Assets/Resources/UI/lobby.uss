@@ -1,0 +1,274 @@
+/*
+    Backrooms Escape — lobby style.
+
+    Same palette as the in-game HUD, and for the same reason: the lobby is the first thing anyone
+    sees, and if it reads as a game menu the level's mood starts from zero when the match begins.
+    Wall #C9B36B, trim #A8924E, fluorescent #FFF6D6, bone #F2E7C2, brown-black #0E0C08.
+
+    The two rules carried over from game-hud.uss:
+    - Nothing is pure white or pure black. Pure values read as software; these read as signage.
+    - Panels are translucent, thin-bordered, square. Facility labelling, not a game overlay.
+
+    One rule of its own: this screen is *read while typing a code someone said out loud*, so the
+    code field and the code display are the largest things on it and are letter-spaced wide enough
+    that no two characters run together.
+*/
+
+.lobby-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgb(24, 21, 14);
+    align-items: center;
+    justify-content: center;
+}
+
+.scanlines {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    opacity: 0.16;
+    /* texture generated at runtime to match the screen height, so the lines stay one pixel */
+}
+
+.frame {
+    width: 460px;
+    padding-left: 34px;
+    padding-right: 34px;
+    padding-top: 28px;
+    padding-bottom: 28px;
+    background-color: rgba(14, 12, 8, 0.82);
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-color: rgb(168, 146, 78);
+    border-right-color: rgb(168, 146, 78);
+    border-top-color: rgb(168, 146, 78);
+    border-bottom-color: rgb(168, 146, 78);
+}
+
+.brand {
+    color: rgb(255, 246, 214);
+    font-size: 22px;
+    letter-spacing: 5px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    text-shadow: 1px 1px 0 rgb(14, 12, 8);
+}
+
+.brand-sub {
+    color: rgb(168, 146, 78);
+    font-size: 10px;
+    letter-spacing: 4px;
+    -unity-text-align: middle-center;
+    margin-bottom: 22px;
+}
+
+.screen {
+    flex-direction: column;
+}
+
+/* ============================================================ fields */
+
+.field-label {
+    color: rgb(168, 146, 78);
+    font-size: 10px;
+    letter-spacing: 3px;
+    margin-top: 10px;
+    margin-bottom: 3px;
+}
+
+.field {
+    margin-bottom: 2px;
+}
+
+.field .unity-base-text-field__input {
+    background-color: rgba(201, 179, 107, 0.10);
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-color: rgb(120, 104, 58);
+    border-right-color: rgb(120, 104, 58);
+    border-top-color: rgb(120, 104, 58);
+    border-bottom-color: rgb(120, 104, 58);
+    color: rgb(242, 231, 194);
+    font-size: 14px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+/* 코드는 받아 적는 값이다. 크게, 자간을 넓게, 대문자로. */
+.field-code .unity-base-text-field__input {
+    font-size: 22px;
+    letter-spacing: 8px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+}
+
+.hint {
+    color: rgb(183, 172, 126);
+    font-size: 11px;
+    white-space: normal;
+    margin-top: 3px;
+    margin-bottom: 4px;
+}
+
+.meta {
+    color: rgb(183, 172, 126);
+    font-size: 11px;
+    letter-spacing: 1px;
+    margin-top: 8px;
+}
+
+/* ============================================================ layout */
+
+.row {
+    flex-direction: row;
+    align-items: flex-end;
+    margin-top: 6px;
+}
+
+.col {
+    flex-grow: 1;
+    margin-right: 8px;
+}
+
+.divider {
+    margin-top: 18px;
+    margin-bottom: 4px;
+    border-top-width: 1px;
+    border-top-color: rgb(78, 68, 40);
+    align-items: center;
+}
+
+.divider-text {
+    color: rgb(120, 104, 58);
+    font-size: 10px;
+    letter-spacing: 3px;
+    margin-top: -7px;
+    padding-left: 8px;
+    padding-right: 8px;
+    background-color: rgb(14, 12, 8);
+}
+
+/* ============================================================ buttons */
+
+.button {
+    background-color: rgba(201, 179, 107, 0.14);
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-color: rgb(168, 146, 78);
+    border-right-color: rgb(168, 146, 78);
+    border-top-color: rgb(168, 146, 78);
+    border-bottom-color: rgb(168, 146, 78);
+    color: rgb(242, 231, 194);
+    font-size: 13px;
+    letter-spacing: 2px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+    margin-top: 8px;
+    margin-left: 0;
+    margin-right: 0;
+    flex-grow: 1;
+}
+
+.button:hover {
+    background-color: rgba(255, 246, 214, 0.20);
+}
+
+.button:disabled {
+    opacity: 0.35;
+}
+
+.button-primary {
+    background-color: rgba(255, 246, 214, 0.22);
+    -unity-font-style: bold;
+}
+
+.button-small {
+    font-size: 11px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    margin-right: 6px;
+}
+
+/* ============================================================ room */
+
+.room-code {
+    color: rgb(255, 246, 214);
+    font-size: 42px;
+    letter-spacing: 12px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    text-shadow: 2px 2px 0 rgb(14, 12, 8);
+    margin-top: 2px;
+    margin-bottom: 6px;
+}
+
+.roster {
+    flex-direction: column;
+    min-height: 96px;
+    border-left-width: 1px;
+    border-left-color: rgb(78, 68, 40);
+    padding-left: 10px;
+}
+
+.roster-row {
+    flex-direction: row;
+    justify-content: space-between;
+    margin-top: 3px;
+}
+
+.roster-name {
+    color: rgb(242, 231, 194);
+    font-size: 13px;
+}
+
+.roster-tag {
+    color: rgb(168, 146, 78);
+    font-size: 10px;
+    letter-spacing: 2px;
+}
+
+/* 나 자신은 눈에 띄어야 한다. 8명 명단에서 자기 줄을 세어 찾게 하면 안 된다. */
+.roster-self .roster-name {
+    color: rgb(255, 246, 214);
+    -unity-font-style: bold;
+}
+
+/* ============================================================ status */
+
+.status {
+    margin-top: 16px;
+    border-top-width: 1px;
+    border-top-color: rgb(78, 68, 40);
+    padding-top: 10px;
+}
+
+.status-line {
+    color: rgb(242, 231, 194);
+    font-size: 12px;
+    white-space: normal;
+}
+
+/* 실패했을 때 다음에 할 일. 사유만 보여 주면 화면이 막힌다. */
+.status-action {
+    color: rgb(168, 146, 78);
+    font-size: 11px;
+    white-space: normal;
+    margin-top: 3px;
+}
+
+.status-failed .status-line {
+    color: rgb(214, 108, 96);
+}
