@@ -1,0 +1,13 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!--
+        Who you are, as far as this build knows.
+
+        There are no accounts (the Identity module is unbuilt), so the name lives as long as the
+        session and nothing stops two people picking the same one. The note line says so rather
+        than letting the header imply an identity the server never verified.
+    -->
+    <ui:VisualElement name="player-info" class="player-info">
+        <ui:Label name="player-name" class="player-name" />
+        <ui:Label name="player-note" class="player-note" />
+    </ui:VisualElement>
+</ui:UXML>

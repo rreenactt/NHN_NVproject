@@ -1,0 +1,5 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="toast" class="toast">
+        <ui:Label name="toast-text" />
+    </ui:VisualElement>
+</ui:UXML>

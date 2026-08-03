@@ -14,7 +14,8 @@ namespace NV.Client.Net.Session
             int playerCount,
             int capacity,
             byte hostPlayerId,
-            int minPlayers)
+            int minPlayers,
+            bool isPublic)
         {
             Code = code;
             MapName = mapName;
@@ -24,6 +25,7 @@ namespace NV.Client.Net.Session
             Capacity = capacity;
             HostPlayerId = hostPlayerId;
             MinPlayers = minPlayers;
+            IsPublic = isPublic;
         }
 
         public string Code { get; }
@@ -45,13 +47,30 @@ namespace NV.Client.Net.Session
         /// 클라이언트가 따로 적으면 서버 규칙이 바뀔 때 화면만 거짓말을 한다.
         public int MinPlayers { get; }
 
+        /// 이 방이 공개 목록에 실리는가.
+        ///
+        /// 방을 만든 사람이 정하고 바꿀 수 없다. 목록에 실릴지만 정하며 접근을 막지
+        /// 않는다 — 비공개 방도 코드를 아는 사람은 그대로 들어온다.
+        ///
+        /// 목록에서 온 방은 정의상 전부 공개다. 이 값이 의미를 갖는 곳은 코드로 들어간
+        /// 방의 화면이다: 자기가 지금 비공개 방에 있다는 것을 알아야 코드를 함부로
+        /// 흘리지 않는다.
+        public bool IsPublic { get; }
+
         public bool IsFull => PlayerCount >= Capacity;
     }
 
     /// 방 만들기 결과.
     public readonly struct RoomCreateResult
     {
-        public RoomCreateResult(string code, string hostToken, string mapName, uint mapHash, int capacity, int minPlayers)
+        public RoomCreateResult(
+            string code,
+            string hostToken,
+            string mapName,
+            uint mapHash,
+            int capacity,
+            int minPlayers,
+            bool isPublic)
         {
             Code = code;
             HostToken = hostToken;
@@ -59,6 +78,7 @@ namespace NV.Client.Net.Session
             MapHash = mapHash;
             Capacity = capacity;
             MinPlayers = minPlayers;
+            IsPublic = isPublic;
             Failure = SessionFailureKind.None;
         }
 
@@ -70,6 +90,7 @@ namespace NV.Client.Net.Session
             MapHash = 0u;
             Capacity = 0;
             MinPlayers = 0;
+            IsPublic = false;
             Failure = failure;
         }
 
@@ -86,6 +107,12 @@ namespace NV.Client.Net.Session
         public int Capacity { get; }
 
         public int MinPlayers { get; }
+
+        /// 서버가 실제로 적용한 공개 여부.
+        ///
+        /// 요청한 값을 그대로 되쓰지 않고 응답을 읽는다. 서버가 요청을 무시했거나
+        /// 필드를 모르는 옛 서버라면 화면이 사실과 다른 것을 말하게 된다.
+        public bool IsPublic { get; }
 
         public SessionFailureKind Failure { get; }
 
@@ -127,6 +154,9 @@ namespace NV.Client.Net.Session
     internal sealed class CreateRoomRequestDto
     {
         public string map;
+
+        /// 목록 공개 여부. 서버는 이 필드가 없으면 비공개로 만든다.
+        public bool isPublic;
     }
 
     [Serializable]
@@ -139,6 +169,7 @@ namespace NV.Client.Net.Session
         public long mapHash;
         public int capacity;
         public int minPlayers;
+        public bool isPublic;
     }
 
     [Serializable]
@@ -152,6 +183,7 @@ namespace NV.Client.Net.Session
         public int capacity;
         public int hostPlayerId;
         public int minPlayers;
+        public bool isPublic;
 
         public RoomInfo ToRoomInfo()
         {
@@ -163,7 +195,8 @@ namespace NV.Client.Net.Session
                 playerCount,
                 capacity,
                 (byte)hostPlayerId,
-                minPlayers);
+                minPlayers,
+                isPublic);
         }
     }
 

@@ -1,0 +1,93 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!--
+        Backrooms Escape — main lobby.
+
+        The shell only. Everything that repeats or pops up lives in templates/ and is cloned by
+        the views, which is this project's answer to "build the UI from prefabs": a VisualTreeAsset
+        is the reusable unit and CloneTree() is Instantiate().
+
+        Three regions sit under #content, and two of them are deliberately empty. #side-rail is
+        where friends and party go, #dock is where chat goes. They are in the tree now so that
+        adding those later is a template drop, not a re-layout — a grid that has never had to
+        hold a third column tends to be written in a way that cannot.
+
+        #popup-root and #toast-root are last so they draw over everything. Order in the tree is
+        the only stacking control here; there is no z-index worth relying on.
+    -->
+    <ui:VisualElement name="lobby-root" class="lobby-root">
+        <ui:VisualElement name="background" class="bg" />
+        <ui:VisualElement name="scanlines" class="scanlines" />
+
+        <!-- ================================================ header -->
+        <ui:VisualElement name="header" class="header">
+            <ui:VisualElement name="logo" class="logo">
+                <ui:Label name="logo-title" class="logo-title" text="BACKROOMS ESCAPE" />
+                <ui:Label name="logo-sub" class="logo-sub" text="LEVEL 0 · ACCESS TERMINAL" />
+            </ui:VisualElement>
+
+            <ui:VisualElement name="header-right" class="header-right">
+                <ui:VisualElement name="player-info" class="player-info-slot" />
+                <ui:VisualElement name="connection" class="connection-slot" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- ================================================ content -->
+        <ui:VisualElement name="content" class="content-grid">
+
+            <!-- 친구 · 파티 확장 지점. 지금은 자리만 잡는다. -->
+            <ui:VisualElement name="side-rail" class="side-rail" />
+
+            <ui:VisualElement name="room-panel" class="panel room-panel">
+                <ui:VisualElement name="room-panel-head" class="panel-head">
+                    <ui:Label name="room-panel-title" class="panel-title" text="ACTIVE ROOMS" />
+                    <ui:VisualElement class="panel-head-right">
+                        <ui:Label name="room-refreshed" class="panel-meta" />
+                        <ui:Button name="refresh-button" class="button button-small" text="새로고침" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+
+                <ui:ScrollView name="room-scroll" class="room-scroll" />
+
+                <!--
+                    빈 목록과 비공개는 같은 화면이 아니다. 하나는 "방이 없다", 다른 하나는
+                    "알 수 없다" 이고 사용자가 다음에 할 일이 다르다.
+                -->
+                <ui:VisualElement name="room-empty" class="room-empty">
+                    <ui:Label name="room-empty-title" class="room-empty-title" />
+                    <ui:Label name="room-empty-note" class="room-empty-note" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement name="action-panel" class="panel action-panel">
+                <ui:Label class="panel-title" text="MENU" />
+
+                <ui:Button name="create-room-button" class="button button-primary" text="방 만들기" />
+                <ui:Button name="join-code-button" class="button button-primary" text="코드로 참가" />
+                <ui:Button name="quick-join-button" class="button" text="빠른 참가" />
+                <ui:Label name="quick-join-note" class="hint" />
+
+                <ui:VisualElement class="action-spacer" />
+
+                <ui:Button name="settings-button" class="button" text="설정" />
+                <ui:Button name="quit-button" class="button button-danger" text="게임 종료" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- 채팅 확장 지점. -->
+        <ui:VisualElement name="dock" class="dock" />
+
+        <!-- ================================================ 상태 줄 -->
+        <ui:VisualElement name="status" class="status">
+            <ui:Label name="status-line" class="status-line" />
+            <ui:Label name="status-action" class="status-action" />
+            <ui:Button name="retry-button" class="button button-small" text="다시 시도" />
+        </ui:VisualElement>
+
+        <!-- ================================================ 겹치는 것들 -->
+        <ui:VisualElement name="popup-root" class="popup-root" />
+        <ui:VisualElement name="toast-root" class="toast-root" />
+        <ui:VisualElement name="loading-overlay" class="loading-overlay">
+            <ui:Label name="loading-text" class="loading-text" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

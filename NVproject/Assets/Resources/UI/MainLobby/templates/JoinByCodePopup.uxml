@@ -1,0 +1,26 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!--
+        Join by invite code.
+
+        This replaces the RoomPasswordPopup the requirement asked for: the server has no room
+        password, and the invite code is what actually gates entry. Codes are 6..12 characters from
+        a 31-symbol alphabet, and the length is a *range* because the server grows it with the live
+        room count — pinning it to 6 would make this screen reject a code the server issued.
+
+        Format is checked here, before the request goes out, so a typo does not spend a slot in the
+        60-per-minute bucket that GET /rooms/{code} shares with the WebSocket upgrade.
+    -->
+    <ui:VisualElement name="join-code-popup" class="popup-frame">
+        <ui:Label class="popup-title" text="코드로 참가" />
+        <ui:Label class="popup-sub" text="JOIN BY INVITE CODE" />
+
+        <ui:Label class="field-label" text="INVITE CODE" />
+        <ui:TextField name="join-code" class="field field-code" max-length="16" />
+        <ui:Label name="join-hint" class="hint" />
+
+        <ui:VisualElement class="row">
+            <ui:Button name="join-confirm" class="button button-primary" text="참가" />
+            <ui:Button name="join-cancel" class="button" text="취소" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

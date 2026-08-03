@@ -1,0 +1,17 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!--
+        Server reachability, protocol version, and the online headcount.
+
+        The headcount is a sum over the public room list, not a figure the server reports — there is
+        no endpoint for it. The meta line says "공개된 방 기준" for that reason, and when the server
+        does not publish its room list the count is hidden entirely rather than shown as zero.
+    -->
+    <ui:VisualElement name="connection" class="connection">
+        <ui:VisualElement class="connection-line">
+            <ui:VisualElement name="connection-dot" class="connection-dot" />
+            <ui:Label name="connection-label" class="connection-label" />
+        </ui:VisualElement>
+        <ui:Label name="connection-meta" class="connection-meta" />
+        <ui:Label name="connection-players" class="connection-meta" />
+    </ui:VisualElement>
+</ui:UXML>

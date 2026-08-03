@@ -1,0 +1,22 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!--
+        One row in the active-room list. This is the template the requirement calls RoomItem.prefab:
+        it is cloned per room and recycled through a free list, so scrolling a full list allocates
+        nothing after the first frame.
+
+        The badges carry the two things a status code alone cannot say — whether the room is already
+        playing, and whether it is a static development room that will never be reclaimed.
+    -->
+    <ui:VisualElement name="room-item" class="room-item">
+        <ui:VisualElement class="room-item-left">
+            <ui:Label name="item-code" class="room-item-code" />
+            <ui:Label name="item-map" class="room-item-map" />
+        </ui:VisualElement>
+
+        <ui:VisualElement class="room-item-right">
+            <ui:Label name="item-badge" class="room-item-badge" />
+            <ui:Label name="item-count" class="room-item-count" />
+            <ui:Button name="item-join" class="button button-small room-item-join" text="참가" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

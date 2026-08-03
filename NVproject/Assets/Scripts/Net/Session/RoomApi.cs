@@ -31,9 +31,18 @@ namespace NV.Client.Net.Session
         public string BaseUrl => _baseUrl;
 
         /// 방을 만든다. 성공하면 코드와 방장 토큰이 담긴다.
-        public IEnumerator Create(string mapId, Action<RoomCreateResult> done)
+        ///
+        /// <param name="isPublic">
+        /// 공개 목록(`GET /rooms`)에 실을 것인가. 서버도 이 필드가 없으면 비공개로
+        /// 해석하므로, 두 쪽 모두에서 노출은 선택이지 기본값이 아니다.
+        /// </param>
+        public IEnumerator Create(string mapId, bool isPublic, Action<RoomCreateResult> done)
         {
-            var body = JsonUtility.ToJson(new CreateRoomRequestDto { map = mapId ?? string.Empty });
+            var body = JsonUtility.ToJson(new CreateRoomRequestDto
+            {
+                map = mapId ?? string.Empty,
+                isPublic = isPublic,
+            });
 
             using var request = new UnityWebRequest(_baseUrl + "/rooms", "POST")
             {
@@ -68,7 +77,8 @@ namespace NV.Client.Net.Session
                     payload.mapName,
                     unchecked((uint)payload.mapHash),
                     payload.capacity,
-                    payload.minPlayers));
+                    payload.minPlayers,
+                    payload.isPublic));
 
                 yield break;
             }
@@ -134,6 +144,63 @@ namespace NV.Client.Net.Session
             }
         }
 
+        /// 공개된 방 목록을 받는다.
+        ///
+        /// 이 엔드포인트는 서버 설정(`Realtime:AllowRoomListing`)이 켜져 있을 때만
+        /// 답한다. 꺼져 있으면 **404 에 빈 본문**이며, 그것은 오류가 아니라 "이 서버는
+        /// 목록을 공개하지 않는다" 는 정상 응답이다 — 초대 코드 모델에서는 그쪽이
+        /// 기본값이다. 그래서 404 만 `NotPublished` 로 따로 뺀다.
+        ///
+        /// 서버 쪽에 이 경로만 레이트리밋이 걸려 있지 않다. 자동 폴링을 붙이면 무방비로
+        /// 맞으므로 호출자가 주기를 만들지 않는다 — 화면 진입 1회와 수동 새로고침뿐이다.
+        public IEnumerator List(Action<RoomListResult> done)
+        {
+            using var request = UnityWebRequest.Get(_baseUrl + "/rooms");
+            request.timeout = TimeoutSeconds;
+
+            yield return request.SendWebRequest();
+
+            if (!Reached(request))
+            {
+                done(RoomListResult.Failed(SessionFailureKind.ServerUnreachable));
+                yield break;
+            }
+
+            if (request.responseCode == 404)
+            {
+                done(RoomListResult.NotPublished());
+                yield break;
+            }
+
+            if (request.responseCode == 429)
+            {
+                done(RoomListResult.Failed(SessionFailureKind.TooManyRequests));
+                yield break;
+            }
+
+            if (request.responseCode != 200)
+            {
+                done(RoomListResult.Failed(SessionFailureKind.ServerUnreachable));
+                yield break;
+            }
+
+            done(new RoomListResult(ReadRoomList(request)));
+        }
+
+        /// 서버가 살아 있는가.
+        ///
+        /// `GET /health` 는 JSON 이 아니라 `text/plain` 으로 `ok` 한 줄을 준다. 파싱하려
+        /// 들면 실패한다. 여기서 보는 것은 본문이 아니라 "200 이 왔는가" 뿐이다.
+        public IEnumerator Health(Action<bool> done)
+        {
+            using var request = UnityWebRequest.Get(_baseUrl + "/health");
+            request.timeout = TimeoutSeconds;
+
+            yield return request.SendWebRequest();
+
+            done(Reached(request) && request.responseCode == 200);
+        }
+
         /// 서버까지 닿았는가.
         ///
         /// `result` 만 보면 안 된다. `ProtocolError` 는 서버가 4xx·5xx 로 답한
@@ -155,6 +222,38 @@ namespace NV.Client.Net.Session
 
             var payload = JsonUtility.FromJson<RoomInfoResponseDto>(text);
             return payload == null ? default : payload.ToRoomInfo();
+        }
+
+        /// 배열 응답을 읽는다.
+        ///
+        /// `JsonUtility` 는 최상위 배열을 파싱하지 못하고 **예외 대신 null 을 돌려준다**.
+        /// 감싸지 않으면 파싱 실패가 "방이 0개" 로 조용히 둔갑해, 목록이 비어 보이는
+        /// 원인이 서버인지 클라이언트인지 화면에서 구분할 수 없게 된다.
+        private static RoomInfo[] ReadRoomList(UnityWebRequest request)
+        {
+            var text = request.downloadHandler?.text;
+
+            if (string.IsNullOrEmpty(text) || text[0] != '[')
+            {
+                return Array.Empty<RoomInfo>();
+            }
+
+            var wrapped = RoomListResponseDto.WrapperPrefix + text + RoomListResponseDto.WrapperSuffix;
+            var payload = JsonUtility.FromJson<RoomListResponseDto>(wrapped);
+
+            if (payload?.items == null)
+            {
+                return Array.Empty<RoomInfo>();
+            }
+
+            var rooms = new RoomInfo[payload.items.Length];
+
+            for (var index = 0; index < payload.items.Length; index++)
+            {
+                rooms[index] = payload.items[index].ToRoomInfo();
+            }
+
+            return rooms;
         }
 
         private static SessionFailureKind CreateFailure(UnityWebRequest request)

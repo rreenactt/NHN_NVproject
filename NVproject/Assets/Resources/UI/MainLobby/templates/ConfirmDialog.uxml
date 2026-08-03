@@ -1,0 +1,11 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="confirm-dialog" class="popup-frame">
+        <ui:Label name="confirm-title" class="popup-title" />
+        <ui:Label name="confirm-body" class="popup-body" />
+
+        <ui:VisualElement class="row">
+            <ui:Button name="confirm-ok" class="button button-primary" text="확인" />
+            <ui:Button name="confirm-cancel" class="button" text="취소" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

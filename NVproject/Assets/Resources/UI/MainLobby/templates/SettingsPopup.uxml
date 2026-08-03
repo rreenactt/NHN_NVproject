@@ -1,0 +1,27 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!--
+        Settings.
+
+        Server address and name can only be changed while the session is Idle. Changing the address
+        mid-session would send the retry path (0.5/1/2/4s backoff) at a different server than the one
+        the room lives on, and the failure that produces looks like the room vanished.
+    -->
+    <ui:VisualElement name="settings-popup" class="popup-frame">
+        <ui:Label class="popup-title" text="설정" />
+        <ui:Label class="popup-sub" text="SETTINGS" />
+
+        <ui:Label class="field-label" text="NAME" />
+        <ui:TextField name="settings-name" class="field" max-length="12" />
+        <ui:Label name="settings-name-note" class="hint" />
+
+        <ui:Label class="field-label" text="SERVER" />
+        <ui:TextField name="settings-host" class="field" />
+        <ui:Toggle name="settings-secure" label="HTTPS / WSS" />
+        <ui:Label name="settings-lock-note" class="hint" />
+
+        <ui:VisualElement class="row">
+            <ui:Button name="settings-save" class="button button-primary" text="저장" />
+            <ui:Button name="settings-cancel" class="button" text="닫기" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

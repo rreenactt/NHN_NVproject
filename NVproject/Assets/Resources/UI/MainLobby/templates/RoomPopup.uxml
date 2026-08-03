@@ -1,0 +1,38 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!--
+        Inside a room: the code to hand out, who is here, and the host's start button.
+
+        The requirement's UI tree does not include this screen — it describes only the lobby's front
+        page. Without it, making a room leaves you on a screen with nothing to do, so it is carried
+        over from the lobby this main lobby replaces.
+
+        The roster is redrawn from the server's 0x82 bulletin, which arrives at 2Hz forever rather
+        than once. Names may be empty (the wire allows a zero-length name) and fall back to the
+        player id.
+    -->
+    <ui:VisualElement name="room-popup" class="popup-frame popup-frame-wide">
+        <ui:Label class="popup-title" text="방" />
+        <ui:Label class="popup-sub" text="INVITE CODE" />
+
+        <ui:Label name="room-code" class="room-code" text="------" />
+
+        <ui:VisualElement class="row">
+            <ui:Button name="room-copy-code" class="button button-small" text="코드 복사" />
+            <ui:Button name="room-copy-link" class="button button-small" text="링크 복사" />
+        </ui:VisualElement>
+        <ui:Label name="room-copy-result" class="hint" />
+
+        <ui:Label name="room-map" class="panel-meta" />
+        <ui:Label name="room-visibility" class="panel-meta" />
+
+        <ui:Label class="field-label" text="PLAYERS" />
+        <ui:VisualElement name="room-roster" class="roster" />
+
+        <ui:Label name="room-note" class="hint" />
+
+        <ui:VisualElement class="row">
+            <ui:Button name="room-start" class="button button-primary" text="게임 시작" />
+            <ui:Button name="room-leave" class="button" text="나가기" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
