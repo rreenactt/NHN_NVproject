@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 1)
-현재 이터레이션: 1
-기준 커밋: `2f83246`
+최종 갱신: 2026-08-04 (이터레이션 2)
+현재 이터레이션: 2
+기준 커밋: `b20b4e9`
 
 ## 이 루프가 실제로 하는 일
 
@@ -25,7 +25,9 @@
 
 | 용도 | 명령 | 확인 결과 |
 |---|---|---|
-| 서버 빌드+테스트 | `cd NVserver && dotnet test` | ✅ 통과 — Architecture 4 + Modules 169 = **173개**, 실패 0 |
+| 서버 빌드+테스트 | `cd NVserver && dotnet test` | ✅ 통과 — Architecture 4 + Modules **205** = **209개**, 실패 0 (이터레이션 2 기준) |
+| 서버 경고 0 확인 | `cd NVserver && dotnet build` | ✅ 경고 0개 오류 0개 (`TreatWarningsAsErrors` 라 IDE0011 같은 스타일 규칙도 빌드를 깬다) |
+| **Unity 가 `Shared` 를 컴파일했는지** | `Unity_RunCommand` 로 ①`AssetDatabase.Refresh(ForceUpdate)` + `UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation()` → ②`NV.Client.*` 타입을 만지는 커맨드가 성공하는지 + `Library/ScriptAssemblies/Shared.dll` 의 타임스탬프 | ✅ 동작 (이터레이션 2). `Shared` 변경 뒤에는 `dotnet build` 만으로 충분하지 않다 — 이 절차가 그 확인이다 |
 | 서버 단일 테스트 | `cd NVserver && dotnet test --filter "FullyQualifiedName~MovementTests"` | (표기만, `dotnet test` 로 검증됨) |
 | 클라이언트 컴파일 검증 | `cd NVproject && dotnet build Assembly-CSharp.csproj` | ✅ **오류 0개**, 경고 2개 (MSB3277 `System.IO.Compression` 참조 통합 — 무해, 기존부터 있음) |
 | 로컬 서버 실행 | `cd NVserver && dotnet run --project Api` | 미실행 (스모크 테스트 태스크에서) |
@@ -43,7 +45,19 @@
 
 **MCP 함정 — exporter 의 `Debug.Log` 가 `Unity_GetConsoleLogs` 에 잡히지 않았다.** 박스 수·해시를
 그 로그로 확인하려던 경로가 빈 배열을 돌려주므로, **부작용은 파일시스템에서 확인한다**
-(`NVproject/CLAUDE.md` 가 이미 지시하는 규칙이며 이번에 실제로 필요했다).
+(`NVproject/CLAUDE.md` 가 이미 지시하는 규칙이며 이번에 실제로 필요했다). 콘솔이 비어 있는 것을
+"에러 없음" 의 증거로 쓸 수 없다는 뜻이기도 하다 — 컴파일 성공은 위의 `Shared` 확인 절차처럼
+**바인딩이 실제로 되는지**로 봐야 한다.
+
+**MCP 함정 — 커맨드 래퍼의 namespace 가 `CompilationPipeline` 을 가로챈다.** 래퍼가 코드를
+`Unity.AI.Assistant.Agent.Dynamic.Extension.Editor` 안에 넣으므로 `using UnityEditor.Compilation;`
+을 써도 `Unity.CompilationPipeline` 로 해석되어 `CS0234` 가 난다. 완전 수식
+(`UnityEditor.Compilation.CompilationPipeline`)으로 쓴다. `NVproject/CLAUDE.md` 가 적어 둔
+`Mesh`/`Image` 충돌과 같은 부류이며, `Unity.` 로 시작하는 이름은 전부 이 위험을 갖는다.
+
+**`Shared` 에 파일을 추가하면 `.meta` 가 함께 커밋되어야 한다.** `NVserver/Shared` 는
+`Shared.asmdef` 를 가진 Unity 로컬 패키지다. 새 `.cs` 를 만들면 `.meta` 는 **Unity 가 임포트할 때**
+생기므로, `AssetDatabase.Refresh` 를 한 번 돌리지 않으면 `.meta` 없이 커밋된다.
 
 **주의 — 새 `.cs` 는 `Assembly-CSharp.csproj` 의 `Compile` 목록에 없다.** 추가 후 첫 빌드는
 자기 namespace 에서 `CS0234` 로 실패한다. `<Compile Include="…" />` 를 넣고 다시 돌린다
@@ -102,7 +116,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | ID | 제목 | 상태 | 우선순위 | 의존 | 요구사항 ID |
 |---|---|---|---|---|---|
 | IG-001 | 맵 이름·등록·export 정합성 복구 | **DONE** | P0 | - | R-0.1, R-0.2 |
-| IG-002 | `MapData` 격자 스키마 + 해시 + `DeterministicSequence` | TODO | P0 | IG-001 | R-0.3 |
+| IG-002 | `MapData` 격자 스키마 + 해시 + `DeterministicSequence` | **DONE** | P0 | IG-001 | R-0.3 |
 | IG-003 | 클라이언트 격자 export (`MapExport`·`INetworkMapSource`) | TODO | P0 | IG-002 | R-0.3 |
 | IG-004 | 서버 `MapGrid` 질의 + 테스트 | TODO | P0 | IG-003 | R-0.3 |
 | IG-005 | `MatchConstants` 분리 (`Shared`) + `GameConfig` 프로퍼티 대체 | TODO | P1 | IG-004 | R-1.x 전반 |
@@ -184,21 +198,59 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
     테스트에서 함께 확인한다.**
 
 ### IG-002 — `MapData` 격자 스키마 + 해시 + `DeterministicSequence`
-- 상태: TODO
+- 상태: **DONE** (이터레이션 2, 2026-08-04)
 - 기획서 근거: R-0.3 — 서버가 "여기 설 수 있는가" 를 답해야 R-3.4·R-6.x·R-7.1 이 가능해진다
-- 계획: `Shared/Collision/MapData.cs` 에 `Grid { Floors, Width, Depth, CellSize, FloorHeight,
-  OriginX, OriginZ, Cells[] }` 추가. 셀당 1바이트 플래그 — `Standable`(격자 통행 가능),
-  `FreeFloor`(플레이어 캡슐이 실제로 들어감 = 계단·기물 제외), `StairLink`(위층 수직 연결).
-  세 개를 나누는 이유는 쓰임이 다르다: 열쇠는 `Standable`, 제단·순간이동 착지점은 `FreeFloor`,
-  `StairLink` 는 경로 탐색용. `ComputeHash` 에 격자를 포함시킨다 — 포함하지 않으면 격자가
-  어긋난 채 해시가 일치해 증상이 "가끔 열쇠가 벽 안에 생김" 으로만 나타난다.
-  `Shared/Simulation/DeterministicSequence.cs` 추가 (xorshift, 상태 명시) — 기존
-  `DeterministicRandom` 은 (틱,엔티티,salt)→값 무상태 해시라 *순서* 있는 난수를 못 만든다.
-- 변경 예정 파일: `Shared/Collision/MapData.cs`, `Shared/Simulation/DeterministicSequence.cs`,
-  `tests/Modules.Tests/Simulation/DeterministicSequenceTests.cs`
-- 검증: `dotnet test`
-- 비고: 해시가 바뀌므로 IG-003 과 **같은 배포 단위**. `DeterministicSequence` 를 초대 코드·방장
-  토큰에 쓰면 안 된다 — 그쪽은 `RandomNumberGenerator` (`conventions.md`).
+- 계획: `MapGridData { Floors, Width, Depth, CellSize, FloorHeight, OriginX, OriginZ, Cells[] }`.
+  셀당 1바이트 `MapCellFlags` — `Standable`(격자 통행 가능), `FreeFloor`(플레이어 캡슐이 실제로
+  들어감 = 계단·기물 제외), `StairLink`(위층 수직 연결). 세 개를 나누는 이유는 쓰임이 다르다:
+  열쇠는 `Standable`, 제단·순간이동 착지점은 `FreeFloor`, `StairLink` 는 경로 탐색용.
+  `DeterministicSequence` 는 xorshift32 + 상태 명시 — 기존 `DeterministicRandom` 은
+  (틱,엔티티,salt)→값 **무상태 해시**라 같은 틱에 여러 번 뽑으면 같은 값이 나오고, "열쇠 10개를
+  차례로" 같은 수열을 만들 수 없다.
+- 변경 파일 (7개):
+  - `Shared/Collision/MapGridData.cs` (신규) — `MapCellFlags` + `MapGridData`,
+    `CellIndex`/`InBounds`/`At`/`Has`/`TryValidate`/`CombineInto`
+  - `Shared/Collision/MapData.cs` — `Grid` 프로퍼티 + `HasGrid`, `ComputeHash` 에 격자 반영
+  - `Shared/Simulation/DeterministicSequence.cs` (신규)
+  - `Infrastructure/FileSystem/MapLoader.cs` — 어긋난 격자를 로드 단계에서 거절
+  - `tests/Modules.Tests/Simulation/DeterministicSequenceTests.cs` (신규, 11개)
+  - `tests/Modules.Tests/Simulation/MapGridDataTests.cs` (신규, 16개)
+  - `tests/Modules.Tests/Realtime/MapLoaderGridTests.cs` (신규, 4개)
+  - (+ `Shared` 의 새 `.cs` 2개에 대한 `.meta` 2개)
+- 검증 (전부 실행함):
+
+  | 확인 | 명령/수단 | 결과 |
+  |---|---|---|
+  | 서버 테스트 | `dotnet test` | ✅ **209개 통과**, 실패 0 (173 → 209, +36) |
+  | 서버 경고 0 | `dotnet build` | ✅ 경고 0개 오류 0개 |
+  | 클라이언트 컴파일 | `dotnet build NVproject/Assembly-CSharp.csproj` | ✅ 오류 0개 (경고 2개는 기존 MSB3277) |
+  | **Unity 가 `Shared` 를 컴파일** | Refresh + `NV.Client.*` 바인딩 + `Shared.dll` 타임스탬프 | ✅ `Shared.dll` 00:12:50 재작성(요청 시점), `Assembly-CSharp` 바인딩 성공 |
+  | `.meta` 생성 | 파일시스템 | ✅ `MapGridData.cs.meta`, `DeterministicSequence.cs.meta` |
+  | **회귀 — 해시 불변** | `dotnet run --project Api` 기동 로그 | ✅ `맵 default: backrooms 해시 3B4B1D41 박스 736개` — IG-001 과 **같은 값** |
+  | **base64 왕복** | `MapLoaderGridTests.격자가_base64_로_왕복한다` | ✅ 8바이트 격자가 base64 로 오가고 플래그가 좌표에 정확히 앉는다 |
+
+- 결정 두 개를 여기서 확정했다 (DECISIONS D-3·D-4 참고):
+  - **`Cells` 는 `byte[]` → base64.** System.Text.Json 의 기본 동작이라 서버 파싱 코드가 0줄이고,
+    2층 35×35 = 2450셀이 한 줄에 들어간다. 숫자 배열이면 같은 정보가 4배 넘게 커진다.
+    클라이언트 export 는 JSON 을 손으로 쓰므로 `Convert.ToBase64String` 을 내면 된다(IG-003).
+  - **`Grid == null` 이면 해시에 기여하지 않는다.** 계획서(`match-authority-plan.md` §4)는 격자를
+    해시에 넣으면 "이번에도 export 를 다시 돌려야 한다" 고 했지만, 없을 때 0 을 섞으면 격자가
+    아직 **없는** 기존 맵 파일 전부의 해시가 바뀌어 정보를 하나도 늘리지 않는 re-export 를
+    강요한다. 없으면 빼고, **있으면 반드시 넣는다.** 덕분에 IG-002 는 해시를 바꾸지 않아
+    회귀 위험이 0 이고, 해시는 격자가 실제로 채워지는 IG-003 에서 한 번만 바뀐다.
+- 비고:
+  - `CellIndex` 식(`((floor * Depth) + z) * Width + x`)은 **이 한 곳에만** 있다. 클라이언트
+    export 와 서버 조회의 순서가 어긋나면 격자가 90도 돌아간 채 크기와 해시가 모두 맞아,
+    증상이 "맵의 절반에서만 열쇠가 벽에 박힘" 으로 나타난다. 유일성 테스트를 붙였다.
+  - `NextInt` 는 거부 표집이다. 나머지 연산만 쓰면 앞쪽 셀이 한 번 더 뽑힐 기회를 갖고, 후보가
+    수천 개일 때 그 치우침이 배치에 보인다. 16버킷 160,000회로 ±5% 안을 확인했다.
+  - `DeterministicSequence` 는 구조체다. `default(...)` 로도 만들어지고 그 내부 상태 0 은
+    xorshift 의 **고정점**이라 계속 0 만 낸다(증상: 목표물이 전부 한 자리에 겹침). 씨드 0 과
+    `default` 둘 다 걸러 내고 테스트로 고정했다.
+  - `DeterministicSequence` 를 초대 코드·방장 토큰에 쓰면 안 된다 — 그쪽은 예측 불가능해야 하므로
+    `RandomNumberGenerator` 다(`conventions.md`). 클래스 주석에 적어 두었다.
+  - **`MapGrid` 질의(`TryRandomPoint`/`TryNearestFreeFloor`/`CellToWorld`/`FloorIndexAt`)는 아직
+    없다.** IG-004 의 범위다. 지금은 스키마와 조회 원시연산(`At`/`Has`)만 있다.
 
 ### IG-003 — 클라이언트 격자 export
 - 상태: TODO
@@ -439,6 +491,8 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 | 2026-08-03 | 순수 게임 로직 검증은 `dotnet test`, Unity EditMode 는 뷰 로직만 | 루프의 목적이 그 로직을 서버로 옮기는 것이므로, 옮긴 뒤 로직은 `Modules.Tests` 대상이다. Unity 배치모드 테스트는 MCP 환경에서 취약하다 | — (D-2, 위 명령 카탈로그) |
 | 2026-08-03 | 승리 조건(IG-007)을 매치 단계·시계(IG-006)에서 분리 | 승리 조건이 OQ-2·OQ-6 에 걸려 있어, 묶어 두면 상태 머신 전체가 차단된다 | — |
 | 2026-08-03 | `match-authority-plan.md` 를 이 루프의 구현 계획 근거로 채택 | 이미 코드 인용 기반으로 Phase 0~6 을 정리해 두었다. 백로그는 그것을 LOOP §6 단위로 쪼갠 것이다 | — |
+| 2026-08-04 | (D-3) 격자 `Cells` 를 `byte[]` 로 두고 base64 로 직렬화 | System.Text.Json 의 기본 동작이라 서버 파싱 코드가 0줄이고, 2450셀이 한 줄에 들어간다. 숫자 배열이면 4배 넘게 커진다. `MapLoaderGridTests` 로 왕복을 실증했다 | — |
+| 2026-08-04 | (D-4) `Grid == null` 이면 맵 해시에 기여하지 않고, 있으면 반드시 포함한다 | 계획서는 "격자를 넣으면 export 를 다시 돌려야 한다" 고 했지만, 없을 때 0 을 섞으면 격자가 아직 없는 기존 파일 전부의 해시가 바뀌어 정보를 늘리지 않는 re-export 를 강요한다. 있으면 반드시 넣어야 하는 이유는 반대다 — 빼면 격자가 어긋난 채 해시가 일치하고, 이동 판정은 격자를 쓰지 않으므로 걸어 다니는 동안 아무 신호도 나지 않는다 | — |
 
 ## 가정 (ASSUMPTIONS)
 
@@ -466,15 +520,24 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-002 — `MapData` 격자 스키마 + 해시 + `DeterministicSequence`** (P0, IG-001 완료로 해제됨).
+**IG-003 — 클라이언트 격자 export** (P0, IG-002 완료로 해제됨).
 
-IG-001 이 닫히면서 R-0.1·R-0.2 가 해소됐다. 남은 선행 차단 요소는 R-0.3(서버가 "여기 설 수
-있는가" 를 답할 수 없다)이고, IG-002~IG-004 가 그것을 닫는다.
+IG-001·IG-002 로 스키마와 검증이 서버 쪽에 준비됐다. 남은 것은 그 격자를 **채우는** 일이고,
+그것이 R-0.3 을 실제로 닫는다.
 
 BLOCKED 5건(IG-007, IG-013, IG-016, IG-017, IG-020)은 OQ-1·2·3·4·5·6 의 답을 기다린다.
-나머지 14개는 의존 순서대로 진행 가능하다.
+나머지 13개는 의존 순서대로 진행 가능하다.
 
-**IG-002 진행 시 주의** — `ComputeHash` 에 격자를 포함시키면 해시가 다시 바뀌므로 export 를 또
-돌려야 한다. IG-003 과 같은 배포 단위로 묶고, IG-001 이 확인한 세 경로(런타임 `Generate()` /
-export `ComputeCollision()` / 서버 파일 로드)가 **격자에 대해서도** 일치하는지 같은 방식으로
-실측한다 — 격자는 박스와 달리 `_collisionOnly` 경로를 아직 지나지 않는다.
+**IG-003 진행 시 주의**
+
+1. **`FreeFloor` 는 `MatchManager.IsFreeFloor`(`MatchManager.cs:628-636`)와 같은 캡슐이어야 한다** —
+   `feet + up*0.35` ~ `feet + up*1.5`, 반지름 0.32. 그 상수를 한 곳으로 모아 두 번 적지 않는다.
+2. **`Physics.CheckCapsule` 은 지오메트리가 씬에 있어야 답한다.** 그런데 export 경로
+   (`ComputeCollision`)는 `_collisionOnly` 로 지오메트리를 **만들지 않는다**. 즉 `FreeFloor` 를
+   export 시점에 구우려면 그 경로에서 물리 질의를 할 수 없다 — 이것이 IG-003 의 핵심 난점이고,
+   설계가 두 갈래로 갈리면(임시 지오메트리를 만들고 지운다 / 격자만으로 계단을 판정한다)
+   ADR 초안 + `OPEN_QUESTIONS` 후 `BLOCKED` 로 두고 종료한다(§5.4).
+3. 격자가 채워지면 **해시가 바뀐다**(D-4). IG-001 이 확인한 세 경로(런타임 `Generate()` / export
+   `ComputeCollision()` / 서버 파일 로드)가 **격자에 대해서도** 일치하는지 같은 방식으로 실측한다.
+4. `CellIndex` 식을 클라이언트에서 다시 적지 않는다 — `MapGridData.CellIndex` 를 호출한다.
+5. `TestRoomMap` 은 방 하나이므로 전부 `Standable | FreeFloor` 로 채운다.

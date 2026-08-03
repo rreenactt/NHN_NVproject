@@ -71,6 +71,15 @@ namespace NV.Infrastructure.FileSystem
             {
                 throw new InvalidOperationException($"맵에 스폰 지점이 없다: {path}");
             }
+
+            // 격자는 없어도 된다 — 이동 판정은 박스만으로 되고, 격자를 요구하는 것은
+            // 목표물 배치처럼 나중에 붙는 기능이다. 다만 **있으면서 어긋난** 격자는
+            // 거절한다. 그대로 받으면 서버가 그것을 신뢰하고, 잘못은 한참 뒤 배치
+            // 단계에서 "열쇠가 벽 안에 생김" 으로만 드러난다.
+            if (data.Grid != null && !data.Grid.TryValidate(out var gridError))
+            {
+                throw new InvalidOperationException($"맵의 격자가 잘못됐다: {gridError} ({path})");
+            }
         }
     }
 }
