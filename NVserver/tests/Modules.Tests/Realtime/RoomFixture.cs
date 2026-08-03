@@ -64,7 +64,14 @@ namespace NV.Modules.Tests.Realtime
         /// 룸은 대기 단계로 열리므로 이 절차 없이는 스냅샷이 나오지 않는다.
         /// Join 과 Start 가 같은 드레인에 들어가며, 큐가 FIFO 라 Start 는 이미 모인
         /// 명단을 본다.
-        public static void FillAndStart(Room room, int count = RealtimeConstants.Rooms.MinPlayersToStart)
+        ///
+        /// **기본으로 역할 공개 구간까지 지나간다.** 매치는 `RoleReveal` 로 시작하고 그
+        /// 동안 이동이 잠기므로, 이동을 검사하는 테스트가 이 구간에 걸리면 "서버가 입력을
+        /// 무시한다" 로 보인다. 리빌 자체를 검사할 때만 `skipReveal: false` 로 부른다.
+        public static void FillAndStart(
+            Room room,
+            int count = RealtimeConstants.Rooms.MinPlayersToStart,
+            bool skipReveal = true)
         {
             for (var index = 0; index < count; index++)
             {
@@ -73,6 +80,25 @@ namespace NV.Modules.Tests.Realtime
 
             room.PostCommand(RoomCommand.Start(1));
             room.Advance();
+
+            if (skipReveal)
+            {
+                SkipReveal(room);
+            }
+        }
+
+        /// 역할 공개가 끝날 때까지 틱을 돌린다.
+        ///
+        /// 스냅샷을 보내지 않는다(`Broadcast` 를 부르지 않는다) — 이 구간의 프레임까지
+        /// 세면 전송 수를 확인하는 테스트가 리빌 길이에 묶인다.
+        public static void SkipReveal(Room room)
+        {
+            // 상한을 둔다. 단계가 넘어가지 않는 버그가 들어오면 테스트가 멈추는 대신
+            // 실패해야 한다.
+            for (var guard = 0; guard < 10_000 && room.MatchPhase == MatchPhase.RoleReveal; guard++)
+            {
+                room.Advance();
+            }
         }
     }
 

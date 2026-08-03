@@ -4,6 +4,7 @@ using NV.Realtime.Simulation;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
+using NV.Shared.Simulation;
 using Xunit;
 
 namespace NV.Modules.Tests.Realtime
@@ -35,7 +36,10 @@ namespace NV.Modules.Tests.Realtime
 
             Assert.True(transport.TryLastSnapshot(1, out var header, out var entities));
             Assert.Equal(2, entities.Length);
-            Assert.Equal(2u, header.Tick);
+
+            // 스냅샷의 틱은 룸의 틱이다. 절대값을 적으면 역할 공개 길이 같은 진행
+            // 세부가 바뀔 때마다 이 줄이 깨진다.
+            Assert.Equal(room.Tick, header.Tick);
 
             // 0번 스폰이 원점이고 바닥 위다.
             Assert.Equal(0, entities[0].Id);
@@ -443,6 +447,201 @@ namespace NV.Modules.Tests.Realtime
             // 진행 중으로 남으면 다음에 들어온 사람이 이미 시작된 매치에 갇힌다.
             Assert.Equal(RoomPhase.Waiting, room.Phase);
             Assert.Equal(0, room.PlayerCount);
+        }
+
+        // ==================================================== 매치 단계와 시계
+
+        [Fact]
+        public void 시작하면_역할_공개부터고_룸은_진행_중이다()
+        {
+            var room = RoomFixture.Create();
+
+            RoomFixture.FillAndStart(room, skipReveal: false);
+
+            // 두 축이 따로 움직인다. 룸은 진행 중이어야 시뮬레이션이 돌고,
+            // 매치는 아직 역할 공개다.
+            Assert.Equal(RoomPhase.Playing, room.Phase);
+            Assert.Equal(MatchPhase.RoleReveal, room.MatchPhase);
+        }
+
+        [Fact]
+        public void 역할_공개_중에는_전진_입력이_위치를_바꾸지_않는다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room, skipReveal: false);
+
+            for (var tick = 0; tick < 20; tick++)
+            {
+                room.PostInput(1, (uint)tick + 1, Forward());
+                room.Advance();
+                room.Broadcast(transport);
+            }
+
+            Assert.Equal(MatchPhase.RoleReveal, room.MatchPhase);
+            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+
+            // 스폰이 원점이다. 잠금이 새면 +Z 로 밀려 있다.
+            Assert.Equal(0, entities[0].Z);
+        }
+
+        /// 잠금 중 입력을 **버리지 않고 소비**해야 한다. 버리면 큐에 쌓이고, 리빌이
+        /// 끝나는 순간 쌓인 입력이 한 틱에 적용되어 플레이어가 순간이동한다.
+        [Fact]
+        public void 역할_공개_중_입력이_쌓여_나중에_순간이동하지_않는다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room, skipReveal: false);
+
+            // 리빌 내내 전진을 보낸다.
+            var tick = 1u;
+            while (room.MatchPhase == MatchPhase.RoleReveal)
+            {
+                room.PostInput(1, tick, Forward());
+                room.Advance();
+                tick++;
+            }
+
+            Assert.Equal(MatchPhase.Playing, room.MatchPhase);
+
+            // 잠금이 풀린 첫 틱. 입력을 더 보내지 않는다.
+            room.Advance();
+            room.Broadcast(transport);
+
+            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+
+            // 한 틱에 갈 수 있는 거리는 6.5m/s ÷ 30Hz ≈ 0.22m 이고, 1/64m 양자화로
+            // 약 14 단위다. 쌓인 입력이 터졌다면 이보다 훨씬 크다.
+            Assert.True(
+                entities[0].Z < 32,
+                $"잠금이 풀린 직후 Z 가 {entities[0].Z} 로 튀었다. 입력이 쌓여 있었다는 뜻이다.");
+        }
+
+        /// 시선은 잠그지 않는다. 잠그면 커서가 풀려 게임이 포커스를 잃은 것처럼 보인다.
+        [Fact]
+        public void 역할_공개_중에도_시선은_돌아간다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room, skipReveal: false);
+
+            var turned = new InputFrame(ButtonFlags.None, 0, 0, 16384, 0);
+
+            for (var tick = 0; tick < 10; tick++)
+            {
+                room.PostInput(1, (uint)tick + 1, turned);
+                room.Advance();
+                room.Broadcast(transport);
+            }
+
+            Assert.Equal(MatchPhase.RoleReveal, room.MatchPhase);
+            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+            Assert.Equal(16384, entities[0].Yaw);
+        }
+
+        [Fact]
+        public void 역할_공개가_끝나면_전진_입력이_먹는다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            Assert.Equal(MatchPhase.Playing, room.MatchPhase);
+
+            for (var tick = 0; tick < 30; tick++)
+            {
+                room.PostInput(1, (uint)tick + 1, Forward());
+                room.Advance();
+                room.Broadcast(transport);
+            }
+
+            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+            Assert.True(entities[0].Z > 0, "잠금이 풀린 뒤에도 움직이지 않았다.");
+        }
+
+        /// 기획서 §8 — 시간 종료. 서버의 시계가 스스로 매치를 끝낸다. 지금까지 이 전이는
+        /// 방장 클라이언트의 보고(`ControlKind.EndMatch`)로만 일어났다.
+        [Fact]
+        public void 서버_시계가_0_이_되면_룸이_결과_단계로_간다()
+        {
+            var room = RoomFixture.Create();
+
+            RoomFixture.FillAndStart(room);
+            Assert.Equal(RoomPhase.Playing, room.Phase);
+
+            // 매치 길이만큼 돌린다. 30Hz 기준 480초 = 14400틱.
+            var guard = 0;
+            while (room.Phase == RoomPhase.Playing && guard < 20_000)
+            {
+                room.Advance();
+                guard++;
+            }
+
+            Assert.Equal(RoomPhase.Ended, room.Phase);
+            Assert.Equal(MatchPhase.Ended, room.MatchPhase);
+            Assert.Equal(0f, room.MatchSecondsRemaining);
+
+            // 결과 코드는 아직 서버가 정하지 않는다 — OQ-2·OQ-6 이 풀리면 IG-007 이 채운다.
+            Assert.True(OutcomeIsUnset(room));
+        }
+
+        /// 결과 코드가 아직 비어 있는지 본다. 룸 상태 전문으로 확인한다 — 그것이
+        /// 클라이언트가 실제로 보는 값이다.
+        private static bool OutcomeIsUnset(Room room)
+        {
+            var transport = new RecordingTransport();
+            room.Broadcast(transport);
+
+            return transport.TryLastRoomState(1, out var header, out _) && header.Outcome == 0;
+        }
+
+        [Fact]
+        public void 로비로_되돌리면_매치_단계도_초기화된다()
+        {
+            var room = RoomFixture.Create();
+
+            RoomFixture.FillAndStart(room);
+            Assert.Equal(MatchPhase.Playing, room.MatchPhase);
+
+            room.PostCommand(RoomCommand.EndMatch(1, 1));
+            room.Advance();
+            Assert.Equal(MatchPhase.Ended, room.MatchPhase);
+
+            room.PostCommand(RoomCommand.ReturnToLobby(1));
+            room.Advance();
+
+            // 남아 있으면 다음 매치가 이전 매치의 단계를 물려받는다.
+            Assert.Equal(MatchPhase.Lobby, room.MatchPhase);
+        }
+
+        [Fact]
+        public void 다시_시작하면_시계가_다시_찬다()
+        {
+            var room = RoomFixture.Create();
+
+            RoomFixture.FillAndStart(room);
+
+            for (var tick = 0; tick < 300; tick++)
+            {
+                room.Advance();
+            }
+
+            var midway = room.MatchSecondsRemaining;
+            Assert.True(midway < MatchConstants.MatchDuration);
+
+            room.PostCommand(RoomCommand.EndMatch(1, 1));
+            room.Advance();
+            room.PostCommand(RoomCommand.ReturnToLobby(1));
+            room.Advance();
+            room.PostCommand(RoomCommand.Start(1));
+            room.Advance();
+
+            Assert.Equal(MatchPhase.RoleReveal, room.MatchPhase);
+            Assert.Equal(MatchConstants.MatchDuration, room.MatchSecondsRemaining, 3);
         }
     }
 }

@@ -154,7 +154,10 @@ namespace NV.Client.Net.Session
                     _pendingStart = false;
                     _startedTick = 0u;
 
-                    if (MatchManager.Instance.Phase != MatchPhase.Lobby)
+                    // NV.Game.MatchPhase 로 수식한다. 서버도 이제 자기 매치 단계를
+                    // 갖고(NV.Shared.Contracts.Enums.MatchPhase) 두 이름이 겹친다.
+                    // 값은 같으며, 통합은 이 컴포넌트가 전문을 받게 될 때(IG-010) 한다.
+                    if (MatchManager.Instance.Phase != NV.Game.MatchPhase.Lobby)
                     {
                         MatchManager.Instance.ReturnToLobby();
                     }
@@ -235,7 +238,7 @@ namespace NV.Client.Net.Session
         {
             var match = MatchManager.Instance;
 
-            if (match.Phase == MatchPhase.Ended)
+            if (match.Phase == NV.Game.MatchPhase.Ended)
             {
                 return;
             }

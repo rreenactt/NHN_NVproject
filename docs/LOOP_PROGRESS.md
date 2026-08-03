@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 5)
-현재 이터레이션: 5
-기준 커밋: `1553dac`
+최종 갱신: 2026-08-04 (이터레이션 6)
+현재 이터레이션: 6
+기준 커밋: `6265207`
 
 ## 이 루프가 실제로 하는 일
 
@@ -102,6 +102,10 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | `EventKind.MatchState=2` | S→C | 매치단계 u8, 남은시간 u16(0.1s), 삽입열쇠 u8, 탈출수 u8, 결과 u8, 인원 u8 + 참가자당 (playerId, 역할, 상태플래그, 피격수, 소지열쇠) | 서버 | IG-008 |
 | `EventKind.ObjectiveState=3` | S→C | 문(위치·yaw·개방) / 열쇠 위치 목록 / 장치(위치·yaw·타입·상태) / 제단 위치. ≈166B | 서버 | IG-011 |
 | `EntityFlags` 확장 | S→C | `Bleeding=1<<3`, `Seeker=1<<4`, `Escaped=1<<5`, `Frozen=1<<6`. `EntityState` 크기 13B 그대로 | 서버 | IG-009 |
+
+`MatchPhase`(Lobby/RoleReveal/Playing/Ended)는 **IG-006 에서 이미 `Shared/Contracts/Enums` 에
+들어왔다.** 아직 어떤 프레임에도 실리지 않으며, `MatchState` 전문의 첫 바이트가 될 값이다.
+클라이언트에 같은 이름의 열거형(`NV.Game.MatchPhase`)이 남아 있고 값이 같다 — 통합은 IG-010.
 | `ButtonFlags.Interact=1<<4` | C→S | `All` 마스크 함께 수정. **대상 id 는 싣지 않는다** — 서버가 근접+시선을 재계산 | 서버 재판정 | IG-013 |
 | 삭제: `ControlKind.EndMatch=3` | — | 서버가 결과를 정하므로 방장 보고 경로가 사라진다. 값 3 은 비워 두고 주석 | — | IG-008 |
 | 삭제: `RoomStateHeader.PlacementSeed` | — | 와이어에서 뺀다 (술래에게 문 좌표가 새는 경로). `WireSize` 15 → 11 | — | IG-011 |
@@ -120,7 +124,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-003 | 클라이언트 격자 export (`MapExport`·`INetworkMapSource`) | **DONE** | P0 | IG-002 | R-0.3 |
 | IG-004 | 서버 `MapGrid` 질의 + 테스트 | **DONE** | P0 | IG-003 | R-0.3 |
 | IG-005 | `MatchConstants` 분리 (`Shared`) + `GameConfig` 프로퍼티 대체 | **DONE** | P1 | IG-004 | R-1.x 전반 |
-| IG-006 | 서버 매치 단계·시계 (`Match.cs`) | TODO | P1 | IG-005 | R-1.3, R-1.4, R-1.6 |
+| IG-006 | 서버 매치 단계·시계 (`Match.cs`) | **DONE** | P1 | IG-005 | R-1.3, R-1.4, R-1.6 |
 | IG-007 | 승리 조건 판정 | **BLOCKED** | P1 | IG-006 | R-1.5, R-6.6 |
 | IG-008 | `MatchState` 전문 + 역할별 필터 + 프로토콜 3 | TODO | P1 | IG-006 | R-1.3~R-1.5, R-9.x |
 | IG-009 | `EntityFlags` 확장 (Bleeding/Seeker/Escaped/Frozen) | TODO | P1 | IG-008 | R-2.2, R-4.1, R-5.1 |
@@ -420,8 +424,54 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
   | `seekerWinsOnWipe`(OQ-2), `seekerCanActivateDevices`(OQ-1), `chainAnchorRange`(OQ-4) | `GameConfig.asset` 유지 | 규칙이 미해결이라 옮길 곳이 아직 정해지지 않았다 |
 
 ### IG-006 — 서버 매치 단계·시계
-- 상태: TODO
+- 상태: **DONE** (이터레이션 6, 2026-08-04)
 - 기획서 근거: §3, §8 (R-1.3, R-1.4, R-1.6)
+- 변경 파일 (7개 + meta):
+  - `Shared/Contracts/Enums/MatchPhase.cs` (신규) — Lobby/RoleReveal/Playing/Ended
+  - `Modules/Realtime/Simulation/Match.cs` (신규) — 단계·시계·이동 잠금
+  - `Modules/Realtime/Simulation/Room.cs` — `Match` 소유, 잠금 적용, 시간 종료로 `Ended`
+  - `tests/Modules.Tests/Realtime/MatchTests.cs` (신규, 13개)
+  - `tests/Modules.Tests/Realtime/RoomTests.cs` — 통합 검증 7개 + 기존 1개 수정
+  - `tests/Modules.Tests/Realtime/RoomFixture.cs` — `skipReveal` 옵션과 `SkipReveal`
+  - `NVproject/…/Net/Session/MatchSync.cs` — 이름 충돌 해소 (2줄)
+- 검증 (전부 실행함):
+
+  | 확인 | 수단 | 결과 |
+  |---|---|---|
+  | 서버 테스트 | `dotnet test` | ✅ **260개 통과**, 실패 0 (240 → 260, +20) |
+  | 서버 경고 0 | `dotnet build` | ✅ 오류 0개 |
+  | 클라이언트 컴파일 | `Assembly-CSharp` + `-Editor` | ✅ 둘 다 오류 0개 |
+  | Unity `Shared` | Refresh + `.meta` | ✅ `MatchPhase.cs.meta` |
+  | **리빌 잠금** | `역할_공개_중에는_전진_입력이_위치를_바꾸지_않는다` | ✅ 20틱 전진 입력에도 Z=0 |
+  | **입력 누적 없음** | `역할_공개_중_입력이_쌓여_나중에_순간이동하지_않는다` | ✅ 리빌 내내 전진을 보낸 뒤 잠금 해제 첫 틱에 Z < 32 (한 틱 이동량 ≈ 14) |
+  | 시선은 자유 | `역할_공개_중에도_시선은_돌아간다` | ✅ yaw 16384 반영 |
+  | 잠금 해제 | `역할_공개가_끝나면_전진_입력이_먹는다` | ✅ Z > 0 |
+  | **서버가 매치를 끝낸다** | `서버_시계가_0_이_되면_룸이_결과_단계로_간다` | ✅ 14400틱 후 `RoomPhase.Ended` + `MatchPhase.Ended`, 결과 코드는 0(미정) |
+  | 시계 환산 | `시계가_고정_틱으로_환산된다` | ✅ 480초 = 14400틱, 4초 = 120틱 (나머지 없음) |
+  | 회귀 — 해시 | 기동 로그 | ✅ `7996AF3A` / `27A9412D` 그대로 |
+
+- **기존 테스트 3개가 이 변경으로 깨졌고, 그것이 정상이다.** 리빌은 기획서 §3 의 규칙이므로
+  "시작 직후 바로 움직인다" 는 옛 가정이 틀린 것이 됐다.
+  - `전진_입력은_서버_판정으로_위치를_옮긴다`, `벽을_넘어가지_못한다` → `RoomFixture.FillAndStart`
+    가 기본으로 리빌을 통과하게 해 해결. 리빌 자체를 검사할 때만 `skipReveal: false`.
+  - `시작하면_스폰_위치에서_출발한다` 의 `Assert.Equal(2u, header.Tick)` → `room.Tick` 과 비교로
+    바꿨다. 절대 틱은 "시작 1틱 + 실행 1틱" 이라는 구현 세부에 묶인 값이었고, 리빌 길이 같은
+    진행 파라미터가 바뀔 때마다 깨진다.
+- 비고:
+  - **잠금은 두 갈래 모두에 걸어야 한다.** `StepPlayer` 는 입력이 있을 때와 없을 때(마지막 입력
+    반복)를 따로 처리하는데, 반복 갈래를 빼면 잠금이 걸린 첫 틱에 새 입력이 없는 플레이어가
+    직전 프레임의 이동을 그대로 반복해 **리빌 중에 혼자 계속 달린다.**
+  - **입력을 버리지 않고 소비한다.** 버리면 큐에 쌓이고 리빌이 끝나는 순간 한 틱에 적용되어
+    순간이동한다. 테스트가 그 경로를 직접 확인한다.
+  - **매치 시계는 이동을 처리한 뒤에 올린다.** 먼저 올리면 시간이 0 이 된 틱의 입력이 버려지고,
+    그 한 틱이 마지막 탈출을 판정하는 틱일 수 있다.
+  - `MatchPhase` 가 클라이언트의 `NV.Game.MatchPhase` 와 **이름이 겹친다.** `MatchSync` 두 줄을
+    `NV.Game.MatchPhase` 로 수식해 해소했다. 값은 같으며 통합은 IG-010 에서 한다 — 그때
+    클라이언트가 서버 전문을 받으므로 자기 열거형을 버릴 수 있다.
+  - 결과 코드(`_outcome`)는 서버가 채우지 않는다. 시간 종료가 술래 승리인 것은 기획서 §8 에
+    있지만 OQ-2·OQ-6 이 남아 있어 승패 판정 전체를 IG-007 로 미뤘다. 지금은 단계만 옮긴다.
+  - `MatchRules.cs` 를 만들지 않았다. 이 태스크에 판정이 없다 — 단계 전이 조건은 `Match` 안에
+    있는 것이 맞고, 빈 파일을 미리 두면 어디까지 왔는지 읽어서 알 수 없다(D-8 과 같은 이유).
 - 계획: `Modules/Realtime/Simulation/Match.cs`(상태·전이), `MatchRules.cs`(판정).
   `RoomPhase` 는 건드리지 않는다 — 룸 생애(Waiting/Playing/Ended)와 매치 진행
   (RoleReveal/Playing/Ended)은 다른 축이고 `Room.Advance` 가 이미 `Playing` 에서만 시뮬레이션한다.
@@ -655,27 +705,33 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-006 — 서버 매치 단계·시계** (P1, IG-005 완료로 해제됨).
+**IG-008 — `MatchState` 전문 + 역할별 필터 + 프로토콜 3** (P1).
 
-**이제 서버가 규칙 수치를 안다.** `MatchConstants` 가 양쪽에 컴파일되고 클라이언트의
-`GameConfig` 는 그것을 읽는 창이 됐다. IG-006 은 그 값으로 **서버가 매치를 진행**시킨다 —
-지금까지는 지형과 상수만 준비했고, 여기서 처음으로 판정이 서버로 넘어온다.
+**서버가 이제 매치를 진행시킨다** — 단계·시계·이동 잠금이 서버 판정이고, 시간이 0 이 되면
+서버가 스스로 매치를 끝낸다. 그런데 **클라이언트는 그것을 모른다.** 지금 상태는 서버와
+클라이언트가 각자 시계를 돌리는 것이고, IG-008 이 그 간극을 닫는다.
+
+IG-007(승리 조건)은 OQ-2·OQ-6 때문에 여전히 BLOCKED 이므로 건너뛴다. 전문의 `결과` 바이트는
+자리를 잡아 두고 0(미정)으로 보낸다 — IG-007 이 그 값을 채우면 와이어는 바뀌지 않는다.
 
 BLOCKED 5건(IG-007, IG-013, IG-016, IG-017, IG-020)은 OQ-1·2·3·4·5·6 의 답을 기다린다.
-나머지 10개는 의존 순서대로 진행 가능하다.
+나머지 9개는 의존 순서대로 진행 가능하다.
 
-**IG-006 진행 시 주의**
+**IG-008 진행 시 주의**
 
-1. **`RoomPhase` 를 건드리지 않는다.** 룸 생애(Waiting/Playing/Ended)와 매치 진행
-   (RoleReveal/Playing/Ended)은 다른 축이고 `Room.Advance` 가 이미 `Playing` 에서만
-   시뮬레이션한다. 매치 단계는 `RoomPhase.Playing` **안의** 상태다.
-2. **리빌 중 정지는 단계 전이가 아니라 입력 무력화로 구현한다.** `InputValidator.Neutral` 과
-   같은 방식으로 이동 성분만 0 으로 만들고 시선은 남긴다 — `MatchManager.ApplyMovementLocks`
-   의 의도가 그렇고, 시선까지 잠그면 커서가 풀려 게임이 포커스를 잃은 것처럼 보인다.
-3. **시계는 고정 틱으로 센다.** `SimConstants.TickDelta` 만 쓰고 실제 경과 시간을 쓰지 않는다.
-4. **승리 조건은 IG-007 이다.** 이 태스크는 시간이 0 이 되면 단계만 `Ended` 로 옮기고 결과
-   코드는 채우지 않는다. OQ-2·OQ-6 이 풀리지 않은 상태에서 결과를 정하면 추측이 된다.
-5. 새 파일은 `Modules/Realtime/Simulation/Match.cs`(상태·전이)와 `MatchRules.cs`(판정)이고
-   둘 다 `internal` 이다(`structure.md` 8문 표 5·7번).
-6. 이 태스크는 아직 와이어를 바꾸지 않는다 — 서버가 매치를 진행시키지만 그것을 클라이언트에
-   알리는 전문은 IG-008 이다. 그래서 IG-006 만으로는 화면에 변화가 없고, 검증은 서버 테스트로 한다.
+1. **여기서 `ProtocolInfo.Version` 이 3 이 된다.** 이후 IG-014 까지는 서버와 클라이언트를
+   **같은 커밋에 배포**해야 한다 — 구버전 클라이언트는 426 으로 전부 거절되고 WebGL 빌드는
+   수 분이 걸린다. 버전은 한 번만 올린다.
+2. **전문이지 알림이 아니다.** `RoomState` 와 같은 성격 — 2Hz + 변경 즉시, 멱등, 영구 반복.
+   한 번짜리로 만들면 `Bounded(32, DropOldest)` 채널이 버리는 프레임이 될 수 있고 그
+   클라이언트는 영구히 옛 화면에 남는다.
+3. **세션별로 인코딩해야 한다.** 역할별 필터링이 필요하다 — 룰셋은 Seeker 에게 열쇠 진행도를
+   알리지 않는다. Seeker 사본에서 삽입 열쇠 수와 남의 소지 열쇠를 0 으로 채운다. 클라이언트에서
+   숨기면 디컴파일로 되살아난다. `RoomState` 가 한 번 인코딩해 전원에게 보내는 것과 다른 점이다.
+4. 고정부: 단계 u8, 남은시간 u16(0.1초 단위 = 6553초까지), 삽입열쇠 u8, 탈출수 u8, 결과 u8,
+   인원 u8. 참가자당: playerId u8, 역할 u8, 상태플래그 u8, 피격수 u8, 소지열쇠 u8.
+   삽입열쇠·탈출수·피격수·소지열쇠는 아직 서버가 세지 않으므로 0 이 나간다(IG-012·IG-014).
+5. `ControlKind.EndMatch` 를 제거하고 enum 값 3 을 비워 둔다(값 2 가 이미 그렇다). 클라이언트의
+   `NetSession.ReportMatchEnd` 와 `MatchSync.OnLocalMatchEnded` 도 함께 사라진다 — 그런데 그것은
+   IG-010 의 범위이므로, **제거를 IG-010 과 같은 커밋에 묶을지 판단**해야 한다. 서버만 먼저
+   제거하면 클라이언트가 보내는 프레임이 무시되고, 그 상태에서는 매치가 끝나지 않는다.

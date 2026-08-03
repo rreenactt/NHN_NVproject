@@ -44,6 +44,12 @@ namespace NV.Realtime.Simulation
         private readonly bool[] _slots = new bool[RealtimeConstants.Rooms.MaxPlayers];
         private readonly object _slotGate = new();
 
+        /// 매치의 단계와 시계. 틱 루프만 만진다.
+        ///
+        /// 룸 단계(`_phase`)와 다른 축이다. 룸이 `Playing` 인 동안 매치는 역할 공개
+        /// 중일 수 있고, 그때는 이동만 잠긴다 — 시뮬레이션은 계속 돌아야 한다.
+        private readonly Match _match = new();
+
         private readonly WorldMap _map;
         private readonly NetworkConditionSimulator _network;
         private readonly ILogger _logger;
@@ -108,6 +114,16 @@ namespace NV.Realtime.Simulation
 
         /// 설정으로 미리 열어 둔 룸. 방장이 없고 비어도 회수되지 않는다.
         public bool IsStatic => _isStatic;
+
+        /// 매치의 진행 단계. 틱 루프가 소유하므로 조회는 같은 스레드에서만 한다.
+        ///
+        /// 아직 와이어에 실리지 않는다 — 이 값을 클라이언트에 알리는 전문은 IG-008 이다.
+        /// 지금은 서버가 매치를 진행시키는 것까지이고, 화면에는 변화가 없다.
+        public MatchPhase MatchPhase => _match.Phase;
+
+        public float MatchSecondsRemaining => _match.MatchSecondsRemaining;
+
+        public float RevealSecondsRemaining => _match.RevealSecondsRemaining;
 
         /// 목록에 실리는 방인가. <see cref="_isPublic"/> 의 설명을 참고한다.
         public bool IsPublic => _isPublic;
@@ -192,6 +208,13 @@ namespace NV.Realtime.Simulation
                 foreach (var player in _players.Values)
                 {
                     StepPlayer(player);
+                }
+
+                // 매치 시계는 이동을 처리한 뒤에 올린다. 먼저 올리면 시간이 0 이 된 틱의
+                // 입력이 버려지고, 그 한 틱이 마지막 탈출을 판정하는 틱일 수 있다.
+                if (_match.Advance())
+                {
+                    EndMatchByServer();
                 }
             }
             else
@@ -310,6 +333,15 @@ namespace NV.Realtime.Simulation
             while (applied < RealtimeConstants.Rooms.MaxInputsPerTick && player.TryTakeNext(out var input))
             {
                 var frame = InputValidator.Sanitize(input.Frame);
+
+                // 역할 공개와 결과 화면에서는 이동을 비운다. 입력은 그래도 **소비한다** —
+                // 버리기만 하면 잠금이 풀리는 순간 쌓인 입력이 한꺼번에 적용되어
+                // 플레이어가 순간이동한다. 시선은 남기므로 리빌 중에도 둘러볼 수 있다.
+                if (_match.MovementLocked)
+                {
+                    frame = InputValidator.Neutral(frame);
+                }
+
                 Simulate(player, frame);
 
                 player.LastInput = frame;
@@ -319,7 +351,16 @@ namespace NV.Realtime.Simulation
 
             if (applied == 0)
             {
-                if (player.RepeatCount < RealtimeConstants.Rooms.MaxInputRepeatTicks)
+                // 잠금 중에는 반복도 비운다. 이 갈래를 빼면 잠금이 걸린 첫 틱에 새 입력이
+                // 없는 플레이어가 **직전 프레임의 이동을 그대로 반복**해, 리빌 중에 혼자
+                // 계속 달린다.
+                if (_match.MovementLocked)
+                {
+                    var locked = InputValidator.Neutral(player.LastInput);
+                    Simulate(player, locked);
+                    player.LastInput = locked;
+                }
+                else if (player.RepeatCount < RealtimeConstants.Rooms.MaxInputRepeatTicks)
                 {
                     Simulate(player, player.LastInput);
                     player.RepeatCount++;
@@ -473,6 +514,9 @@ namespace NV.Realtime.Simulation
             _placementSeed = NextPlacementSeed();
             _outcome = 0;
 
+            // 매치는 역할 공개부터 시작한다. 이 시점부터 시계는 서버의 것이다.
+            _match.Begin();
+
             // 커맨드는 틱을 올리기 전에 드레인된다. 그래서 +1 이 실제로 시뮬레이션되는
             // 첫 틱이며, 이 값과 스냅샷의 틱이 같은 기준이 된다.
             _startTick = _tick + 1u;
@@ -506,10 +550,28 @@ namespace NV.Realtime.Simulation
             }
 
             _outcome = outcome;
+            _match.ForceEnd();
             Volatile.Write(ref _phase, (int)RoomPhase.Ended);
             _stateDirty = true;
 
             _logger.LogInformation("룸 {RoomId} 매치 종료. 결과 코드 {Outcome}", RoomId, outcome);
+        }
+
+        /// 서버의 시계가 매치를 끝냈다.
+        ///
+        /// **결과 코드를 채우지 않는다.** 기획서 §8 은 시간 종료를 술래 승리로 정하지만,
+        /// 구현과 어긋나는 지점이 남아 있어(전멸 승리 유무 OQ-2, 2인 매치에서 Runner
+        /// 승리가 구조적으로 불가능 OQ-6) 승패 판정을 여기서 추측하지 않는다. 단계만
+        /// 옮기고 `_outcome` 은 0(미정)으로 둔다 — IG-007 이 그 자리를 채운다.
+        private void EndMatchByServer()
+        {
+            Volatile.Write(ref _phase, (int)RoomPhase.Ended);
+            _stateDirty = true;
+
+            _logger.LogInformation(
+                "룸 {RoomId}: 매치 시간이 끝나 서버가 종료했다. 틱 {Tick}",
+                RoomId,
+                _tick);
         }
 
         private void ReturnToLobby(int sessionId)
@@ -530,6 +592,7 @@ namespace NV.Realtime.Simulation
             _placementSeed = 0;
             _startTick = 0;
             _outcome = 0;
+            _match.Reset();
         }
 
         /// 방장이 필요 없는 룸에서는 누구나 시작할 수 있다. 설정으로 미리 열어 둔
