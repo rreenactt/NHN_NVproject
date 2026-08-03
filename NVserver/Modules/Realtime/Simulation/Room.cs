@@ -41,6 +41,9 @@ namespace NV.Realtime.Simulation
         private readonly RoomPlayerEntry[] _rosterBuffer = new RoomPlayerEntry[RealtimeConstants.Rooms.MaxPlayers];
         private readonly byte[] _stateBuffer = new byte[MessageCodec.RoomStateMaxWireSize(RealtimeConstants.Rooms.MaxPlayers)];
 
+        private readonly MatchParticipant[] _participantBuffer = new MatchParticipant[RealtimeConstants.Rooms.MaxPlayers];
+        private readonly byte[] _matchStateBuffer = new byte[MessageCodec.MatchStateMaxWireSize(RealtimeConstants.Rooms.MaxPlayers)];
+
         private readonly bool[] _slots = new bool[RealtimeConstants.Rooms.MaxPlayers];
         private readonly object _slotGate = new();
 
@@ -82,6 +85,14 @@ namespace NV.Realtime.Simulation
         /// 상태가 바뀐 틱에는 간격을 무시하고 즉시 보낸다.
         private bool _stateDirty = true;
         private uint _lastStateTick;
+
+        /// 매치 전문도 같은 규칙이지만 게이트를 따로 둔다.
+        ///
+        /// `_stateDirty` 를 공유하면 룸 상태를 보내는 쪽이 그 깃발을 내려버려서, 같은
+        /// 틱에 매치 전문이 "바뀐 것 없음" 으로 판단하고 즉시 전송을 건너뛴다. 두 전문은
+        /// 서로 다른 이유로 바뀌므로 깃발도 둘이어야 한다.
+        private bool _matchStateDirty;
+        private uint _lastMatchStateTick;
 
         public Room(
             string roomId,
@@ -212,9 +223,18 @@ namespace NV.Realtime.Simulation
 
                 // 매치 시계는 이동을 처리한 뒤에 올린다. 먼저 올리면 시간이 0 이 된 틱의
                 // 입력이 버려지고, 그 한 틱이 마지막 탈출을 판정하는 틱일 수 있다.
+                var phaseBefore = _match.Phase;
+
                 if (_match.Advance())
                 {
                     EndMatchByServer();
+                }
+
+                // 단계가 바뀐 틱에는 전문을 즉시 보낸다. 간격만으로 보내면 리빌이 끝나고
+                // 최대 0.5초 동안 클라이언트가 아직 잠긴 화면을 그린다.
+                if (_match.Phase != phaseBefore)
+                {
+                    _matchStateDirty = true;
                 }
             }
             else
@@ -239,6 +259,7 @@ namespace NV.Realtime.Simulation
             }
 
             BroadcastRoomState(transport);
+            BroadcastMatchState(transport);
 
             if (Phase != RoomPhase.Playing)
             {
@@ -319,6 +340,87 @@ namespace NV.Realtime.Simulation
                     new ReadOnlySpan<byte>(_stateBuffer, 0, length),
                     Reliability.Reliable);
             }
+        }
+
+        /// 매치 상태 전문을 보낸다. **세션별로 인코딩한다.**
+        ///
+        /// 스냅샷이 `AckedInputTick` 때문에 세션별로 인코딩하는 것과 이유가 다르다.
+        /// 여기서는 **본문 자체가 수신자의 역할에 따라 달라진다** — 룰셋은 Seeker 에게
+        /// 열쇠 진행도를 알리지 않으므로 그 사본에서는 삽입 열쇠와 소지 열쇠가 0 이다.
+        /// 필터는 `MessageCodec.WriteMatchState` 안에 있어 우회할 자리가 없다.
+        ///
+        /// 로비 단계에서는 보내지 않는다. 매치가 없는데 전문을 보내면 클라이언트가
+        /// 시작하지 않은 매치의 시계를 그린다.
+        private void BroadcastMatchState(IServerTransport transport)
+        {
+            if (_match.Phase == MatchPhase.Lobby)
+            {
+                return;
+            }
+
+            var due = _matchStateDirty
+                || _tick - _lastMatchStateTick >= (uint)RealtimeConstants.Rooms.MatchStateIntervalTicks;
+
+            if (!due)
+            {
+                return;
+            }
+
+            _matchStateDirty = false;
+            _lastMatchStateTick = _tick;
+
+            var count = 0;
+            foreach (var player in _players.Values)
+            {
+                // 열쇠·피격·상태 플래그는 아직 서버가 세지 않는다. 자리를 잡아 두었으므로
+                // 그 판정이 올 때(IG-012·IG-014) 와이어 포맷은 바뀌지 않는다.
+                _participantBuffer[count] = new MatchParticipant(
+                    player.PlayerId,
+                    RoleOf(player.PlayerId),
+                    0,
+                    0,
+                    0);
+
+                count++;
+            }
+
+            var header = new MatchStateHeader(
+                _match.Phase,
+                MatchStateHeader.ToTenths(_match.MatchSecondsRemaining),
+                0,
+                0,
+                _outcome,
+                (byte)count);
+
+            var participants = new ReadOnlySpan<MatchParticipant>(_participantBuffer, 0, count);
+
+            foreach (var player in _players.Values)
+            {
+                var length = MessageCodec.WriteMatchState(
+                    _matchStateBuffer,
+                    header,
+                    participants,
+                    RoleOf(player.PlayerId));
+
+                transport.TrySend(
+                    player.SessionId,
+                    new ReadOnlySpan<byte>(_matchStateBuffer, 0, length),
+                    Reliability.Reliable);
+            }
+        }
+
+        /// 이 플레이어가 어느 편인가.
+        ///
+        /// Seeker 가 정해지기 전에는 아무도 배정되지 않았다. 그때 전원을 Runner 로 두면
+        /// 클라이언트가 로비에서 무기 없는 몸을 만들고, 역할이 정해진 뒤 다시 만들어야 한다.
+        private MatchRole RoleOf(byte playerId)
+        {
+            if (_seekerPlayerId == RoomStateHeader.NoPlayer)
+            {
+                return MatchRole.Unassigned;
+            }
+
+            return playerId == _seekerPlayerId ? MatchRole.Seeker : MatchRole.Runner;
         }
 
         /// 한 플레이어를 한 틱 진행한다.
@@ -516,6 +618,7 @@ namespace NV.Realtime.Simulation
 
             // 매치는 역할 공개부터 시작한다. 이 시점부터 시계는 서버의 것이다.
             _match.Begin();
+            _matchStateDirty = true;
 
             // 커맨드는 틱을 올리기 전에 드레인된다. 그래서 +1 이 실제로 시뮬레이션되는
             // 첫 틱이며, 이 값과 스냅샷의 틱이 같은 기준이 된다.
@@ -553,6 +656,7 @@ namespace NV.Realtime.Simulation
             _match.ForceEnd();
             Volatile.Write(ref _phase, (int)RoomPhase.Ended);
             _stateDirty = true;
+            _matchStateDirty = true;
 
             _logger.LogInformation("룸 {RoomId} 매치 종료. 결과 코드 {Outcome}", RoomId, outcome);
         }
@@ -567,6 +671,7 @@ namespace NV.Realtime.Simulation
         {
             Volatile.Write(ref _phase, (int)RoomPhase.Ended);
             _stateDirty = true;
+            _matchStateDirty = true;
 
             _logger.LogInformation(
                 "룸 {RoomId}: 매치 시간이 끝나 서버가 종료했다. 틱 {Tick}",
@@ -593,6 +698,7 @@ namespace NV.Realtime.Simulation
             _startTick = 0;
             _outcome = 0;
             _match.Reset();
+            _matchStateDirty = true;
         }
 
         /// 방장이 필요 없는 룸에서는 누구나 시작할 수 있다. 설정으로 미리 열어 둔

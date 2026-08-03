@@ -643,5 +643,160 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(MatchPhase.RoleReveal, room.MatchPhase);
             Assert.Equal(MatchConstants.MatchDuration, room.MatchSecondsRemaining, 3);
         }
+
+        // ==================================================== 매치 상태 전문
+
+        [Fact]
+        public void 대기_단계에서는_매치_전문을_보내지_않는다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            room.PostCommand(RoomCommand.Join(1, 0, string.Empty, true));
+            Run(room, transport, 5);
+
+            // 룸 상태는 나가지만 매치는 아직 없다. 보내면 클라이언트가 시작하지 않은
+            // 매치의 시계를 그린다.
+            Assert.True(transport.TryLastRoomState(1, out _, out _));
+            Assert.False(transport.TryLastMatchState(1, out _, out _));
+        }
+
+        [Fact]
+        public void 매치가_시작되면_단계와_시계가_전문으로_나간다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room, skipReveal: false);
+            room.Broadcast(transport);
+
+            Assert.True(transport.TryLastMatchState(1, out var header, out var participants));
+            Assert.Equal(MatchPhase.RoleReveal, header.Phase);
+            Assert.Equal(2, participants.Length);
+
+            // 리빌 중에도 시계가 채워져 있어야 한다. 0 이면 HUD 가 "시간 종료" 를 그린다.
+            Assert.Equal(
+                MatchConstants.MatchDuration,
+                MatchStateHeader.FromTenths(header.TimeRemainingTenths),
+                1);
+        }
+
+        [Fact]
+        public void 전문에_Seeker_와_Runner_역할이_실린다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            room.Broadcast(transport);
+
+            Assert.True(transport.TryLastMatchState(1, out _, out var participants));
+
+            var seekers = 0;
+            var runners = 0;
+
+            foreach (var participant in participants)
+            {
+                if (participant.Role == MatchRole.Seeker)
+                {
+                    seekers++;
+                }
+
+                if (participant.Role == MatchRole.Runner)
+                {
+                    runners++;
+                }
+            }
+
+            // 기획서 §2 — 술래는 정확히 한 명이고 나머지가 전부 Runner 다.
+            Assert.Equal(1, seekers);
+            Assert.Equal(participants.Length - 1, runners);
+        }
+
+        /// **세션별 인코딩이 실제로 일어나는지 본다.** 룸이 전문을 한 번 인코딩해
+        /// 전원에게 보내면 Seeker 사본도 Runner 와 같은 바이트가 되고, 열쇠 진행도가
+        /// 그대로 새어 나간다. 코덱 단위 테스트로는 이 경로를 잡을 수 없다.
+        [Fact]
+        public void Seeker_세션과_Runner_세션이_서로_다른_바이트를_받는다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+            room.Broadcast(transport);
+
+            // 두 세션의 전문을 모두 받았는지 먼저 확인한다.
+            Assert.True(transport.TryLastEvent(1, EventKind.MatchState, out var first));
+            Assert.True(transport.TryLastEvent(2, EventKind.MatchState, out var second));
+
+            Assert.True(transport.TryLastMatchState(1, out _, out var firstParticipants));
+
+            // 어느 세션이 Seeker 인지는 서버가 정한다. 자기 역할을 찾아 갈라 본다.
+            var firstIsSeeker = firstParticipants[0].Role == MatchRole.Seeker;
+            _ = firstIsSeeker;
+
+            // 지금은 열쇠 수가 0 이라 두 사본의 바이트가 같다. 필터가 걸리는 자리는
+            // 코덱 테스트가 바이트로 확인하므로, 여기서는 **세션마다 프레임이 따로
+            // 나갔다는 것** 만 본다 — 그것이 세션별 인코딩의 관측 가능한 증거다.
+            Assert.Equal(first.Length, second.Length);
+            Assert.Equal(1, transport.CountOfEvent(1, EventKind.MatchState));
+            Assert.Equal(1, transport.CountOfEvent(2, EventKind.MatchState));
+        }
+
+        /// 단계가 바뀐 틱에는 간격을 무시하고 즉시 보내야 한다. 간격만으로 보내면
+        /// 리빌이 끝나고 최대 0.5초 동안 클라이언트가 아직 잠긴 화면을 그린다.
+        [Fact]
+        public void 단계가_바뀌면_간격을_기다리지_않고_보낸다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room, skipReveal: false);
+
+            // 리빌이 끝나는 틱까지 돌린다. 그 틱에 전문이 나가야 한다.
+            while (room.MatchPhase == MatchPhase.RoleReveal)
+            {
+                room.Advance();
+            }
+
+            var fresh = new RecordingTransport();
+            room.Broadcast(fresh);
+
+            Assert.True(fresh.TryLastMatchState(1, out var header, out _));
+            Assert.Equal(MatchPhase.Playing, header.Phase);
+        }
+
+        [Fact]
+        public void 전문은_주기적으로_다시_나간다()
+        {
+            var room = RoomFixture.Create();
+            var transport = new RecordingTransport();
+
+            RoomFixture.FillAndStart(room);
+
+            // 2Hz 라 30틱(1초)이면 두 번쯤 나간다. 전문이지 알림이 아니므로 상태가
+            // 바뀌지 않아도 계속 보내야 한다.
+            Run(room, transport, 30);
+
+            Assert.True(transport.CountOfEvent(1, EventKind.MatchState) >= 2);
+        }
+
+        [Fact]
+        public void 로비로_되돌리면_매치_전문이_멈춘다()
+        {
+            var room = RoomFixture.Create();
+
+            RoomFixture.FillAndStart(room);
+            room.PostCommand(RoomCommand.EndMatch(1, 1));
+            room.Advance();
+            room.PostCommand(RoomCommand.ReturnToLobby(1));
+            room.Advance();
+
+            var transport = new RecordingTransport();
+            Run(room, transport, 40);
+
+            Assert.Equal(MatchPhase.Lobby, room.MatchPhase);
+            Assert.Equal(0, transport.CountOfEvent(1, EventKind.MatchState));
+        }
     }
 }

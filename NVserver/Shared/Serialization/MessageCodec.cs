@@ -324,6 +324,127 @@ namespace NV.Shared.Serialization
             return playerCount;
         }
 
+        public static int MatchStateMaxWireSize(int maxPlayers)
+        {
+            return MatchStateHeader.WireSize + (maxPlayers * MatchParticipant.WireSize);
+        }
+
+        /// `Event` 프레임의 종류. 본문을 파싱하기 전에 어느 전문인지 가른다.
+        ///
+        /// 이것 없이 `Event` 를 무조건 한 종류로 파싱하면, 새 전문이 추가된 순간
+        /// 기존 클라이언트가 매 프레임 파싱 예외를 던진다.
+        public static EventKind ReadEventKind(ReadOnlySpan<byte> source)
+        {
+            if (source.Length < 2 || (MessageOpcode)source[0] != MessageOpcode.Event)
+            {
+                return EventKind.None;
+            }
+
+            return (EventKind)source[1];
+        }
+
+        /// 매치 상태 전문을 **수신자의 역할에 맞게** 쓴다.
+        ///
+        /// `forRole` 이 이 함수의 요점이다. 룰셋은 Seeker 에게 열쇠 진행도를 알리지
+        /// 않으므로, 그 사본에서는 삽입된 열쇠 수와 모든 참가자의 소지 열쇠를 0 으로
+        /// 채운다. **필터를 인코딩 지점에 두는 이유는 우회할 자리를 없애기 위해서다** —
+        /// 호출부가 필터를 잊는 경로가 있으면 그 경로로 좌표가 새고, 클라이언트에서
+        /// 숨기는 방식은 디컴파일로 되살아난다.
+        ///
+        /// 탈출 수는 걸러내지 않는다. Seeker 가 막아야 하는 수이므로 알아야 한다.
+        public static int WriteMatchState(
+            Span<byte> destination,
+            MatchStateHeader header,
+            ReadOnlySpan<MatchParticipant> participants,
+            MatchRole forRole)
+        {
+            if (participants.Length != header.ParticipantCount)
+            {
+                throw new ArgumentException(
+                    "헤더의 ParticipantCount 와 참가자 수가 다르다.",
+                    nameof(participants));
+            }
+
+            var hideKeys = forRole == MatchRole.Seeker;
+
+            var writer = new BitWriter(destination);
+            writer.WriteByte((byte)MessageOpcode.Event);
+            writer.WriteByte((byte)EventKind.MatchState);
+            writer.WriteByte((byte)header.Phase);
+            writer.WriteUInt16(header.TimeRemainingTenths);
+            writer.WriteByte(hideKeys ? (byte)0 : header.KeysInserted);
+            writer.WriteByte(header.Escapes);
+            writer.WriteByte(header.Outcome);
+            writer.WriteByte(header.ParticipantCount);
+
+            for (var index = 0; index < participants.Length; index++)
+            {
+                var participant = participants[index];
+
+                writer.WriteByte(participant.PlayerId);
+                writer.WriteByte((byte)participant.Role);
+                writer.WriteByte(participant.Flags);
+                writer.WriteByte(participant.Hits);
+                writer.WriteByte(hideKeys ? (byte)0 : participant.CarriedKeys);
+            }
+
+            return writer.BytesWritten;
+        }
+
+        /// 읽은 참가자 수를 반환한다.
+        public static int ReadMatchState(
+            ReadOnlySpan<byte> source,
+            out MatchStateHeader header,
+            Span<MatchParticipant> participants)
+        {
+            var reader = new BitReader(source);
+            var opcode = (MessageOpcode)reader.ReadByte();
+            if (opcode != MessageOpcode.Event)
+            {
+                throw new InvalidOperationException($"Event 가 아니다: 0x{(byte)opcode:X2}");
+            }
+
+            var kind = (EventKind)reader.ReadByte();
+            if (kind != EventKind.MatchState)
+            {
+                throw new InvalidOperationException($"MatchState 가 아니다: {kind}");
+            }
+
+            var phase = (MatchPhase)reader.ReadByte();
+            var timeRemaining = reader.ReadUInt16();
+            var keysInserted = reader.ReadByte();
+            var escapes = reader.ReadByte();
+            var outcome = reader.ReadByte();
+            var participantCount = reader.ReadByte();
+
+            if (participants.Length < participantCount)
+            {
+                throw new ArgumentException(
+                    $"참가자 {participantCount} 명을 담을 공간이 없다.",
+                    nameof(participants));
+            }
+
+            for (var index = 0; index < participantCount; index++)
+            {
+                participants[index] = new MatchParticipant(
+                    reader.ReadByte(),
+                    (MatchRole)reader.ReadByte(),
+                    reader.ReadByte(),
+                    reader.ReadByte(),
+                    reader.ReadByte());
+            }
+
+            header = new MatchStateHeader(
+                phase,
+                timeRemaining,
+                keysInserted,
+                escapes,
+                outcome,
+                participantCount);
+
+            return participantCount;
+        }
+
         public static int WriteControl(Span<byte> destination, ControlMessage message)
         {
             var writer = new BitWriter(destination);

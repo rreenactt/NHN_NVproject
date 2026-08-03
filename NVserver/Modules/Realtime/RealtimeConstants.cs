@@ -72,6 +72,13 @@ namespace NV.Realtime
             /// 시작 버튼과 화면 전환 사이에 최대 이 간격만큼 공백이 생긴다.
             public const int RoomStateIntervalTicks = 15;
 
+            /// 매치 상태 전문의 간격(틱). 룸 상태와 같은 2Hz 다.
+            ///
+            /// 값을 다시 적지 않고 유도한다. 두 전문은 같은 이유로 같은 주기를 쓰므로
+            /// (전문이지 알림이 아니고, 그 사이는 클라이언트가 자기 시계로 메운다)
+            /// 하나를 조정하면 다른 하나도 따라가야 한다.
+            public const int MatchStateIntervalTicks = RoomStateIntervalTicks;
+
             /// 새 입력이 없을 때 마지막 입력을 반복하는 상한.
             /// 짧은 손실은 흡수하고, 그 이상 끊기면 이동을 멈춘다.
             /// 무제한 허용하면 입력을 끊은 클라이언트가 계속 달린다.

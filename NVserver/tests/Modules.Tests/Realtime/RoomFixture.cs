@@ -173,12 +173,16 @@ namespace NV.Modules.Tests.Realtime
             return true;
         }
 
+        /// **종류까지 걸러야 한다.** 매치 상태 전문도 같은 `Event` opcode 로 오므로,
+        /// opcode 만 보고 마지막 프레임을 집으면 종류가 다른 전문을 룸 상태로 파싱하고
+        /// `ReadRoomState` 가 예외를 던진다. 클라이언트의 `DispatchEvent` 가 같은 이유로
+        /// 종류를 먼저 본다.
         public bool TryLastRoomState(int sessionId, out RoomStateHeader header, out RoomPlayerEntry[] players)
         {
             header = default;
             players = Array.Empty<RoomPlayerEntry>();
 
-            if (!TryLastOf(sessionId, MessageOpcode.Event, out var payload))
+            if (!TryLastEvent(sessionId, EventKind.RoomState, out var payload))
             {
                 return false;
             }
@@ -189,6 +193,65 @@ namespace NV.Modules.Tests.Realtime
             players = new RoomPlayerEntry[count];
             Array.Copy(buffer, players, count);
             return true;
+        }
+
+        public bool TryLastMatchState(int sessionId, out MatchStateHeader header, out MatchParticipant[] participants)
+        {
+            header = default;
+            participants = Array.Empty<MatchParticipant>();
+
+            if (!TryLastEvent(sessionId, EventKind.MatchState, out var payload))
+            {
+                return false;
+            }
+
+            var buffer = new MatchParticipant[RealtimeConstants.Rooms.MaxPlayers];
+            var count = MessageCodec.ReadMatchState(payload, out header, buffer);
+
+            participants = new MatchParticipant[count];
+            Array.Copy(buffer, participants, count);
+            return true;
+        }
+
+        /// 이 세션에 마지막으로 간 그 종류의 전문.
+        public bool TryLastEvent(int sessionId, EventKind kind, out byte[] payload)
+        {
+            payload = Array.Empty<byte>();
+
+            if (!_sent.TryGetValue(sessionId, out var list))
+            {
+                return false;
+            }
+
+            for (var index = list.Count - 1; index >= 0; index--)
+            {
+                if (MessageCodec.ReadEventKind(list[index]) == kind)
+                {
+                    payload = list[index];
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public int CountOfEvent(int sessionId, EventKind kind)
+        {
+            if (!_sent.TryGetValue(sessionId, out var list))
+            {
+                return 0;
+            }
+
+            var count = 0;
+            foreach (var payload in list)
+            {
+                if (MessageCodec.ReadEventKind(payload) == kind)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private bool TryLastOf(int sessionId, MessageOpcode opcode, out byte[] payload)

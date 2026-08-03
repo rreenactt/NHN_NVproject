@@ -342,11 +342,37 @@ namespace NV.Client.Net
                     break;
 
                 case MessageOpcode.Event:
-                    ReadRoomState(payload);
+                    DispatchEvent(payload);
                     break;
 
                 default:
                     // 정의되지 않은 값. 손상되었거나 조작된 프레임이다.
+                    break;
+            }
+        }
+
+        /// `Event` 프레임을 종류별로 가른다.
+        ///
+        /// **종류를 먼저 보지 않으면 새 전문이 추가된 순간 매 프레임 파싱 예외가 난다.**
+        /// 예전에는 `Event` 를 무조건 룸 상태로 파싱했고, `ReadRoomState` 가 종류 불일치를
+        /// 예외로 던지므로 서버가 다른 전문을 보내기 시작하면 2Hz 로 `LastError` 가
+        /// 덮여 화면에 네트워크 오류가 뜬다.
+        private void DispatchEvent(ReadOnlySpan<byte> payload)
+        {
+            switch (MessageCodec.ReadEventKind(payload))
+            {
+                case EventKind.RoomState:
+                    ReadRoomState(payload);
+                    break;
+
+                case EventKind.MatchState:
+                    // 서버는 이미 매치 단계와 시계를 보내고 있다. 이 클라이언트는 아직
+                    // 자기 시계로 매치를 돌리므로 지금은 받아만 두고 버린다 — 적용은
+                    // MatchManager 가 심판에서 뷰로 바뀔 때(IG-010) 붙는다.
+                    break;
+
+                default:
+                    // 모르는 종류. 서버가 앞서 나갔거나 프레임이 손상되었다.
                     break;
             }
         }

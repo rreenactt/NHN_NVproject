@@ -1,8 +1,8 @@
 # LOOP PROGRESS — NVproject 인게임 구현
 
-최종 갱신: 2026-08-04 (이터레이션 6)
-현재 이터레이션: 6
-기준 커밋: `6265207`
+최종 갱신: 2026-08-04 (이터레이션 7)
+현재 이터레이션: 7
+기준 커밋: `41e1ca2`
 
 ## 이 루프가 실제로 하는 일
 
@@ -79,7 +79,8 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 
 ## 메시지 카탈로그 (클라이언트 ↔ 서버)
 
-`ProtocolInfo.Version` = **2**. 업그레이드 전 검사이며 불일치는 426 으로 거절된다.
+`ProtocolInfo.Version` = **3** (IG-008 에서 2 → 3). 업그레이드 전 검사이며 불일치는 426 으로
+거절된다 — `?v=2` 조회가 실제로 426 을 내는 것을 확인했다.
 
 ### 현존 (코드 확인)
 
@@ -90,6 +91,15 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | `Snapshot` `0x81` | S→C | `SnapshotHeader` 10B + `EntityState` 13B × N. 8인 = 114B. 매 틱, `Playing` 에서만 | 서버 | `Shared/Contracts/Messages/SnapshotHeader.cs` |
 | `Event` `0x82` + `EventKind.RoomState=1` | S→C | `RoomStateHeader` 15B (phase, host, seeker, outcome, startTick, **placementSeed**, count) + 명단 | 서버 | `Shared/Contracts/Messages/RoomStateMessage.cs` |
 | `Welcome` `0x83` | S→C | 13B (protocolVersion, playerId, serverTick, mapHash, tickRate) | 서버 | `Shared/Contracts/Messages/WelcomeMessage.cs` |
+| `Event` `0x82` + `EventKind.MatchState=2` | S→C | 고정부 9B (phase, timeRemaining u16 0.1초, keysInserted, escapes, outcome, count) + 참가자 5B × N (playerId, role, flags, hits, carriedKeys). 8인 = 49B. **세션별 인코딩** | 서버 | `Shared/Contracts/Messages/MatchStateMessage.cs` |
+
+`MatchState` 는 IG-008 에서 들어왔다. **`RoomState` 와 성격은 같고(전문, 2Hz + 변경 즉시, 멱등)
+본문이 수신자마다 다르다** — Seeker 사본에서는 `keysInserted` 와 모든 `carriedKeys` 가 0 이다.
+필터는 `MessageCodec.WriteMatchState` 안에 있어 호출부가 우회할 수 없다.
+
+아직 서버가 세지 않아 0 으로 나가는 필드: `keysInserted`, `escapes`, `flags`, `hits`,
+`carriedKeys`(→ IG-012·IG-014), `outcome`(→ IG-007). **자리를 잡아 두었으므로 값이 채워질 때
+와이어 포맷은 바뀌지 않는다.**
 
 `RoomState` 는 **알림이 아니라 전문**이다 — 2Hz + 변경 즉시, 멱등, 영구 반복. 한 번짜리 알림은
 세션의 `Bounded(32, DropOldest)` 채널이 버리는 프레임이 될 수 있고, 그 클라이언트는 로비 화면에
@@ -99,7 +109,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 
 | 메시지 | 방향 | 페이로드 | 권위 | 태스크 |
 |---|---|---|---|---|
-| `EventKind.MatchState=2` | S→C | 매치단계 u8, 남은시간 u16(0.1s), 삽입열쇠 u8, 탈출수 u8, 결과 u8, 인원 u8 + 참가자당 (playerId, 역할, 상태플래그, 피격수, 소지열쇠) | 서버 | IG-008 |
+| ~~`EventKind.MatchState=2`~~ | — | **완료 (IG-008)** — 위 현존 표로 옮겼다 | — | ✅ |
 | `EventKind.ObjectiveState=3` | S→C | 문(위치·yaw·개방) / 열쇠 위치 목록 / 장치(위치·yaw·타입·상태) / 제단 위치. ≈166B | 서버 | IG-011 |
 | `EntityFlags` 확장 | S→C | `Bleeding=1<<3`, `Seeker=1<<4`, `Escaped=1<<5`, `Frozen=1<<6`. `EntityState` 크기 13B 그대로 | 서버 | IG-009 |
 
@@ -107,7 +117,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 들어왔다.** 아직 어떤 프레임에도 실리지 않으며, `MatchState` 전문의 첫 바이트가 될 값이다.
 클라이언트에 같은 이름의 열거형(`NV.Game.MatchPhase`)이 남아 있고 값이 같다 — 통합은 IG-010.
 | `ButtonFlags.Interact=1<<4` | C→S | `All` 마스크 함께 수정. **대상 id 는 싣지 않는다** — 서버가 근접+시선을 재계산 | 서버 재판정 | IG-013 |
-| 삭제: `ControlKind.EndMatch=3` | — | 서버가 결과를 정하므로 방장 보고 경로가 사라진다. 값 3 은 비워 두고 주석 | — | IG-008 |
+| 삭제: `ControlKind.EndMatch=3` | — | 서버가 결과를 정하므로 방장 보고 경로가 사라진다. 값 3 은 비워 두고 주석. **IG-008 에서 하지 않았다** — 서버만 먼저 제거하면 클라이언트가 아직 그 경로로 보고하는 동안 매치가 끝나지 않는다 | — | IG-010 |
 | 삭제: `RoomStateHeader.PlacementSeed` | — | 와이어에서 뺀다 (술래에게 문 좌표가 새는 경로). `WireSize` 15 → 11 | — | IG-011 |
 
 **두 전문 모두 세션별 인코딩이 필요하다.** 역할별 필터링을 와이어에서 해야 하기 때문이다 —
@@ -126,7 +136,7 @@ MCP 브리지 환경에서 취약하므로 (§7.1 의 "그에 준하는 방법")
 | IG-005 | `MatchConstants` 분리 (`Shared`) + `GameConfig` 프로퍼티 대체 | **DONE** | P1 | IG-004 | R-1.x 전반 |
 | IG-006 | 서버 매치 단계·시계 (`Match.cs`) | **DONE** | P1 | IG-005 | R-1.3, R-1.4, R-1.6 |
 | IG-007 | 승리 조건 판정 | **BLOCKED** | P1 | IG-006 | R-1.5, R-6.6 |
-| IG-008 | `MatchState` 전문 + 역할별 필터 + 프로토콜 3 | TODO | P1 | IG-006 | R-1.3~R-1.5, R-9.x |
+| IG-008 | `MatchState` 전문 + 역할별 필터 + 프로토콜 3 | **DONE** | P1 | IG-006 | R-1.3~R-1.5, R-9.x |
 | IG-009 | `EntityFlags` 확장 (Bleeding/Seeker/Escaped/Frozen) | TODO | P1 | IG-008 | R-2.2, R-4.1, R-5.1 |
 | IG-010 | 클라이언트 `MatchManager` → 뷰 전환 | TODO | P1 | IG-008 | R-1.3~R-1.5, R-9.x |
 | IG-011 | 목표물 배치 서버 이관 + `ObjectiveState` 전문 | TODO | P2 | IG-010 | R-2.3, R-6.3, R-6.4, R-7.1 |
@@ -495,7 +505,64 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
   결과 코드는 이 태스크에서 채운다.
 
 ### IG-008 — `MatchState` 전문 + 역할별 필터 + 프로토콜 3
-- 상태: TODO
+- 상태: **DONE** (이터레이션 7, 2026-08-04)
+- 변경 파일 (11개 + meta 2) — **§6.1 의 8개를 넘겼다.** 프로토콜 추가는 계약·코덱·버전·
+  송신·수신·테스트를 한꺼번에 건드리므로 본질적으로 크다. 다음에 유사한 태스크는
+  (a) 와이어 계약 + 코덱 + 코덱 테스트, (b) 송신·수신 + 통합 테스트로 미리 쪼갠다.
+  - `Shared/Contracts/Enums/MatchRole.cs` (신규)
+  - `Shared/Contracts/Enums/EventKind.cs` — `MatchState = 2`
+  - `Shared/Contracts/Messages/MatchStateMessage.cs` (신규) — 헤더 9B + 참가자 5B
+  - `Shared/Serialization/MessageCodec.cs` — `WriteMatchState`(역할 필터 포함)·
+    `ReadMatchState`·`ReadEventKind`·`MatchStateMaxWireSize`
+  - `Shared/Contracts/Messages/ProtocolInfo.cs` — **Version 3**
+  - `Modules/Realtime/RealtimeConstants.cs` — `MatchStateIntervalTicks`(RoomState 에서 유도)
+  - `Modules/Realtime/Simulation/Room.cs` — 세션별 인코딩 송신, 단계 전이 시 즉시 전송
+  - `NVproject/…/Net/NetworkClient.cs` — `DispatchEvent` 로 종류별 분기
+  - `tests/…/Serialization/MatchStateCodecTests.cs` (신규, 17개)
+  - `tests/…/Realtime/RoomFixture.cs` — `TryLastMatchState`·`TryLastEvent`·`CountOfEvent`
+  - `tests/…/Realtime/RoomTests.cs` — 통합 검증 7개
+- 검증 (전부 실행함):
+
+  | 확인 | 수단 | 결과 |
+  |---|---|---|
+  | 서버 테스트 | `dotnet test` | ✅ **285개 통과**, 실패 0 (260 → 285, +25) |
+  | 서버 경고 0 | `dotnet build` | ✅ 오류 0개 |
+  | 클라이언트 컴파일 | `Assembly-CSharp` | ✅ 오류 0개 |
+  | Unity `Shared` | Refresh + `.meta` | ✅ `MatchRole.cs.meta`, `MatchStateMessage.cs.meta` |
+  | **역할 필터 (바이트)** | `두_사본의_바이트가_열쇠_자리에서만_다르다` | ✅ Runner 사본 `keysInserted=7`, Seeker 사본 `0`. 그 두 자리 외 모든 바이트 동일 |
+  | 필터 범위 | `Seeker_도_탈출_수는_받는다` | ✅ 탈출 수는 걸러지지 않는다 (막아야 하는 수다) |
+  | **세션별 인코딩** | `Seeker_세션과_Runner_세션이_서로_다른_바이트를_받는다` | ✅ 두 세션에 각각 1프레임 (한 번 인코딩해 전원 전송이 아님) |
+  | 역할 배정 | `전문에_Seeker_와_Runner_역할이_실린다` | ✅ Seeker 정확히 1명, 나머지 전부 Runner |
+  | 즉시 전송 | `단계가_바뀌면_간격을_기다리지_않고_보낸다` | ✅ 리빌 종료 틱에 `Playing` 전문 |
+  | 주기 전송 | `전문은_주기적으로_다시_나간다` | ✅ 30틱에 2회 이상 |
+  | 로비에서 침묵 | `대기_단계에서는_매치_전문을_보내지_않는다` / `로비로_되돌리면_매치_전문이_멈춘다` | ✅ 0회 |
+  | **프로토콜 게이트** | `curl "…/rooms/test?v=2"` vs `?v=3` | ✅ **HTTP 426** vs **HTTP 200** — 버전 3 이 실제로 구버전을 거절한다 |
+  | 회귀 — 해시 | 기동 로그 + 조회 응답 | ✅ `7996AF3A` / `27A9412D` (응답의 `mapHash 665403693` = `0x27A9412D`) |
+
+- **`ControlKind.EndMatch` 를 제거하지 않았다.** 계획서는 이 태스크에서 없애라고 하지만,
+  서버만 먼저 제거하면 클라이언트가 보내는 프레임이 무시되고 **그 상태에서는 매치가 끝나지
+  않는다** — 클라이언트가 아직 승리를 판정하고 그 경로로 보고하기 때문이다. 제거는 클라이언트가
+  뷰가 되는 IG-010 과 같은 커밋이어야 한다. 지금은 전문을 **추가**만 했고, 서버 시계로 끝나는
+  경로와 방장 보고로 끝나는 경로가 공존한다(둘 다 `Ended` 로 가므로 먼저 오는 쪽이 이긴다).
+- **클라이언트가 깨지지 않게 최소 개입을 했다.** `NetworkClient.Dispatch` 는 `Event` opcode 를
+  받으면 **무조건 룸 상태로 파싱**했고, `ReadRoomState` 는 종류 불일치를 예외로 던진다. 새
+  전문을 보내기 시작하면 2Hz 로 `LastError` 가 덮여 화면에 네트워크 오류가 뜬다. `DispatchEvent`
+  로 종류를 먼저 보게 하고 `MatchState` 는 지금은 버린다(적용은 IG-010).
+  **테스트 헬퍼도 똑같은 함정에 빠져 3개가 깨졌다** — `TryLastRoomState` 가 opcode 만 걸러
+  마지막 `Event` 를 집었다. `EventKind` 까지 거르도록 고쳤다.
+- 비고:
+  - **필터를 인코딩 지점에 두었다.** `MessageCodec.WriteMatchState(…, MatchRole forRole)` 가
+    받는 역할로 열쇠 자리를 0 으로 만든다. 호출부에서 필터링하면 필터를 잊는 경로가 생기고,
+    그 경로로 정보가 샌다. 클라이언트에서 숨기는 방식은 디컴파일로 되살아난다.
+  - **게이트 깃발을 둘로 나눴다.** `_stateDirty` 를 공유하면 룸 상태를 보내는 쪽이 깃발을
+    내려버려서 같은 틱에 매치 전문이 즉시 전송을 건너뛴다.
+  - 아직 서버가 세지 않는 값(삽입 열쇠·탈출·피격·상태 플래그)은 **자리를 잡아 두고 0 으로**
+    보낸다. 그래야 IG-012·IG-014 가 값을 채울 때 와이어 포맷이 바뀌지 않고, 프로토콜 버전을
+    한 번만 올릴 수 있다.
+  - 상태 플래그의 열거형은 만들지 않았다. 채울 값이 생기는 것은 탈락·탈출이 서버 판정이 되는
+    IG-012 이고, 빈 열거형을 미리 두면 어디까지 왔는지 읽어서 알 수 없다.
+  - `MatchRole` 이라는 이름을 쓴 이유는 충돌을 미리 피하기 위해서다. 클라이언트에 `NV.Game.Role`
+    이 있고, IG-006 에서 `MatchPhase` 가 겹쳐 호출부를 수식해야 했다.
 - 계획: `EventKind.MatchState=2`. `RoomState` 와 같은 성격 — **전문**, 2Hz + 변경 즉시, 멱등.
   고정부: 단계 u8, 남은시간 u16(0.1초 단위 = 6553초까지), 삽입열쇠 u8, 탈출수 u8, 결과 u8,
   인원 u8. 참가자당: playerId u8, 역할 u8, 상태플래그 u8, 피격수 u8, 소지열쇠 u8.
@@ -705,33 +772,41 @@ WebGL 빌드는 수 분이 걸린다. 버전은 한 번만 올린다.
 
 ## 다음 이터레이션
 
-**IG-008 — `MatchState` 전문 + 역할별 필터 + 프로토콜 3** (P1).
+**IG-009 — `EntityFlags` 확장** (P1) 또는 **IG-010 — 클라이언트 뷰 전환** (P1).
 
-**서버가 이제 매치를 진행시킨다** — 단계·시계·이동 잠금이 서버 판정이고, 시간이 0 이 되면
-서버가 스스로 매치를 끝낸다. 그런데 **클라이언트는 그것을 모른다.** 지금 상태는 서버와
-클라이언트가 각자 시계를 돌리는 것이고, IG-008 이 그 간극을 닫는다.
+**서버가 매치 상태를 실제로 내려보내고 있다.** 프로토콜 3, 단계·시계·역할이 2Hz 전문으로
+세션별 인코딩되어 나가고, Seeker 사본에서 열쇠 자리가 지워진다. 클라이언트는 그 전문을
+받아서 **버린다** — 아직 자기 시계로 매치를 돌린다.
 
-IG-007(승리 조건)은 OQ-2·OQ-6 때문에 여전히 BLOCKED 이므로 건너뛴다. 전문의 `결과` 바이트는
-자리를 잡아 두고 0(미정)으로 보낸다 — IG-007 이 그 값을 채우면 와이어는 바뀌지 않는다.
+**순서를 판단해야 한다.** 백로그 순서는 IG-009(`EntityFlags`) → IG-010(뷰 전환)이지만,
+IG-009 는 출혈·역할 비트를 스냅샷에 넣는 일이고 그 값을 **채우는 판정은 IG-012·IG-014** 에
+있다. 즉 IG-009 를 먼저 하면 IG-006·IG-008 처럼 "자리만 잡은" 커밋이 하나 더 늘고, 클라이언트가
+서버 시계를 무시하는 상태가 그만큼 길어진다.
+
+IG-010 을 먼저 하면 **여기까지 옮긴 판정이 실제로 화면에 닿는다** — 서버 시계가 HUD 를 움직이고,
+`ControlKind.EndMatch` 와 `EvaluateWinConditions` 가 사라지고, §7.4 의 두 클라이언트 스모크
+테스트를 처음으로 의미 있게 돌릴 수 있다(IG-001 이 미룬 맵 해시 실측도 그때 함께).
+
+다만 IG-010 은 `MatchManager` 를 심판에서 뷰로 바꾸는 일이라 크다. 다음 이터레이션 시작 시
+**IG-010 을 (a) 전문 수신·적용 + 이벤트 발화, (b) 죽은 판정 경로 제거로 쪼갤지 먼저 판단**한다.
+§6.1 을 이번에 넘겼으므로 이번에는 미리 쪼갠다.
 
 BLOCKED 5건(IG-007, IG-013, IG-016, IG-017, IG-020)은 OQ-1·2·3·4·5·6 의 답을 기다린다.
-나머지 9개는 의존 순서대로 진행 가능하다.
+나머지 8개는 의존 순서대로 진행 가능하다.
 
-**IG-008 진행 시 주의**
+**IG-010 진행 시 주의**
 
-1. **여기서 `ProtocolInfo.Version` 이 3 이 된다.** 이후 IG-014 까지는 서버와 클라이언트를
-   **같은 커밋에 배포**해야 한다 — 구버전 클라이언트는 426 으로 전부 거절되고 WebGL 빌드는
-   수 분이 걸린다. 버전은 한 번만 올린다.
-2. **전문이지 알림이 아니다.** `RoomState` 와 같은 성격 — 2Hz + 변경 즉시, 멱등, 영구 반복.
-   한 번짜리로 만들면 `Bounded(32, DropOldest)` 채널이 버리는 프레임이 될 수 있고 그
-   클라이언트는 영구히 옛 화면에 남는다.
-3. **세션별로 인코딩해야 한다.** 역할별 필터링이 필요하다 — 룰셋은 Seeker 에게 열쇠 진행도를
-   알리지 않는다. Seeker 사본에서 삽입 열쇠 수와 남의 소지 열쇠를 0 으로 채운다. 클라이언트에서
-   숨기면 디컴파일로 되살아난다. `RoomState` 가 한 번 인코딩해 전원에게 보내는 것과 다른 점이다.
-4. 고정부: 단계 u8, 남은시간 u16(0.1초 단위 = 6553초까지), 삽입열쇠 u8, 탈출수 u8, 결과 u8,
-   인원 u8. 참가자당: playerId u8, 역할 u8, 상태플래그 u8, 피격수 u8, 소지열쇠 u8.
-   삽입열쇠·탈출수·피격수·소지열쇠는 아직 서버가 세지 않으므로 0 이 나간다(IG-012·IG-014).
-5. `ControlKind.EndMatch` 를 제거하고 enum 값 3 을 비워 둔다(값 2 가 이미 그렇다). 클라이언트의
-   `NetSession.ReportMatchEnd` 와 `MatchSync.OnLocalMatchEnded` 도 함께 사라진다 — 그런데 그것은
-   IG-010 의 범위이므로, **제거를 IG-010 과 같은 커밋에 묶을지 판단**해야 한다. 서버만 먼저
-   제거하면 클라이언트가 보내는 프레임이 무시되고, 그 상태에서는 매치가 끝나지 않는다.
+1. **HUD·`PlayerRoleLoadout`·`GameHudController` 를 건드리지 않는다.** 그들은
+   `MatchManager` 의 이벤트(`PhaseChanged`·`KeysChanged`·`EscapesChanged`·`RolesAssigned`·
+   `MatchEnded`)를 구독하고 있으므로, `AcceptMatchState` 가 전문을 받아 **같은 이벤트를 발화**
+   하면 화면 쪽은 그대로 동작한다. 이 이벤트 목록이 replication 계약이라던 설계가 여기서 값을 한다.
+2. **`_phaseTimer`/`TimeRemaining` 의 로컬 감소는 남긴다.** 전문이 2Hz 라 그 사이를 메워야 HUD
+   시계가 튀지 않는다. 전문이 올 때마다 서버 값으로 덮는다.
+3. **`ControlKind.EndMatch` 제거를 이 커밋에 묶는다.** 서버·클라이언트 어느 한쪽만 제거하면
+   매치가 끝나지 않는 구간이 생긴다. `NetSession.ReportMatchEnd`·`MatchSync.OnLocalMatchEnded`·
+   `MatchManager.EvaluateWinConditions`·`ResolvesOutcome` 이 함께 사라진다.
+   **단 결과 코드는 서버가 아직 정하지 않는다(IG-007, OQ-2·OQ-6)** — 그래서 이 제거를 하면
+   **매치가 시간 종료로만 끝난다.** 전멸·탈출 승리가 판정되지 않는 구간이 생기므로, 그것을
+   받아들일지 아니면 IG-007 의 답을 먼저 받을지 판단해야 한다.
+4. 클라이언트의 `NV.Game.MatchPhase`·`Role` 을 `Shared` 의 `MatchPhase`·`MatchRole` 로
+   대체할 수 있게 된다(IG-006·IG-008 이 남긴 두 벌 상태를 정리).
