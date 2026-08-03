@@ -5,6 +5,7 @@ using System.Threading;
 using Microsoft.Extensions.Logging;
 using NV.Realtime.Contracts;
 using NV.Realtime.Transport;
+using NV.Shared.Contracts;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Simulation;
 
@@ -18,8 +19,12 @@ namespace NV.Realtime.Simulation
         /// 등록되지 않은 맵 id. 기본 맵으로 대신 열지 않는다.
         UnknownMap = 1,
 
-        /// 동시에 열어 두는 룸 수 상한.
-        RoomLimit = 2,
+        /// 겹치지 않는 코드를 만들지 못했다.
+        ///
+        /// 길이를 상한까지 늘려도 실패했다는 뜻이므로 정상적으로는 도달하지 않는다.
+        /// 알파벳이나 길이 규칙을 줄이는 변경이 들어왔을 때만 나타나며, 조용히
+        /// 넘기지 않고 사유를 따로 두어 로그와 응답에서 구분되게 한다.
+        CodeExhausted = 2,
     }
 
     /// 룸 목록. 룸은 명시적으로 만들어지고 초대 코드로만 참가한다.
@@ -27,6 +32,11 @@ namespace NV.Realtime.Simulation
     /// 예전에는 접속 쿼리의 룸 id 로 룸이 그 자리에서 생겼다. 초대 코드 모델에서는
     /// 그 반대여야 한다 — 코드를 모르는 접속은 거부되어야 하고, 그러려면 "없는 룸을
     /// 만들어 준다" 는 경로가 아예 없어야 한다.
+    ///
+    /// **동시 룸 수에 상한이 없다.** 상한은 임의의 쿼리스트링으로 룸이 무한히 생기던
+    /// 시절의 방어선이었고, 룸이 명시적으로만 만들어지는 지금은 그 자리를 두 가지가
+    /// 대신한다 — 빈 룸 회수(60초)와 생성 요청 제한(Api). 대신 코드 길이가 룸 수에
+    /// 따라 늘어난다. 공간이 고정이면 룸이 늘수록 충돌이 잦아진다.
     internal sealed class RoomRegistry : IRoomQuery
     {
         private sealed class Entry
@@ -98,50 +108,63 @@ namespace NV.Realtime.Simulation
                 return false;
             }
 
-            if (_rooms.Count >= RealtimeConstants.Rooms.MaxRooms)
-            {
-                _logger.LogWarning("룸 수 상한 {MaxRooms} 에 도달해 새 룸을 만들지 않는다.", RealtimeConstants.Rooms.MaxRooms);
-                error = RoomCreateError.RoomLimit;
-                return false;
-            }
-
             var createdTick = Volatile.Read(ref _serverTick);
 
-            for (var attempt = 0; attempt < RealtimeConstants.Rooms.CodeGenerationAttempts; attempt++)
-            {
-                var candidate = InviteCode.NewCode();
-                var token = InviteCode.NewHostToken();
-                var entry = new Entry(
-                    new Room(candidate, map, _network, _logger),
-                    token,
-                    createdTick);
+            // 길이는 지금 열려 있는 룸 수에서 나온다. 룸 수에 상한이 없으므로 공간을
+            // 고정하면 룸이 늘수록 충돌이 잦아진다.
+            var length = InviteCode.LengthFor(_rooms.Count);
 
-                if (!_rooms.TryAdd(candidate, entry))
+            while (length <= InviteCodeFormat.MaxLength)
+            {
+                for (var attempt = 0; attempt < RealtimeConstants.Rooms.CodeGenerationAttempts; attempt++)
                 {
-                    continue;
+                    var candidate = InviteCode.NewCode(length);
+                    var token = InviteCode.NewHostToken();
+                    var entry = new Entry(
+                        new Room(candidate, map, _network, _logger),
+                        token,
+                        createdTick);
+
+                    // 충돌은 여기서 흡수된다. `TryAdd` 가 실패했다는 것은 그 코드를
+                    // 이미 다른 방이 쓰고 있다는 뜻이며, 같은 코드가 두 방에 붙는
+                    // 경로는 없다 — 경쟁하는 요청 둘이 같은 코드를 뽑아도 하나만 이긴다.
+                    if (!_rooms.TryAdd(candidate, entry))
+                    {
+                        continue;
+                    }
+
+                    _logger.LogInformation(
+                        "룸 {RoomId} 생성. 맵 {MapId}({MapName}) 해시 {MapHash:X8} 박스 {BoxCount}개, 룸 {RoomCount}개",
+                        candidate,
+                        resolvedMapId,
+                        map.Name,
+                        map.Hash,
+                        map.Collision.BoxCount,
+                        _rooms.Count);
+
+                    code = candidate;
+                    hostToken = token;
+                    error = RoomCreateError.None;
+                    return true;
                 }
 
-                _logger.LogInformation(
-                    "룸 {RoomId} 생성. 맵 {MapId}({MapName}) 해시 {MapHash:X8} 박스 {BoxCount}개",
-                    candidate,
-                    resolvedMapId,
-                    map.Name,
-                    map.Hash,
-                    map.Collision.BoxCount);
+                // 같은 길이에서 연달아 겹혔다. 부하율 계산이 실제 상황과 어긋났다는
+                // 뜻이므로 길이를 늘려 공간을 키운다. 실패로 끝내는 것보다 낫다.
+                _logger.LogWarning(
+                    "{Length}자 코드가 {Attempts}회 연속 겹쳤다. 한 자 늘려 다시 시도한다. 룸 {RoomCount}개",
+                    length,
+                    RealtimeConstants.Rooms.CodeGenerationAttempts,
+                    _rooms.Count);
 
-                code = candidate;
-                hostToken = token;
-                error = RoomCreateError.None;
-                return true;
+                length++;
             }
 
-            // 여기까지 오면 코드 공간이나 알파벳이 줄어든 것이다. 룸 상한과 같은
-            // 취급을 하되 로그는 따로 남긴다 — 원인이 전혀 다르다.
+            // 상한까지 늘려도 실패했다. 알파벳이나 길이 규칙이 줄어든 경우다.
             _logger.LogError(
-                "초대 코드를 {Attempts} 번 시도해 만들지 못했다. 코드 길이나 알파벳을 확인한다.",
-                RealtimeConstants.Rooms.CodeGenerationAttempts);
+                "초대 코드를 {MaxLength}자까지 늘려도 만들지 못했다. 코드 알파벳과 길이 규칙을 확인한다.",
+                InviteCodeFormat.MaxLength);
 
-            error = RoomCreateError.RoomLimit;
+            error = RoomCreateError.CodeExhausted;
             return false;
         }
 

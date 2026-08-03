@@ -18,7 +18,7 @@
 | 대기/진행 구분 | 없다. 틱 루프가 항상 시뮬레이션한다 (`GameLoopService.RunTick`) | 룸 단계 `Waiting → Playing → Ended` |
 | 시작 신호 | 없다 | 방장의 제어 메시지 → 틱 경계에서 단계 전이 |
 | 명단 통보 | 없다. 서버→클라 메시지는 Welcome·Snapshot 둘뿐 | `Event(0x82)` 코덱 신설 → **프로토콜 버전 2** |
-| 룸 정리 | 없다. 룸은 만들어지면 영원히 남는다 | 빈 룸 만료 (`MaxRooms` 16 이 죽은 방으로 차는 것을 막는다) |
+| 룸 정리 | 없다. 룸은 만들어지면 영원히 남는다 | 빈 룸 만료. 동시 룸 수에는 상한을 두지 않고 요청 속도를 제한한다 |
 
 클라이언트 단독으로는 만들 수 없다. 앞선 계획(세션 계층 분리)은 유효하고 그 위에 얹는다.
 
@@ -208,7 +208,7 @@ WebGL 은 탭이 열릴 때 `?code=` 를 읽어 로비의 코드 칸을 자동�
 | 선행 | S03 |
 | 변경 대상 | `RoomRegistry.cs`, 신규 `InviteCode.cs`, `RealtimeConstants` |
 | 내용 | `Create(mapId)` → 6자 코드 생성(충돌 시 재생성, 8회 실패면 `503`) + `hostToken`(16바이트 무작위). `GetOrCreate` 는 정적 룸에만 남기고 **접속 경로는 `TryGet` 으로 바꾼다** — 없는 코드로 붙으면 `404`. 만료: `Waiting` 무접속 60초 / `Playing`·`Ended` 무접속 30초 / 시작 없이 10분. 제거는 틱 루프가 한다 |
-| 완료 조건 | 없는 코드는 `404`, 빈 방이 스스로 사라져 `MaxRooms` 16 이 죽은 방으로 차지 않는다 |
+| 완료 조건 | 없는 코드는 `404`, 빈 방이 스스로 사라진다. 동시 룸 수 상한은 없고 생성·시도 요청 속도로 막는다 |
 | 검증 | `dotnet test` — 만료·충돌 재생성·미등록 코드 거부 |
 | 함정 | 코드 생성에 `DeterministicRandom` 을 쓰면 안 된다. 그쪽은 클라이언트와 같은 값을 내는 것이 목적인 시뮬레이션용이고, 초대 코드는 **예측 불가능해야 한다**. `RandomNumberGenerator` 를 쓴다 |
 
@@ -273,7 +273,7 @@ WebGL 은 탭이 열릴 때 `?code=` 를 읽어 로비의 코드 칸을 자동�
 | 목적 | 11종 실패를 화면에서 갈라낸다 |
 | 선행 | C03 |
 | 변경 대상 | 신규 `Assets/Scripts/Net/Session/SessionFailure.cs` |
-| 내용 | `ServerUnreachable, VersionMismatch, InvalidCode, UnknownCode, RoomFull, RoomInProgress, RoomLimit, NotHost, TooFewPlayers, HandshakeTimeout, ConnectionLost, MapHashMismatch` + 사유별 문구와 다음 행동. 접속은 항상 프리플라이트를 먼저 통과한다 |
+| 내용 | `ServerUnreachable, VersionMismatch, InvalidCode, UnknownCode, UnknownMap, RoomFull, RoomInProgress, TooManyRequests, RoomCreateFailed, HandshakeTimeout, ConnectionLost, MapHashMismatch` + 사유별 문구와 다음 행동. 접속은 항상 프리플라이트를 먼저 통과한다 |
 | 완료 조건 | 재현 표(M6) 전부가 서로 다른 문구를 낸다 |
 | 함정 | 브라우저는 WS 핸드셰이크 실패 사유를 JS 에 주지 않는다 — `1006` 하나뿐이다(`ClientTransportFactory.FailureReason`). 프리플라이트가 그 앞에서 원인을 잡는 유일한 수단이고, 프리플라이트 통과 후의 `/ws` 실패는 진짜 전송 문제라는 것 자체가 정보다. 프리플라이트와 업그레이드 사이에 정원이 찰 수 있으므로 그 문구는 "정원이 방금 찼을 수 있다"로 남긴다 — 없는 확실성을 주지 않는다 |
 
@@ -353,7 +353,7 @@ WebGL 은 탭이 열릴 때 `?code=` 를 읽어 로비의 코드 칸을 자동�
 | 만료된 방 코드 | `UnknownCode` (만료 문구) | 새 방 |
 | 8명 찬 방에 9번째 | `RoomFull` | 다른 방 |
 | 이미 시작된 방에 참가 | `RoomInProgress` | 다음 판 대기 |
-| 17번째 방 생성 | `RoomLimit` | 잠시 뒤 재시도 |
+| 분당 제한을 넘겨 방 만들기 | `TooManyRequests` | 잠시 뒤 재시도 |
 | 방장이 아닌데 시작 시도 | `NotHost` | 방장에게 요청 |
 | 1명인 방에서 시작 | `TooFewPlayers` | 인원 대기 |
 | 플레이 중 서버 강제 종료 | `ConnectionLost` | 자동 재시도 → 실패 시 로비 |
@@ -382,6 +382,10 @@ WebGL 은 탭이 열릴 때 `?code=` 를 읽어 로비의 코드 칸을 자동�
 | 정적 룸에서 `Control(StartMatch)` | 단계 `Waiting → Playing`, Seeker 배정, **씨드 0 아님**(`-1162551485`), 방장 `255`(정적 룸이라 없음) |
 | 진행 중 룸에 새 접속 | `409` (자리를 비워 두고 확인 — 정원이 아니라 단계 때문이다) |
 | 전원 퇴장 후 재접속 | 성공. 단계가 대기로 돌아갔다 |
+| 룸 40개 연속 생성 | 전부 성공(옛 상한 16 초과), 코드 40개 모두 유일하고 6자 |
+| 방 만들기 13회 | `201` 10회 → `429` 3회 (기본 분당 10회) |
+| 코드 시도 65회 | `429` 5회. `/ws` 로 찍어도 같은 양동이를 쓴다 — 제한에 걸린 뒤 정상 조회도 `429` |
+| `429` 응답 헤더 | `Access-Control-Allow-Origin` 이 붙는다. 브라우저가 429 를 읽을 수 있다 |
 
 **클라이언트 쪽 (에디터 필요, 미확인)**
 
@@ -478,6 +482,9 @@ S03 ─┬─ S04 ─── S05 ─┴─ C03 ─── C04 ─┬─ C05 ─┐
 | 배치 씨드를 `config.placementSeed` 에 주입 | `MatchManager.PlacementSeedOverride` | 설정은 `ScriptableObject` 다. 런타임 변경이 에디터에서 그대로 저장되어 다음 오프라인 세션이 지난 매치의 씨드를 재사용한다 |
 | — (계획에 없던 것) | 명단 전원의 몸을 기다린 뒤 시작 | 원격 몸은 첫 스냅샷에 만들어지고 역할은 시작 시점의 명단에만 배정된다. 먼저 시작하면 늦게 온 플레이어가 역할 없이 남는다 |
 | — (계획에 없던 것) | `MatchManager.ResolvesOutcome` | 전원이 각자 결과를 판정하면 서로 다른 순간에 끝내고 결과도 갈린다. 방장 하나가 판정하고 나머지는 받는다 |
+| 동시 룸 수 상한 16 | 상한 없음 + 요청 속도 제한 | 개수로 막으면 정상 사용자가 남이 만든 방 때문에 방을 못 만든다. 속도로 막으면 각자 자기 몫만 쓴다. 상한은 임의의 쿼리스트링으로 룸이 생기던 시절의 방어선이었다 |
+| 코드 6자 고정 | 룸 수에 따라 6~12자 | 공간이 고정이면 룸이 늘수록 충돌이 잦아진다. 부하율을 10만분의 1 로 유지하도록 길이를 늘린다 — 현실적인 배포에서는 6자에 머무른다 |
+| 나머지 연산으로 알파벳 접기 | 거부 표집 | 256은 31로 나누어떨어지지 않아 앞쪽 8개 문자가 더 자주 나온다. 상한이 있던 동안에는 무해했지만 코드가 유일한 방어선이 된 뒤로는 공간을 깎을 이유가 없다 |
 
 ## 문서 갱신 (M2·M3 완료 시점에 함께)
 

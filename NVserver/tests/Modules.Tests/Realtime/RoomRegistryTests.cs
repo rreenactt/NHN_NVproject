@@ -120,17 +120,82 @@ namespace NV.Modules.Tests.Realtime
         }
 
         [Fact]
-        public void 룸_상한을_넘으면_만들지_못한다()
+        public void 동시_룸_수에_상한이_없고_코드가_겹치지_않는다()
         {
+            // 예전에는 16개에서 막혔다. 상한을 없앤 뒤에도 코드가 유일해야 한다 —
+            // 충돌은 재시도로 흡수되지만, 같은 코드가 두 방에 붙는 경로는 없어야 한다.
             var registry = Registry(out _, StaticRooms.Empty);
+            var codes = new HashSet<string>(StringComparer.Ordinal);
 
-            for (var index = 0; index < RealtimeConstants.Rooms.MaxRooms; index++)
+            for (var index = 0; index < 300; index++)
             {
-                Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out _, out _, out _));
+                Assert.True(registry.TryCreate(RoomMaps.DefaultMapId, out var code, out _, out var error));
+                Assert.Equal(RoomCreateError.None, error);
+                Assert.True(InviteCodeFormat.IsValid(code), code);
+                Assert.True(codes.Add(code), "코드가 겹쳤다: " + code);
             }
 
-            Assert.False(registry.TryCreate(RoomMaps.DefaultMapId, out _, out _, out var error));
-            Assert.Equal(RoomCreateError.RoomLimit, error);
+            Assert.Equal(300, registry.ListRooms().Count);
+        }
+
+        [Fact]
+        public void 코드_길이는_룸_수에_따라_늘어난다()
+        {
+            // 여유율 10만이면 31^6 / 100000 = 8875 룸까지 6자를 쓴다.
+            Assert.Equal(6, InviteCode.LengthFor(0));
+            Assert.Equal(6, InviteCode.LengthFor(8875));
+            Assert.Equal(7, InviteCode.LengthFor(8876));
+
+            // 31^7 / 100000 = 275126
+            Assert.Equal(7, InviteCode.LengthFor(275126));
+            Assert.Equal(8, InviteCode.LengthFor(275127));
+
+            // 필요한 만큼만 늘린다. 21억 룸이면 10자에서 여유율이 채워지므로 상한까지
+            // 가지 않는다 — 31^10 / 100000 = 81.9억 > 21억.
+            Assert.Equal(10, InviteCode.LengthFor(int.MaxValue));
+
+            // 어떤 경우에도 상한을 넘지 않는다. 넘으면 룸 id 규칙(32자)과
+            // 길이 계산의 long 범위가 깨진다.
+            Assert.True(InviteCode.LengthFor(int.MaxValue) <= InviteCodeFormat.MaxLength);
+        }
+
+        [Fact]
+        public void 표집_경계는_알파벳_길이의_배수다()
+        {
+            // 이 값이 배수가 아니면 나머지 연산에 편향이 남아 앞쪽 문자가 더 자주 나오고,
+            // 그만큼 코드 공간이 실질적으로 줄어든다.
+            Assert.Equal(0, InviteCodeFormat.SamplingLimit % InviteCodeFormat.Alphabet.Length);
+
+            // 256 이하에서 가능한 가장 큰 배수여야 한다. 작으면 버리는 바이트만 늘어난다.
+            Assert.True(InviteCodeFormat.SamplingLimit + InviteCodeFormat.Alphabet.Length > 256);
+        }
+
+        [Fact]
+        public void 코드는_알파벳_전체를_쓴다()
+        {
+            // 편향을 통계로 잡지는 않는다. 어떤 문자가 아예 나오지 않는 것 —
+            // 알파벳이나 접기 방식이 잘못된 경우 — 만 확인한다.
+            var seen = new HashSet<char>();
+
+            for (var index = 0; index < 400; index++)
+            {
+                foreach (var character in InviteCode.NewCode(InviteCodeFormat.MinLength))
+                {
+                    seen.Add(character);
+                }
+            }
+
+            Assert.Equal(InviteCodeFormat.Alphabet.Length, seen.Count);
+        }
+
+        [Fact]
+        public void 범위를_벗어난_길이는_거부한다()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => InviteCode.NewCode(InviteCodeFormat.MinLength - 1));
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => InviteCode.NewCode(InviteCodeFormat.MaxLength + 1));
         }
 
         [Fact]

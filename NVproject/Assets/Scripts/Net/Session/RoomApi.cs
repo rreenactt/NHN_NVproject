@@ -124,6 +124,10 @@ namespace NV.Client.Net.Session
                     done(new RoomProbeResult(default, SessionFailureKind.InvalidCode, elapsed));
                     break;
 
+                case 429:
+                    done(new RoomProbeResult(default, SessionFailureKind.TooManyRequests, elapsed));
+                    break;
+
                 default:
                     done(new RoomProbeResult(default, SessionFailureKind.UnknownCode, elapsed));
                     break;
@@ -155,14 +159,22 @@ namespace NV.Client.Net.Session
 
         private static SessionFailureKind CreateFailure(UnityWebRequest request)
         {
-            if (request.responseCode == 400)
+            switch (request.responseCode)
             {
-                return SessionFailureKind.UnknownMap;
-            }
+                case 400:
+                    return SessionFailureKind.UnknownMap;
 
-            return request.responseCode == 503
-                ? SessionFailureKind.RoomLimit
-                : SessionFailureKind.ServerUnreachable;
+                // 서버가 요청 속도를 제한한다. 동시 룸 수 상한을 없앤 자리를 그것이
+                // 대신하므로, 옛 "방을 더 만들 수 없다" 는 이 응답으로 온다.
+                case 429:
+                    return SessionFailureKind.TooManyRequests;
+
+                case 503:
+                    return SessionFailureKind.RoomCreateFailed;
+
+                default:
+                    return SessionFailureKind.ServerUnreachable;
+            }
         }
     }
 }

@@ -36,12 +36,19 @@ namespace NV.Client.Net.Session
 
             if (normalized.Length == 0)
             {
-                return "초대 코드 " + InviteCodeFormat.Length + "자";
+                return "초대 코드 " + InviteCodeFormat.MinLength + "자";
             }
 
-            if (normalized.Length != InviteCodeFormat.Length)
+            // 길이는 고정이 아니다. 서버가 열려 있는 룸 수에 맞춰 늘리므로 범위만 본다 —
+            // 6자로 못박으면 서버가 늘린 코드를 여기서 거부한다.
+            if (normalized.Length < InviteCodeFormat.MinLength)
             {
-                return InviteCodeFormat.Length + "자여야 한다. 지금 " + normalized.Length + "자.";
+                return "최소 " + InviteCodeFormat.MinLength + "자다. 지금 " + normalized.Length + "자.";
+            }
+
+            if (normalized.Length > InviteCodeFormat.MaxLength)
+            {
+                return "최대 " + InviteCodeFormat.MaxLength + "자다. 지금 " + normalized.Length + "자.";
             }
 
             for (var index = 0; index < normalized.Length; index++)

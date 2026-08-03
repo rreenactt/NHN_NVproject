@@ -28,6 +28,11 @@ if (ModuleRegistration.ReadAllowedOrigins(builder.Configuration).Length == 0)
 
 app.UseCors(ModuleRegistration.CorsPolicy);
 
+// 요청 제한은 CORS 뒤에 둔다. 앞에 두면 거절된 요청의 응답에 CORS 헤더가 붙지 않아
+// 브라우저가 429 를 읽지 못하고 네트워크 오류로 처리한다 — 화면에서 "서버에 닿지
+// 못했다" 와 "너무 자주 요청했다" 가 구분되지 않는다.
+app.UseRateLimiter();
+
 // 게임 트래픽은 이 미들웨어를 지나 모듈 엔드포인트로 간다.
 app.UseWebSockets(new WebSocketOptions
 {

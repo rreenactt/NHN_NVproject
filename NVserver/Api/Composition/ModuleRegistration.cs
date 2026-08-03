@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NV.Infrastructure.FileSystem;
@@ -37,6 +39,20 @@ namespace NV.Api.Composition
         /// 허용 오리진 목록. 비어 있으면 전부 허용한다(개발).
         private const string AllowedOriginsKey = "Cors:AllowedOrigins";
 
+        private const string CreatePerMinuteKey = "RateLimit:CreatePerMinute";
+        private const string CodeAttemptsPerMinuteKey = "RateLimit:CodeAttemptsPerMinute";
+
+        /// 한 IP 가 분당 만들 수 있는 방. 빈 방이 60초 뒤 회수되므로 이 값이 곧
+        /// 한 클라이언트가 동시에 잡아 둘 수 있는 방 수에 가깝다.
+        private const int DefaultCreatePerMinute = 10;
+
+        /// 한 IP 가 분당 시도할 수 있는 코드(조회 + 접속). 사람이 코드를 받아 적고
+        /// 들어오는 데는 몇 번이면 충분하고, 찍어 보기에는 턱없이 부족한 값이어야 한다.
+        ///
+        /// 한 IP 뒤에 여러 클라이언트가 있는 경우(같은 기계의 에디터 + 빌드, 한 NAT
+        /// 안의 8명)를 감안해야 한다. 초당 한 번이면 그 경우도 넉넉하다.
+        private const int DefaultCodeAttemptsPerMinute = 60;
+
         public static IServiceCollection AddModules(this IServiceCollection services, IConfiguration configuration)
         {
             // 맵 로드는 파일 IO 다. 컴포지션 루트가 하고 결과만 넘긴다.
@@ -47,6 +63,8 @@ namespace NV.Api.Composition
             services.AddRealtime(options => configuration
                 .GetSection(RealtimeOptions.SectionName)
                 .Bind(options));
+
+            services.AddNvRateLimiter(configuration);
 
             services.AddCors(cors => cors.AddPolicy(CorsPolicy, policy =>
             {
@@ -65,6 +83,55 @@ namespace NV.Api.Composition
             }));
 
             return services;
+        }
+
+        /// 룸 엔드포인트의 요청 제한.
+        ///
+        /// 동시 룸 수 상한을 없앤 자리를 이것이 대신한다. 룸은 `POST /rooms` 로만
+        /// 생기고 비면 60초 뒤 회수되므로, 분당 허용량이 곧 한 클라이언트가 잡아 둘 수
+        /// 있는 룸 수의 상한이 된다.
+        ///
+        /// 나누는 기준은 원격 IP 다. **리버스 프록시 뒤에서는 프록시의 IP 하나로 묶인다** —
+        /// 전체가 한 양동이를 쓰게 되므로, 그런 배포에서는 전달 헤더를 신뢰 목록과 함께
+        /// 설정해야 한다. 신뢰 목록 없이 헤더를 믿으면 헤더를 위조해 제한을 우회한다.
+        private static IServiceCollection AddNvRateLimiter(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            var createPerMinute = configuration.GetValue(CreatePerMinuteKey, DefaultCreatePerMinute);
+            var codeAttemptsPerMinute = configuration.GetValue(
+                CodeAttemptsPerMinuteKey,
+                DefaultCodeAttemptsPerMinute);
+
+            services.AddRateLimiter(limiter =>
+            {
+                limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+                limiter.AddPolicy(
+                    RateLimitPolicies.RoomCreate,
+                    context => FixedWindowFor(context, createPerMinute));
+
+                limiter.AddPolicy(
+                    RateLimitPolicies.CodeAttempt,
+                    context => FixedWindowFor(context, codeAttemptsPerMinute));
+            });
+
+            return services;
+        }
+
+        private static RateLimitPartition<string> FixedWindowFor(HttpContext context, int permitsPerMinute)
+        {
+            var key = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+            return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = permitsPerMinute,
+                Window = TimeSpan.FromMinutes(1),
+
+                // 대기열을 두지 않는다. 넘친 요청을 붙잡고 있으면 클라이언트는 느린
+                // 서버와 거절을 구분할 수 없고, 화면에는 "접속 중" 만 남는다.
+                QueueLimit = 0,
+            });
         }
 
         /// WebGL 빌드는 브라우저 XHR 로 방 만들기·조회를 호출하므로 CORS 가 필요하다.

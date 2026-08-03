@@ -3,6 +3,7 @@ using System.Net;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using NV.Infrastructure.Json;
@@ -21,10 +22,16 @@ namespace NV.Realtime.Transport
     {
         public static void Map(IEndpointRouteBuilder endpoints)
         {
-            endpoints.Map("/ws", HandleAsync);
+            // 요청 제한을 붙인다. 동시 룸 수 상한을 없앤 자리를 이것이 대신한다 —
+            // 룸은 `POST /rooms` 로만 생기므로 막아야 하는 것은 룸의 개수가 아니라
+            // 요청의 속도다.
+            //
+            // 접속과 조회가 같은 양동이를 쓴다. 조회만 막으면 조회를 건너뛰고 접속으로
+            // 코드를 찍을 수 있다 — `/ws` 도 없는 코드와 있는 코드에 다르게 답한다.
+            endpoints.Map("/ws", HandleAsync).RequireRateLimiting(RateLimitPolicies.CodeAttempt);
 
-            endpoints.MapPost("/rooms", CreateRoom);
-            endpoints.MapGet("/rooms/{code}", GetRoom);
+            endpoints.MapPost("/rooms", CreateRoom).RequireRateLimiting(RateLimitPolicies.RoomCreate);
+            endpoints.MapGet("/rooms/{code}", GetRoom).RequireRateLimiting(RateLimitPolicies.CodeAttempt);
             endpoints.MapGet("/rooms", ListRooms);
         }
 
@@ -45,8 +52,10 @@ namespace NV.Realtime.Transport
                         JsonDefaults.Options,
                         statusCode: (int)HttpStatusCode.BadRequest),
 
+                    // 코드를 만들지 못한 경우다. 서버 쪽 결함이므로 사유를 따로 둔다 —
+                    // 요청이 많아서 거절된 것(429)과 섞이면 화면에서 구분되지 않는다.
                     _ => Results.Json(
-                        new ErrorResponse("roomLimit"),
+                        new ErrorResponse("codeExhausted"),
                         JsonDefaults.Options,
                         statusCode: (int)HttpStatusCode.ServiceUnavailable),
                 };

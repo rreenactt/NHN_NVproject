@@ -82,7 +82,11 @@ After changing `Shared`, `dotnet build` passing is half the check; confirm the U
 
 The room state is a **bulletin, not a notification**: phase, host, seeker, placement seed and roster go out at 2Hz, in full, forever. A one-shot "the match started" would eventually be the frame that the session's `Bounded(32, DropOldest)` channel drops, and that client would sit in the lobby screen for good. `Control` is a *request* — the room re-checks who is host and whether the transition is legal at the tick boundary.
 
-**Rooms are made, not stumbled into.** `POST /rooms` returns a 6-character invite code and a host token; connecting with an unknown code is a 404. `GET /rooms/{code}?v=2` is the pre-flight that separates the failure cases (400/404/409/426/503) *before* the upgrade, because a browser turns every handshake rejection into close code `1006` and nothing else.
+**Rooms are made, not stumbled into.** `POST /rooms` returns an invite code and a host token; connecting with an unknown code is a 404. `GET /rooms/{code}?v=2` is the pre-flight that separates the failure cases (400/404/409/426/429/503) *before* the upgrade, because a browser turns every handshake rejection into close code `1006` and nothing else.
+
+**There is no cap on concurrent rooms.** The cap was the guard from when any query string could conjure a room; now that rooms are made explicitly, two things replace it — empty rooms are reclaimed after 60s, and the request *rate* is limited (`RateLimit:CreatePerMinute` 10, `RateLimit:CodeAttemptsPerMinute` 60). The code-attempt budget covers `GET /rooms/{code}` **and** `/ws` from one bucket: limiting only the lookup leaves guessing via the upgrade, which answers differently for a code that exists. Rate limits partition by remote IP, so behind a reverse proxy everyone shares one bucket unless forwarded headers are configured with a trusted-proxy list.
+
+Codes are 6 characters from a 31-symbol alphabet (`i l o 0 1` removed — a code is read aloud, and one wrong character is indistinguishable from a dead room). **The length is not fixed:** it grows with the live room count so the load factor stays under 1e-5 (6 chars up to ~8,900 rooms, 7 up to ~275,000). Clients validate the length as a *range*; pinning it to 6 would make a client reject a code the server legitimately grew. Bytes are folded into the alphabet by rejection sampling, since 256 is not a multiple of 31 and the naive modulo would favour the first 8 symbols.
 
 ## Server architecture in one screen
 

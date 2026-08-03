@@ -32,8 +32,18 @@ namespace NV.Client.Net.Session
         /// 이미 시작한 방이다. 비대칭 매치 중간 합류는 규칙을 깬다.
         RoomInProgress,
 
-        /// 서버가 열어 둘 수 있는 방 수를 넘었다.
-        RoomLimit,
+        /// 요청이 너무 잦아 서버가 거절했다.
+        ///
+        /// 동시 룸 수에 상한이 없어진 대신 서버가 생성·조회 요청의 속도를 제한한다.
+        /// 사람이 방을 만들거나 코드를 넣는 속도로는 걸리지 않는 값이다 — 여기에
+        /// 걸렸다면 재시도 루프가 돌고 있거나 여러 클라이언트가 한 IP 를 쓰고 있다.
+        TooManyRequests,
+
+        /// 서버가 겹치지 않는 초대 코드를 만들지 못했다.
+        ///
+        /// 정상적으로는 나타나지 않는다. 코드 길이나 알파벳 규칙이 줄어든 서버에서만
+        /// 나오며, 그 경우 재시도해도 결과가 같다.
+        RoomCreateFailed,
 
         /// 소켓은 열렸는데 서버가 Welcome 을 보내지 않았다.
         HandshakeTimeout,
@@ -94,7 +104,7 @@ namespace NV.Client.Net.Session
                 case SessionFailureKind.InvalidCode:
                     return new SessionFailure(
                         kind,
-                        "초대 코드 형식이 어긋난다. 6자이며 I·L·O·0·1 은 쓰지 않는다.",
+                        "초대 코드 형식이 어긋난다. I·L·O·0·1 은 쓰지 않는다." + Detail(detail),
                         "코드를 다시 확인한다.",
                         false);
 
@@ -126,12 +136,19 @@ namespace NV.Client.Net.Session
                         "다음 판을 기다린다.",
                         true);
 
-                case SessionFailureKind.RoomLimit:
+                case SessionFailureKind.TooManyRequests:
                     return new SessionFailure(
                         kind,
-                        "서버가 열어 둘 수 있는 방을 모두 썼다.",
-                        "잠시 뒤 다시 만든다.",
+                        "요청이 너무 잦아 서버가 거절했다." + Detail(detail),
+                        "잠시 기다린 뒤 다시 시도한다.",
                         true);
+
+                case SessionFailureKind.RoomCreateFailed:
+                    return new SessionFailure(
+                        kind,
+                        "서버가 초대 코드를 만들지 못했다." + Detail(detail),
+                        "서버 로그를 확인한다. 재시도해도 결과가 같다.",
+                        false);
 
                 case SessionFailureKind.HandshakeTimeout:
                     return new SessionFailure(

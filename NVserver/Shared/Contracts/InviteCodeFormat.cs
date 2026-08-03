@@ -10,20 +10,38 @@ namespace NV.Shared.Contracts
     ///
     /// 형식 검사는 여기서 하고, 그 코드의 방이 실제로 있는지는 서버만 안다.
     /// 값을 공유하는 것과 판단을 넘기는 것은 다르다.
+    ///
+    /// **길이가 고정이 아니다.** 서버는 지금 열려 있는 룸 수에 맞춰 길이를 늘린다.
+    /// 그래서 클라이언트는 범위만 검사하고, 몇 자인지는 받은 코드를 따른다 —
+    /// 6자로 못박으면 서버가 늘린 코드를 클라이언트가 "형식 오류" 로 거부한다.
     public static class InviteCodeFormat
     {
-        /// 6자. 31^6 ≈ 8.9억이고 동시에 열리는 룸은 16개뿐이라
-        /// 코드를 찍어서 남의 방에 들어가는 것은 실질적으로 불가능하다.
-        public const int Length = 6;
+        /// 사람이 받아 적을 수 있는 최소 길이. 31^6 ≈ 8.9억.
+        public const int MinLength = 6;
+
+        /// 상한. 31^12 ≈ 7.9×10^17 이며 이보다 길게 만들 이유가 생기지 않는다.
+        /// 룸 id 규칙의 32자 상한 안에 있어야 하고, 길이 계산이 long 을 넘지 않아야 한다.
+        public const int MaxLength = 12;
 
         /// 소문자와 숫자에서 받아쓰기로 갈리는 문자를 뺐다 — `i` `l` `o` `0` `1`.
         /// 코드는 사람이 읽어서 옮기는 값이고, 그 자리에서 한 글자만 틀려도
         /// "없는 방" 과 구분되지 않는 실패가 된다.
         public const string Alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
 
+        /// 무작위 바이트를 알파벳으로 접을 때 버릴 경계.
+        ///
+        /// 256 은 31 로 나누어떨어지지 않는다. 나머지를 그대로 쓰면 앞쪽 8개 문자가
+        /// 다른 문자보다 자주 나오고, 그만큼 코드 공간이 줄어든다. 이 값 이상인
+        /// 바이트를 버리면(거부 표집) 분포가 고르게 된다.
+        ///
+        /// 룸 수 상한이 있던 동안에는 이 편향이 실질적으로 무해했다. 상한이 사라진
+        /// 지금은 코드 자체가 남의 방에 들어오지 못하게 하는 유일한 수단이므로,
+        /// 공간을 깎는 요소를 남겨 둘 이유가 없다.
+        public const int SamplingLimit = 256 - (256 % 31);
+
         public static bool IsValid(string code)
         {
-            if (code == null || code.Length != Length)
+            if (code == null || code.Length < MinLength || code.Length > MaxLength)
             {
                 return false;
             }
