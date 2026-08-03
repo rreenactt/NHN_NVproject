@@ -117,6 +117,15 @@ namespace NV.Game
             LastHitTime = Time.time;
         }
 
+        /// <summary>
+        /// Overwrite the hit count with the server's. Networked, the count is not something this
+        /// client arrives at — it is told, so this sets rather than increments.
+        ///
+        /// `LastHitTime` is deliberately left alone: the immunity window is the server's now
+        /// (`PlayerEntity.ImmuneUntilTick`), and this field only feeds the offline `ReportHit`.
+        /// </summary>
+        internal void SetHits(int hits) => Hits = Mathf.Max(0, hits);
+
         internal void SetBleeding(bool bleeding)
         {
             Bleeding = bleeding;

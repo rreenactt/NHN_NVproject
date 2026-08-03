@@ -174,33 +174,38 @@ namespace NV.Client.Net.Session
                 }
 
                 MatchManager.Instance.AcceptCarriedKeys(agent, participant.CarriedKeys);
-                ApplyEscaped(participant.PlayerId, agent);
+                ApplyBody(participant, agent);
             }
         }
 
-        /// 탈출은 **스냅샷의 플래그**로 온다(`EntityFlags.Escaped`).
+        /// 몸에 실리는 서버 판정 — 탈출·출혈·쓰러짐.
         ///
-        /// 매치 전문의 `escapes` 는 몇 명인지만 말하고 누구인지는 말하지 않는다. 몸을 감추려면
-        /// 대상을 알아야 하므로 두 경로를 함께 쓴다 — 수는 전문, 대상은 스냅샷이다.
+        /// **수는 전문에서, 상태는 스냅샷에서 온다.** 전문(2Hz)이 피격 수를 싣고, 플래그는 매 틱
+        /// 오는 스냅샷에 있다 — 출혈 흔적과 사라지는 몸은 0.5초를 기다릴 수 없기 때문이다
+        /// (`EntityFlags` 주석이 그 기준을 적어 두었다).
         ///
-        /// 보간하지 않은 최신 값을 읽는다(`TryLatest`). 보간은 위치를 위한 것이고, 플래그를
-        /// 섞으면 두 스냅샷 사이에서 켜졌다 꺼졌다 한다.
-        private void ApplyEscaped(byte playerId, PlayerAgent agent)
+        /// 보간하지 않은 최신 값을 읽는다(`TryLatest`). 보간은 위치를 위한 것이고, 불리언을 두
+        /// 스냅샷 사이에서 섞으면 켜졌다 꺼졌다 한다.
+        private void ApplyBody(MatchParticipant participant, PlayerAgent agent)
         {
-            if (agent.Escaped || _client.Snapshots == null)
+            if (_client.Snapshots == null
+                || !_client.Snapshots.TryLatest(participant.PlayerId, out var sample))
             {
                 return;
             }
 
-            if (!_client.Snapshots.TryLatest(playerId, out var sample))
-            {
-                return;
-            }
+            var flags = sample.Flags;
 
-            if ((sample.Flags & NV.Shared.Contracts.Enums.EntityFlags.Escaped) != 0)
+            if (!agent.Escaped && (flags & NV.Shared.Contracts.Enums.EntityFlags.Escaped) != 0)
             {
                 MatchManager.Instance.AcceptEscaped(agent);
             }
+
+            MatchManager.Instance.AcceptCombatState(
+                agent,
+                participant.Hits,
+                (flags & NV.Shared.Contracts.Enums.EntityFlags.Bleeding) != 0,
+                (flags & NV.Shared.Contracts.Enums.EntityFlags.Downed) != 0);
         }
 
         /// 세션·클라이언트·매치가 모두 준비됐는가.
@@ -334,6 +339,10 @@ namespace NV.Client.Net.Session
             // 배치 함수를 갖고 있어도(ADR 0002) 계산할 수 없다. 컬링 레이어가 화면에서 가리는
             // 것과 달리 이것은 디컴파일로 되살릴 수 없다.
             match.ServerOwnsObjectives = true;
+
+            // 전투도 서버의 것이다 — 총알이 어디로 가고 누가 맞고 그 대가가 무엇인지.
+            // 목표물과 별개의 플래그인 이유는 `MatchManager` 쪽에 적혀 있다.
+            match.ServerOwnsCombat = true;
 
             // 결과를 판정하는 클라이언트는 방장 하나다. 전원이 각자 판정하면 서로
             // 다른 순간에 매치를 끝내고 결과도 갈린다.

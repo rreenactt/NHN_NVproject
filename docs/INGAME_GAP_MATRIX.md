@@ -56,7 +56,7 @@
 
 | ID | 기획서 근거 | 현재 상태 | 근거 파일:라인 | 서버 권위 | 동기화 |
 |---|---|---|---|---|---|
-| R-3.1 | §4.1 피격 판정 | `PARTIAL` — **총알은 서버에서 날아간다**(IG-014a) 그런데 **맞는 판정은 아직 쏜 클라이언트가 한다** | 서버: `Room.StepProjectiles`·`FireWeapons`, `Projectile`. 클라이언트: `Bullet.cs` → `SendMessageUpwards("OnHit")` → `PlayerAgent.OnHit` (→ IG-014b·c 가 닫는다) | 필요 | 필요 |
+| R-3.1 | §4.1 피격 판정 | **`DONE`** (IG-014a·b·c) — **이 매트릭스가 "가장 심각하다" 고 적었던 경로가 닫혔다** | 서버: `Room.FireWeapons`·`StepProjectiles`·`TryFindVictim`·`ApplyHit`. 클라이언트: `MatchManager.ReportHit` 이 `ServerOwnsCombat` 에서 거부하고 `AcceptCombatState` 로 받는다. **`Bullet` 은 그대로 남아 순수 표현이 됐다** — 삭제가 아니라 무력화다 | **서버** ✅ | ✅ 스냅샷 플래그 + `MatchParticipant.Hits` |
 | R-3.2 | §4.1 1회 피격 = 출혈 | **서버 판정 `DONE`** (IG-014b) | `Room.ApplyHit`, `PlayerEntity.Bleeding`(피격 수에서 유도), `EntityFlags.Bleeding`; 클라이언트 적용은 IG-014c | **서버** ✅ | ✅ 스냅샷 플래그(매 틱 — 흔적이 끊기면 안 된다) |
 | R-3.3 | §4.1 2회 피격 = 사망 | **서버 판정 `DONE`** (IG-014b) | `Room.DownRunner`, `MatchConstants.RunnerHitsToDie`, **`EntityFlags.Downed`** — `Alive` 를 내리지 않는다(`StateHash` 오염) | **서버** ✅ | ✅ 스냅샷 플래그 + `MatchParticipant.Hits` |
 | R-3.4 | §4.1 피격 시 랜덤 위치 순간이동 | **서버 판정 `DONE`** (IG-014b) | `Room.TeleportToRandomFreeFloor` → `MapGrid.TryRandomFreeFloor`; 난수는 배치와 분리된 수열 | **서버** ✅ | ✅ 스냅샷 위치 |
@@ -64,9 +64,19 @@
 | R-3.6 | §4.3 탄창 3발 | **서버 판정 `DONE`** (IG-014a) — 발사마다 차감하고 비면 거부한다. **재장전은 없다**(체인 경로가 OQ-4 에 막혀 있다 → IG-016) | `PlayerEntity.Ammo`, `Room.FireWeapons`, `MatchConstants.SeekerMagazine`·`FireInterval`, `Match.FireIntervalTicks` | **서버** ✅ | HUD 적용은 IG-014c |
 | R-3.7 | §4.3 소진 시 체인 강제이동·3초 행동불가·자동 재장전 | `PARTIAL` | `ChainDrag.cs:1-371`, `ChainAltar.cs` — `NavMesh.CalculatePath` 사용 | 필요 | 필요 |
 
-**R-3.1 이 가장 심각하다.** `Bullet` 은 쏜 사람의 머신에서만 날고 `SendMessageUpwards` 는 그
-머신의 `PlayerAgent` 에 닿는다. 원격 플레이어의 피격은 각 클라이언트가 자기 사본에 대해 따로
-계산하므로, **맞았다고 인정하지 않는 클라이언트가 있으면 그 플레이어는 맞지 않는다.**
+**~~R-3.1 이 가장 심각하다.~~ 닫혔다 (IG-014a·b·c, 이터레이션 23~25).**
+
+원래 진단: `Bullet` 은 쏜 사람의 머신에서만 날고 `SendMessageUpwards` 는 그 머신의 `PlayerAgent`
+에 닿는다. 원격 플레이어의 피격은 각 클라이언트가 자기 사본에 대해 따로 계산하므로, **맞았다고
+인정하지 않는 클라이언트가 있으면 그 플레이어는 맞지 않는다.**
+
+지금: 서버가 눈높이에서 총알을 날려(스윕 레이캐스트) 자기 시뮬레이션의 몸과 교차시키고, 결과를
+스냅샷 플래그와 매치 전문으로 내려보낸다. `MatchManager.ReportHit` 은 세션이 있으면 거부하므로
+클라이언트가 만들 수 있는 피격 판정이 없다. **`Bullet` 은 삭제되지 않았다** — 무력화됐고
+오프라인 연습 경로에서 계속 같은 코드로 판정한다.
+
+남은 것은 표현 두 가지다: 서버 총알이 화면에 없어 남의 예광탄이 보이지 않고(IG-028),
+히트마커가 로컬 총알로 뜨므로 서버 판정과 어긋날 수 있다.
 
 ## 4. 출혈 시스템
 

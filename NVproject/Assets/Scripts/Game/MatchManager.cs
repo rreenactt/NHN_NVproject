@@ -129,6 +129,20 @@ namespace NV.Game
         public bool ServerOwnsObjectives { get; set; }
 
         /// <summary>
+        /// The server owns combat — where the round goes, who it hits, and what that costs.
+        ///
+        /// Separate from <see cref="ServerOwnsObjectives"/> even though a session sets both, because
+        /// the two crossed over in different tasks (IG-012 and IG-014) and for several iterations the
+        /// server judged one and not the other. A flag per domain lets that migration happen a piece
+        /// at a time; one flag covering both would have had to lie during the gap.
+        ///
+        /// With it on, <see cref="ReportHit"/> refuses and hits arrive through
+        /// <see cref="AcceptCombatState"/> instead. Off (no session), the offline practice path still
+        /// resolves its own hits — that is what makes hunting practice runners work solo.
+        /// </summary>
+        public bool ServerOwnsCombat { get; set; }
+
+        /// <summary>
         /// Does this client decide when the match is over?
         ///
         /// With the rules still resolved client-side, letting every client end the match on its own
@@ -468,6 +482,16 @@ namespace NV.Game
         /// </summary>
         public void ReportHit(PlayerAgent victim)
         {
+            // **This is the seam R-3.1 was about.** `Bullet` flies on the shooter's machine only,
+            // so `SendMessageUpwards("OnHit")` lands here having been decided by the one client with
+            // an interest in the answer. Networked, the server flies the round against the
+            // authoritative positions and tells everyone (IG-014a/b); this refuses so that a client
+            // saying "I hit you" is a client saying nothing at all.
+            //
+            // Refusing here rather than in `PlayerAgent.OnHit` keeps the rule in the one place that
+            // decides rules, and leaves `Bullet` as pure presentation without touching it.
+            if (ServerOwnsCombat) return;
+
             if (Phase != MatchPhase.Playing || victim == null || !victim.InPlay) return;
             if (victim.Role != Role.Runner) return;   // the Seeker cannot be shot; nobody else is armed
             if (Time.time - victim.LastHitTime < config.hitImmunity) return;
@@ -497,6 +521,41 @@ namespace NV.Game
 
             Notify(victim.isLocalPlayer ? "HIT — BLEEDING. KEEP MOVING" : $"{victim.displayName} HIT");
             AgentHit?.Invoke(victim, false);
+        }
+
+        /// <summary>
+        /// The server's verdict on one body: how many hits it has taken, whether it is bleeding, and
+        /// whether it is down. Polled every frame from <c>MatchSync</c>.
+        ///
+        /// **The notifications survive here, unlike the key inserts.** The bulletin says *who* was
+        /// hit, so "X HIT" is information this client legitimately has — what it cannot say is when,
+        /// which is why the messages fire on a *transition* and not on every poll.
+        ///
+        /// Bleeding is applied only on change. <see cref="PlayerAgent.SetBleeding"/> starts a
+        /// <c>BloodTrail</c>, and calling it every frame restarts the trail every frame — the symptom
+        /// is a wounded Runner leaving no trail at all.
+        /// </summary>
+        public void AcceptCombatState(PlayerAgent agent, int hits, bool bleeding, bool downed)
+        {
+            if (agent == null) return;
+
+            bool wounded = hits > agent.Hits;
+            agent.SetHits(hits);
+
+            if (bleeding != agent.Bleeding) agent.SetBleeding(bleeding);
+
+            if (downed && agent.Alive)
+            {
+                agent.Kill();
+                Notify($"{agent.displayName} DOWN");
+                AgentHit?.Invoke(agent, true);
+                return;
+            }
+
+            if (!wounded) return;
+
+            Notify(agent.isLocalPlayer ? "HIT — BLEEDING. KEEP MOVING" : $"{agent.displayName} HIT");
+            AgentHit?.Invoke(agent, false);
         }
 
         public void ClearBleeding(PlayerAgent agent)
