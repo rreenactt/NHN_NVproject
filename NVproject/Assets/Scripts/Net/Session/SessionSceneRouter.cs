@@ -1,3 +1,4 @@
+using NV.Client.Map;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -90,9 +91,41 @@ namespace NV.Client.Net.Session
             SceneManager.LoadScene(LobbyScene);
         }
 
+        /// 이 맵을 여는 씬.
+        ///
+        /// **순서가 이 함수의 내용이다.**
+        ///
+        /// 1. 카탈로그가 이 맵에 전용 씬을 적어 두었으면 그것. 베이크가 `MapSceneTable` 에서
+        ///    읽어 적으므로 표와 갈리지 않는다.
+        /// 2. 표에 짝이 있으면 그것. 카탈로그가 없는 빌드에서도 **오늘의 동작이 그대로 유지되는
+        ///    자리다** — 이 줄이 없으면 카탈로그를 굽기 전의 빌드가 아무 맵도 열지 못한다.
+        /// 3. 카탈로그에 프리팹이 있으면 공용 런타임 씬. 새로 굽힌 맵이 이 길로 열린다.
+        /// 4. 아무것도 없으면 빈 문자열 — 호출자가 어느 맵이 빠졌는지 남긴다.
+        ///
+        /// 예외를 던지지 않는다. 서버는 클라이언트가 모르는 맵을 물린 룸을 열 수 있고, 그때는
+        /// "그 맵의 씬을 모른다" 를 사람에게 말해야 한다.
         private static string SceneFor(string mapName)
         {
-            return MapSceneTable.SceneFor(mapName);
+            if (string.IsNullOrEmpty(mapName))
+            {
+                return string.Empty;
+            }
+
+            var entry = MapCatalog.Load()?.Find(mapName);
+
+            if (entry != null && !string.IsNullOrEmpty(entry.sceneOverride))
+            {
+                return entry.sceneOverride;
+            }
+
+            var paired = MapSceneTable.SceneFor(mapName);
+
+            if (!string.IsNullOrEmpty(paired))
+            {
+                return paired;
+            }
+
+            return entry != null && entry.prefab != null ? MapSceneTable.RuntimeScene : string.Empty;
         }
     }
 }

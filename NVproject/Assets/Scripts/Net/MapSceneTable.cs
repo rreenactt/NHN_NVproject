@@ -1,10 +1,16 @@
 namespace NV.Client.Net
 {
-    /// 맵 이름 ↔ 씬 이름. **이 표가 유일한 출처다.**
+    /// 맵 이름 ↔ **전용 씬**. 짝이 있는 맵만 여기 있다.
     ///
-    /// 두 곳이 이것을 읽는다. 하나는 세션 라우터(`SessionSceneRouter`) — 룸의 맵을 보고 어느
-    /// 씬을 열지 정한다. 다른 하나는 배치 export — 등록된 맵을 전부 내보내려면 어느 씬을
-    /// 열어야 하는지 알아야 한다.
+    /// **모든 맵이 여기 있어야 하는 것은 아니다.** 예전에는 그랬고, 그래서 맵을 하나 늘리는
+    /// 일이 씬 하나 + 이 표 한 줄 + Build Settings 한 줄이었다. 이제 굽힌 맵은 프리팹으로
+    /// 나오고 공용 런타임 씬(`MapRuntimeLoader`)이 그것을 세우므로, 이 표에 남는 것은
+    /// **맵 말고도 다른 것을 담은 씬** 뿐이다 — `SampleScene` 은 아직 런타임 생성기로 지형을
+    /// 만들고, `MultiplayerTest` 는 계측 도구를 담고 있다.
+    ///
+    /// 세 곳이 이것을 읽는다. 세션 라우터(`SessionSceneRouter`)는 룸의 맵을 보고 어느 씬을
+    /// 열지 정하고, 배치 export 는 등록된 맵을 전부 내보내려면 어느 씬을 열어야 하는지
+    /// 알아야 하며, 베이크(`MapCatalogWriter`)는 구운 맵에 전용 씬이 있는지 이 표에 묻는다.
     ///
     /// **표를 둘로 두면 갈린다.** 그리고 이 표가 갈리는 방식은 특히 조용하다: 라우터가 맵 A 를
     /// 보고 씬 B 를 열면 그 씬은 다른 지형을 만들고, 증상은 접속할 때마다의 맵 해시 불일치
@@ -25,7 +31,14 @@ namespace NV.Client.Net
         /// `Tools ▸ NV ▸ Scene ▸ Create Main Lobby Scene` 이 등록까지 한다.
         public const string LobbyScene = "MainLobby";
 
-        /// 맵 이름 → 씬 이름. 짝을 늘릴 때 여기만 고친다.
+        /// 굽힌 맵을 어떤 씬이든 담을 수 있는 공용 씬.
+        ///
+        /// 전용 씬이 없는 맵이 이것으로 열린다. **Build Settings 에 한 번만** 등록되며,
+        /// 그것이 맵을 늘리는 비용에서 씬을 없앤 자리다.
+        /// `Tools ▸ NV ▸ Scene ▸ Create Map Runtime Scene` 이 등록까지 한다.
+        public const string RuntimeScene = "MapRuntime";
+
+        /// 맵 이름 → 전용 씬. **새 맵은 여기 붙이지 않는다** — 공용 씬이 그것을 담는다.
         private static readonly string[,] Pairs =
         {
             { "backrooms", "SampleScene" },
