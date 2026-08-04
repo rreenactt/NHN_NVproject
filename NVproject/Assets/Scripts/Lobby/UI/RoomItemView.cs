@@ -62,7 +62,10 @@ namespace NV.Client.Lobby.UI
             }
 
             _code.text = InviteCodeText.ToDisplay(room.Code);
-            _map.text = string.IsNullOrEmpty(room.MapName) ? "MAP —" : "MAP " + room.MapName.ToUpperInvariant();
+            // 표시용 이름을 쓴다. 서버가 주지 않는 옛 서버에서는 맵 이름과 같은 값이다.
+            _map.text = string.IsNullOrEmpty(room.MapDisplayName)
+                ? "MAP —"
+                : "MAP " + room.MapDisplayName.ToUpperInvariant();
             _count.text = $"{room.PlayerCount}/{room.Capacity}";
 
             var joinable = LobbyModel.IsJoinable(room);

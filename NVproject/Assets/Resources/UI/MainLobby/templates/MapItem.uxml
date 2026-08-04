@@ -1,0 +1,19 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!--
+        One map in the create-room list.
+
+        The reason label is the point of this template. A map can be listed and un-pickable — the
+        server has it but this build cannot draw it, or the terrain hashes differ — and the row has
+        to say which, on the row. Dropping such maps from the list instead would leave somebody
+        looking for a map they know exists.
+    -->
+    <ui:VisualElement name="map-item" class="map-item">
+        <ui:VisualElement class="map-item-head">
+            <ui:Label name="map-item-name" class="map-item-name" />
+            <ui:Label name="map-item-meta" class="map-item-meta" />
+        </ui:VisualElement>
+
+        <ui:Label name="map-item-description" class="map-item-description" />
+        <ui:Label name="map-item-reason" class="map-item-reason" />
+    </ui:VisualElement>
+</ui:UXML>

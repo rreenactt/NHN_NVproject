@@ -26,6 +26,7 @@ namespace NV.Client.Lobby.Controllers
         private LobbyEvents _events;
         private LobbyService _lobbyService;
         private RoomService _roomService;
+        private MapChoiceService _mapChoices;
         private LobbyUIController _ui;
         private LobbyController _flow;
 
@@ -132,8 +133,12 @@ namespace NV.Client.Lobby.Controllers
             _lobbyService ??= new LobbyService(this, _model, _events);
             _roomService ??= new RoomService(this, _model, _events);
 
+            // 맵 목록도 트리보다 오래 산다. 서버가 다시 뜨기 전까지 변하지 않는 값이므로
+            // 도메인 리로드마다 다시 받을 이유가 없다.
+            _mapChoices ??= new MapChoiceService(this);
+
             _ui = new LobbyUIController(_root, _session, _model, _events, _roomService);
-            _flow = new LobbyController(_session, _events, _lobbyService, _roomService, _ui);
+            _flow = new LobbyController(_session, _events, _lobbyService, _roomService, _mapChoices, _ui);
 
             _lobbyService.ApplyStoredProfile();
             _lobbyService.StartWatching();

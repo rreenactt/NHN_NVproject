@@ -393,6 +393,7 @@ namespace NV.Client.Net.Session
             Room = new RoomInfo(
                 result.Code,
                 result.MapName,
+                result.MapDisplayName,
                 result.MapHash,
                 RoomPhase.Waiting,
                 0,

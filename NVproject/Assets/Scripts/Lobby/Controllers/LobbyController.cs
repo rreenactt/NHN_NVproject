@@ -17,6 +17,7 @@ namespace NV.Client.Lobby.Controllers
         private readonly LobbyEvents _events;
         private readonly LobbyService _lobby;
         private readonly RoomService _rooms;
+        private readonly MapChoiceService _maps;
         private readonly LobbyUIController _ui;
         private readonly RoomController _room;
 
@@ -25,12 +26,14 @@ namespace NV.Client.Lobby.Controllers
             LobbyEvents events,
             LobbyService lobby,
             RoomService rooms,
+            MapChoiceService maps,
             LobbyUIController ui)
         {
             _session = session;
             _events = events;
             _lobby = lobby;
             _rooms = rooms;
+            _maps = maps;
             _ui = ui;
 
             _room = new RoomController(session, ui);
@@ -57,7 +60,7 @@ namespace NV.Client.Lobby.Controllers
 
         private void OpenCreateRoom()
         {
-            CreateRoomPopup.Open(_ui.Popups, (mapId, isPublic) => _rooms.Create(mapId, isPublic));
+            CreateRoomPopup.Open(_ui.Popups, _maps, (mapId, isPublic) => _rooms.Create(mapId, isPublic));
         }
 
         private void OpenJoinByCode()

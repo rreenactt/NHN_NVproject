@@ -646,3 +646,84 @@
     font-size: 14px;
     letter-spacing: 5px;
 }
+
+/* ============================================================ map list
+
+   The create-room map list. Rows come from the server merged with this build's
+   catalog, so a row can be listed and un-pickable — .map-item-blocked is that
+   state and it keeps the reason readable rather than dimming it away. */
+
+.map-list {
+    max-height: 210px;
+    margin-bottom: 10px;
+    border-left-width: 2px;
+    border-left-color: rgb(78, 68, 40);
+}
+
+.map-item {
+    flex-direction: column;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+    background-color: rgba(201, 179, 107, 0.06);
+    border-left-width: 2px;
+    border-left-color: rgba(78, 68, 40, 0);
+}
+
+.map-item:hover {
+    background-color: rgba(255, 246, 214, 0.10);
+}
+
+.map-item-selected {
+    background-color: rgba(255, 246, 214, 0.14);
+    border-left-color: rgb(201, 179, 107);
+}
+
+.map-item-blocked {
+    background-color: rgba(201, 179, 107, 0.03);
+    border-left-color: rgb(120, 60, 48);
+}
+
+.map-item-head {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.map-item-name {
+    color: rgb(255, 246, 214);
+    font-size: 14px;
+    letter-spacing: 1px;
+    -unity-font-style: bold;
+}
+
+.map-item-meta {
+    color: rgb(150, 132, 76);
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+
+.map-item-description {
+    color: rgb(150, 132, 76);
+    font-size: 11px;
+    margin-top: 2px;
+    white-space: normal;
+}
+
+/* Not dimmed. This line is the whole reason the row is still on screen. */
+.map-item-reason {
+    color: rgb(214, 132, 106);
+    font-size: 11px;
+    margin-top: 3px;
+    white-space: normal;
+}
+
+#create-map-loading {
+    color: rgb(150, 132, 76);
+    font-size: 12px;
+    padding-left: 12px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}

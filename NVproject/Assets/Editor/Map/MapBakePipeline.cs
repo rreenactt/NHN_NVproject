@@ -105,6 +105,10 @@ namespace NV.Client.EditorTools
                 result.PrefabPath = WritePrefab(result.SceneRoot, blueprint.MapName);
             }
 
+            // 카탈로그에 등록한다. **이것이 "맵을 늘릴 때 코드를 고치지 않는다" 의 절반이다** —
+            // 나머지 절반은 서버가 `MapData/` 를 훑는 것이고, 둘 다 사람이 표를 고치던 자리다.
+            MapCatalogWriter.Register(result.Asset, result.PrefabPath);
+
             return result;
         }
 

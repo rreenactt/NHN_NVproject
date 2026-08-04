@@ -75,6 +75,7 @@ namespace NV.Client.Net.Session
                     payload.code,
                     payload.hostToken,
                     payload.mapName,
+                    payload.mapDisplayName,
                     unchecked((uint)payload.mapHash),
                     payload.capacity,
                     payload.minPlayers,
@@ -187,6 +188,48 @@ namespace NV.Client.Net.Session
             done(new RoomListResult(ReadRoomList(request)));
         }
 
+        /// 서버가 아는 맵의 목록.
+        ///
+        /// **404 는 실패가 아니다.** 이 엔드포인트가 없는 옛 서버가 그렇게 답하며, 그때 로비는
+        /// 이 빌드가 아는 맵만으로 목록을 만든다. 그 구분이 없으면 옛 서버에 붙은 클라이언트가
+        /// 방을 아예 만들 수 없다.
+        ///
+        /// 프로토콜 버전을 붙이지 않는다. 서버도 이 경로에서는 그것을 요구하지 않는다 —
+        /// 접속 전 화면을 그리는 값이고, 버전 불일치는 접속 시점에 426 으로 정확히 갈린다.
+        public IEnumerator Maps(Action<MapListResult> done)
+        {
+            using var request = UnityWebRequest.Get(_baseUrl + "/maps");
+            request.timeout = TimeoutSeconds;
+
+            yield return request.SendWebRequest();
+
+            if (!Reached(request))
+            {
+                done(MapListResult.Failed(SessionFailureKind.ServerUnreachable));
+                yield break;
+            }
+
+            if (request.responseCode == 404)
+            {
+                done(MapListResult.NotPublished());
+                yield break;
+            }
+
+            if (request.responseCode == 429)
+            {
+                done(MapListResult.Failed(SessionFailureKind.TooManyRequests));
+                yield break;
+            }
+
+            if (request.responseCode != 200)
+            {
+                done(MapListResult.Failed(SessionFailureKind.ServerUnreachable));
+                yield break;
+            }
+
+            done(MapListResult.Ok(ReadMapList(request)));
+        }
+
         /// 서버가 살아 있는가.
         ///
         /// `GET /health` 는 JSON 이 아니라 `text/plain` 으로 `ok` 한 줄을 준다. 파싱하려
@@ -254,6 +297,35 @@ namespace NV.Client.Net.Session
             }
 
             return rooms;
+        }
+
+        /// 맵 목록도 최상위 배열이다. 감싸는 이유는 `ReadRoomList` 와 같다 —
+        /// 파싱 실패가 "0개" 로 둔갑하면 원인이 서버인지 클라이언트인지 알 수 없다.
+        private static ServerMapInfo[] ReadMapList(UnityWebRequest request)
+        {
+            var text = request.downloadHandler?.text;
+
+            if (string.IsNullOrEmpty(text) || text[0] != '[')
+            {
+                return Array.Empty<ServerMapInfo>();
+            }
+
+            var wrapped = MapListResponseDto.WrapperPrefix + text + MapListResponseDto.WrapperSuffix;
+            var payload = JsonUtility.FromJson<MapListResponseDto>(wrapped);
+
+            if (payload?.items == null)
+            {
+                return Array.Empty<ServerMapInfo>();
+            }
+
+            var maps = new ServerMapInfo[payload.items.Length];
+
+            for (var index = 0; index < payload.items.Length; index++)
+            {
+                maps[index] = payload.items[index].ToMapInfo();
+            }
+
+            return maps;
         }
 
         private static SessionFailureKind CreateFailure(UnityWebRequest request)

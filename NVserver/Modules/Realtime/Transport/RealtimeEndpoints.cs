@@ -97,7 +97,11 @@ namespace NV.Realtime.Transport
         ///
         /// 룸 생성은 레지스트리 수준이라 HTTP 스레드에서 해도 된다. 룸 *상태* 를 바꾸는
         /// 것과 다르다 — 그쪽은 틱 루프가 소유하므로 `RoomCommand` 를 거친다.
-        private static IResult CreateRoom(CreateRoomRequest? request, RoomRegistry rooms, RoomMaps maps)
+        private static IResult CreateRoom(
+            CreateRoomRequest? request,
+            RoomRegistry rooms,
+            RoomMaps maps,
+            MapListPayload catalog)
         {
             var mapId = string.IsNullOrWhiteSpace(request?.Map) ? RoomMaps.DefaultMapId : request!.Map!.Trim();
 
@@ -135,6 +139,7 @@ namespace NV.Realtime.Transport
                     HostToken = hostToken,
                     Map = map.Name,
                     MapName = map.Name,
+                    MapDisplayName = catalog.DisplayNameOf(map.Name),
                     MapHash = map.Hash,
                     Capacity = RealtimeConstants.Rooms.MaxPlayers,
                     MinPlayers = RealtimeConstants.Rooms.MinPlayersToStart,

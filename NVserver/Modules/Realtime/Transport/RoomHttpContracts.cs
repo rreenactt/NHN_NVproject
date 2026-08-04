@@ -34,6 +34,12 @@ namespace NV.Realtime.Transport
         /// `Map` 은 "무엇을 요청했는가" 의 답이고 `MapName` 은 "어느 씬을 여는가" 의 근거다.
         public string MapName { get; set; } = string.Empty;
 
+        /// 그 맵의 표시용 이름. 맵이 적지 않았으면 `MapName` 과 같다.
+        ///
+        /// 참가 전 조회에도 같은 필드가 있다. 방을 **만든** 사람의 화면도 그 이름을 적어야
+        /// 하는데, 만든 직후에는 조회를 한 번 더 하지 않으므로 여기 실려 있어야 한다.
+        public string MapDisplayName { get; set; } = string.Empty;
+
         public uint MapHash { get; set; }
 
         public int Capacity { get; set; }

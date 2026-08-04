@@ -9,6 +9,7 @@ namespace NV.Client.Net.Session
         public RoomInfo(
             string code,
             string mapName,
+            string mapDisplayName,
             uint mapHash,
             RoomPhase phase,
             int playerCount,
@@ -19,6 +20,7 @@ namespace NV.Client.Net.Session
         {
             Code = code;
             MapName = mapName;
+            MapDisplayName = string.IsNullOrEmpty(mapDisplayName) ? mapName : mapDisplayName;
             MapHash = mapHash;
             Phase = phase;
             PlayerCount = playerCount;
@@ -32,6 +34,12 @@ namespace NV.Client.Net.Session
 
         /// 서버가 로드한 맵의 이름. 어느 씬을 열어야 하는지가 이것으로 갈린다.
         public string MapName { get; }
+
+        /// 화면에 적을 이름. 서버가 주지 않았으면(옛 서버) `MapName` 과 같다.
+        ///
+        /// **판정에 쓰지 않는다.** 씬을 정하는 것은 계속 `MapName` 이다 — 이 값은 사람이
+        /// 고치는 값이고, 그것으로 라우팅하면 이름을 다듬는 것이 방을 열 수 없게 만든다.
+        public string MapDisplayName { get; }
 
         public uint MapHash { get; }
 
@@ -67,6 +75,7 @@ namespace NV.Client.Net.Session
             string code,
             string hostToken,
             string mapName,
+            string mapDisplayName,
             uint mapHash,
             int capacity,
             int minPlayers,
@@ -75,6 +84,7 @@ namespace NV.Client.Net.Session
             Code = code;
             HostToken = hostToken;
             MapName = mapName;
+            MapDisplayName = string.IsNullOrEmpty(mapDisplayName) ? mapName : mapDisplayName;
             MapHash = mapHash;
             Capacity = capacity;
             MinPlayers = minPlayers;
@@ -87,6 +97,7 @@ namespace NV.Client.Net.Session
             Code = string.Empty;
             HostToken = string.Empty;
             MapName = string.Empty;
+            MapDisplayName = string.Empty;
             MapHash = 0u;
             Capacity = 0;
             MinPlayers = 0;
@@ -101,6 +112,9 @@ namespace NV.Client.Net.Session
         public string HostToken { get; }
 
         public string MapName { get; }
+
+        /// 화면에 적을 이름. 서버가 주지 않았으면 `MapName` 과 같다.
+        public string MapDisplayName { get; }
 
         public uint MapHash { get; }
 
@@ -166,6 +180,7 @@ namespace NV.Client.Net.Session
         public string hostToken;
         public string map;
         public string mapName;
+        public string mapDisplayName;
         public long mapHash;
         public int capacity;
         public int minPlayers;
@@ -177,6 +192,7 @@ namespace NV.Client.Net.Session
     {
         public string code;
         public string mapName;
+        public string mapDisplayName;
         public long mapHash;
         public int phase;
         public int playerCount;
@@ -190,6 +206,7 @@ namespace NV.Client.Net.Session
             return new RoomInfo(
                 code ?? string.Empty,
                 mapName ?? string.Empty,
+                mapDisplayName ?? string.Empty,
                 unchecked((uint)mapHash),
                 (RoomPhase)phase,
                 playerCount,

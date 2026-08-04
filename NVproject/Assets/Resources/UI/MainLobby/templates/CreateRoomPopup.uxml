@@ -2,17 +2,17 @@
     <!--
         Make a room.
 
-        The map list is hardcoded because the server does not expose one — RoomMaps.ByMap exists but
-        no endpoint serves it. Getting it wrong is not silent: POST /rooms answers 400 unknownMap and
-        that becomes SessionFailureKind.UnknownMap on screen.
+        The map list comes from the server (GET /maps), merged with what this build can actually
+        draw (MapCatalog). It is a list rather than a dropdown because a row can be un-pickable for
+        four different reasons and a dropdown has nowhere to put the reason.
     -->
     <ui:VisualElement name="create-room-popup" class="popup-frame">
         <ui:Label class="popup-title" text="방 만들기" />
         <ui:Label class="popup-sub" text="CREATE ROOM" />
 
         <ui:Label class="field-label" text="MAP" />
-        <ui:DropdownField name="create-map" class="field" />
         <ui:Label name="create-map-note" class="hint" />
+        <ui:ScrollView name="create-map-list" class="map-list" />
 
         <!--
             공개 여부는 만든 뒤에 바꿀 수 없다. 비공개인 줄 알고 코드를 나눈 방이
