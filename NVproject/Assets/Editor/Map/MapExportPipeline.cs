@@ -57,6 +57,8 @@ namespace NV.Client.EditorTools
             plan.Report = report;
             plan.OutputPath = Path.Combine(plan.OutputDirectory, plan.Data.Name + ".json");
 
+            StampProvenance(plan.Data, source);
+
             InspectGridReport(plan);
 
             if (MapDataValidator.TryValidateSchema(plan.Data, plan.Errors))
@@ -75,6 +77,9 @@ namespace NV.Client.EditorTools
             plan.ExistingText = File.Exists(plan.OutputPath)
                 ? Normalize(File.ReadAllText(plan.OutputPath))
                 : null;
+
+            plan.SerializedKey = ComparisonKey(plan.Serialized);
+            plan.ExistingKey = ComparisonKey(plan.ExistingText);
 
             CheckRegistration(plan);
 
@@ -122,6 +127,35 @@ namespace NV.Client.EditorTools
             message = $"export 완료: {plan.OutputPath}\n{plan.Describe()}";
             return true;
         }
+
+        /// 스키마 버전과 출처를 찍는다.
+        ///
+        /// **`MapExport.BuildMapData` 가 아니라 여기서 한다.** 그 함수는 런타임에도 불린다
+        /// (접속 시 해시 대조, 오프라인 배치) — 거기서 시각을 찍으면 매 호출마다 다른 값이
+        /// 들어가고, 해시에 안 들어가더라도 "런타임이 export 를 흉내낸다" 는 모양이 된다.
+        /// 출처는 파일에만 있는 값이므로 파일을 만드는 쪽이 찍는다.
+        private static void StampProvenance(MapData data, INetworkMapSource source)
+        {
+            data.Version = MapSchema.Current;
+
+            var behaviour = source as MonoBehaviour;
+            var scene = behaviour == null
+                ? string.Empty
+                : behaviour.gameObject.scene.name ?? string.Empty;
+
+            data.Source = new MapSourceInfo
+            {
+                Scene = scene,
+                Component = source.GetType().Name,
+                ExportedAtUtc = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture),
+                ExporterVersion = ExporterVersion,
+            };
+        }
+
+        /// export 도구의 버전. 바이트가 달라지는 변경을 할 때 올린다.
+        ///
+        /// 1 = 창과 검사가 붙고 스키마 버전·출처가 실리기 시작한 버전.
+        public const int ExporterVersion = 1;
 
         /// 격자 보고를 오류로 옮긴다.
         ///
@@ -230,7 +264,12 @@ namespace NV.Client.EditorTools
         {
             var text = new StringBuilder(data.Boxes.Length * 96);
 
-            text.Append("{\n  \"name\": \"").Append(data.Name).Append("\",\n  \"boxes\": [\n");
+            text.Append("{\n  \"version\": ").Append(data.Version)
+                .Append(",\n  \"name\": \"").Append(data.Name).Append("\",\n");
+
+            AppendSource(text, data.Source);
+
+            text.Append("  \"boxes\": [\n");
 
             for (var index = 0; index < data.Boxes.Length; index++)
             {
@@ -270,6 +309,25 @@ namespace NV.Client.EditorTools
             return text.ToString();
         }
 
+        /// 출처를 쓴다. 없으면 아무것도 쓰지 않는다.
+        ///
+        /// **해시에 들어가지 않으므로 파일에 추가해도 맵 해시가 바뀌지 않는다.** 그래서 이
+        /// 필드를 도입하는 것만으로 재-export 를 강제하지 않는다.
+        ///
+        /// 문자열은 이스케이프하지 않는다. 들어가는 값이 씬 이름과 타입 이름과 ISO 8601
+        /// 시각뿐이고, 그중 어느 것도 따옴표나 역슬래시를 가질 수 없다 — Unity 는 씬 이름에
+        /// 그 문자를 허용하지 않고 타입 이름은 C# 식별자다.
+        private static void AppendSource(StringBuilder text, MapSourceInfo source)
+        {
+            if (source == null) return;
+
+            text.Append("  \"source\": { \"scene\": \"").Append(source.Scene)
+                .Append("\", \"component\": \"").Append(source.Component)
+                .Append("\", \"exportedAtUtc\": \"").Append(source.ExportedAtUtc)
+                .Append("\", \"exporterVersion\": ").Append(source.ExporterVersion)
+                .Append(" },\n");
+        }
+
         /// 격자를 쓴다. 없으면 아무것도 쓰지 않는다 — 필드가 없으면 서버가 `null` 로 읽고,
         /// 그것이 "격자를 내놓지 않는 레벨" 의 정상 표현이다.
         ///
@@ -296,6 +354,45 @@ namespace NV.Client.EditorTools
         private static string F(float value)
         {
             return value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        /// 두 파일이 같은 맵인가를 비교하기 위한 형태.
+        ///
+        /// **출처 줄을 뺀다.** 거기에는 export 시각이 있어 매번 달라지고, 그것을 그대로 비교하면
+        /// "내용이 같으면 쓰지 않는다" 가 영구히 거짓이 된다 — 두 기능이 정면으로 부딪힌다.
+        ///
+        /// 빼는 쪽이 맞는 이유는 뜻에 있다. 시각은 지형이 아니므로 지형 비교에 들어갈 값이
+        /// 아니고, 빼 두면 그 시각이 "export 를 마지막으로 돌린 때" 가 아니라 **"맵이 마지막으로
+        /// 바뀐 때"** 가 된다. 후자가 알고 싶은 값이다.
+        ///
+        /// 출처는 정확히 한 줄로 쓰이므로(`AppendSource`) 그 줄만 버리면 된다. 여러 줄로 쓰게
+        /// 바꾸면 이 함수도 같이 바꿔야 한다.
+        private static string ComparisonKey(string text)
+        {
+            if (text == null)
+            {
+                return null;
+            }
+
+            var lines = text.Split('\n');
+            var kept = new StringBuilder(text.Length);
+
+            for (var index = 0; index < lines.Length; index++)
+            {
+                if (lines[index].StartsWith("  \"source\":", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                kept.Append(lines[index]);
+
+                if (index < lines.Length - 1)
+                {
+                    kept.Append('\n');
+                }
+            }
+
+            return kept.ToString();
         }
 
         /// 줄바꿈을 맞춘다. **없으면 "변경 없음" 이 영구히 거짓이 된다.**
@@ -357,9 +454,15 @@ namespace NV.Client.EditorTools
 
         public bool IsNewFile => Data != null && ExistingText == null;
 
-        public bool Unchanged => Serialized != null
-            && ExistingText != null
-            && string.Equals(Serialized, ExistingText, StringComparison.Ordinal);
+        /// 지금 파일과 같은 맵인가. 출처(export 시각)는 비교하지 않는다 — 이유는
+        /// `MapExportPipeline.ComparisonKey` 에 있다.
+        public bool Unchanged => SerializedKey != null
+            && ExistingKey != null
+            && string.Equals(SerializedKey, ExistingKey, StringComparison.Ordinal);
+
+        public string SerializedKey { get; set; }
+
+        public string ExistingKey { get; set; }
 
         /// 서버 설정을 읽을 수 있었는가. 못 읽었으면 등록 여부를 말하지 않는다.
         public bool RegistrationKnown { get; set; }

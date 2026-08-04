@@ -13,6 +13,12 @@ namespace NV.Shared.Collision
     /// 사라짐" 으로만 나타나 추적이 어렵다.
     public sealed class MapData
     {
+        /// 스키마 버전. 없으면 0 이고 그때는 1 로 읽는다 — `MapSchema` 를 본다.
+        ///
+        /// **해시에 넣지 않는다.** 넣으면 버전을 도입하는 이 커밋에서 기존 맵 전부의 해시가
+        /// 바뀌어 재-export 를 돌려야 하는데, 그 재-export 는 아무 정보도 늘리지 않는다.
+        public int Version { get; set; }
+
         public string Name { get; set; }
 
         public MapBox[] Boxes { get; set; }
@@ -25,6 +31,10 @@ namespace NV.Shared.Collision
         /// 없는 맵 파일도 로드된다 — 이동 판정은 박스만으로 되고, 격자를 요구하는 것은
         /// 목표물 배치처럼 나중에 붙는 기능이다. 그쪽에서 없음을 확인하고 거절한다.
         public MapGridData Grid { get; set; }
+
+        /// 이 파일이 어디서 나왔는가. 없을 수 있다 — 출처를 싣기 전에 만들어진 파일이다.
+        /// **해시에 들어가지 않는다.** 이유는 `MapSourceInfo` 에 있다.
+        public MapSourceInfo Source { get; set; }
 
         public bool HasGrid => Grid != null && Grid.Cells != null;
 
@@ -59,6 +69,12 @@ namespace NV.Shared.Collision
         /// 넣는다 — 빼면 격자가 어긋난 채로 해시가 일치해, 증상이 "가끔 열쇠가 벽 안에
         /// 생김" 으로만 나타난다. 이동 판정은 격자를 쓰지 않으므로 그 불일치는
         /// 걸어 다니는 동안에는 아무 신호도 내지 않는다.
+        ///
+        /// **`Version` 과 `Source` 는 일부러 들어가지 않는다.** 이 값은 "클라이언트와 서버가
+        /// 같은 지형을 보고 있는가" 를 답해야 하고, 스키마 버전과 export 시각은 지형이 아니다.
+        /// 넣으면 재-export 마다 해시가 바뀌어 대조가 뜻을 잃는다. 반대로 **지형에 영향을 주는
+        /// 필드를 새로 넣는다면 반드시 여기에도 넣어야 한다** — 빼면 지형이 다른데 해시가 맞고,
+        /// 그것이 이 값이 막아야 하는 유일한 경우다.
         public uint ComputeHash()
         {
             var hash = StateHash.Seed;

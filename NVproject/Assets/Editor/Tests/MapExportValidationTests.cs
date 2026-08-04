@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using NUnit.Framework;
+using NV.Client.EditorTools;
 using NV.Client.Net;
 using NV.Shared.Collision;
 using UnityEngine;
@@ -193,6 +194,76 @@ namespace NV.Client.Tests
             Assert.IsNotNull(found);
             Assert.AreEqual(0, found.Count);
             Assert.IsNull(MapExport.FindInScene());
+        }
+
+        // ==================================================== 스키마 드리프트
+
+        /// <summary>
+        /// **Every writable property on the schema types must appear in the exported JSON.**
+        ///
+        /// The serialiser writes key names as string literals, because <c>Shared</c> cannot reference
+        /// <c>System.Text.Json</c> — Unity has no such assembly. That means adding a property and
+        /// forgetting the writer compiles cleanly, and the server then reads the field as its default.
+        /// The symptom is the feature that needed it simply not working, with nothing to point at.
+        ///
+        /// The rule is <c>CanWrite</c>: a property with a setter is part of the file, a getter-only
+        /// property is computed (<c>HasGrid</c>, <c>CellCount</c>) and must not be written. That is
+        /// not a convention invented for this test — it is what the deserialiser on the server side
+        /// can actually populate.
+        /// </summary>
+        [Test]
+        public void 스키마의_모든_쓰기_가능_프로퍼티가_JSON_에_쓰인다()
+        {
+            var data = MapExport.BuildMapData(new FlatRoom());
+
+            data.Version = MapSchema.Current;
+            data.Source = new MapSourceInfo
+            {
+                Scene = "scene",
+                Component = "component",
+                ExportedAtUtc = "1970-01-01T00:00:00Z",
+                ExporterVersion = MapExportPipeline.ExporterVersion,
+            };
+
+            var json = MapExportPipeline.Serialize(data);
+
+            AssertEveryWritablePropertyIsWritten(typeof(MapData), json);
+            AssertEveryWritablePropertyIsWritten(typeof(MapBox), json);
+            AssertEveryWritablePropertyIsWritten(typeof(MapSpawn), json);
+            AssertEveryWritablePropertyIsWritten(typeof(MapGridData), json);
+            AssertEveryWritablePropertyIsWritten(typeof(MapSourceInfo), json);
+        }
+
+        /// <summary>
+        /// A getter-only property must NOT be written. The server cannot deserialise into one, so a
+        /// key it does not recognise is either ignored (best case, dead bytes) or — with a stricter
+        /// option set later — a parse failure at startup.
+        /// </summary>
+        [Test]
+        public void 계산되는_프로퍼티는_JSON_에_쓰이지_않는다()
+        {
+            var json = MapExportPipeline.Serialize(MapExport.BuildMapData(new FlatRoom()));
+
+            Assert.IsFalse(json.Contains("\"hasGrid\""), "HasGrid 는 계산되는 값이다.");
+            Assert.IsFalse(json.Contains("\"cellCount\""), "CellCount 는 계산되는 값이다.");
+        }
+
+        private static void AssertEveryWritablePropertyIsWritten(System.Type type, string json)
+        {
+            foreach (var property in type.GetProperties())
+            {
+                if (!property.CanWrite)
+                {
+                    continue;
+                }
+
+                var key = "\"" + char.ToLowerInvariant(property.Name[0]) + property.Name.Substring(1) + "\"";
+
+                Assert.IsTrue(
+                    json.Contains(key),
+                    $"{type.Name}.{property.Name} 이 JSON 에 {key} 로 쓰이지 않았다. " +
+                    "프로퍼티를 늘리고 직렬화를 잊으면 서버가 그 필드를 기본값으로 읽는다.");
+            }
         }
 
         private static void AssertClean(MapData data)

@@ -56,6 +56,16 @@ namespace NV.Shared.Collision
                 return false;
             }
 
+            // **버전을 먼저 본다.** 읽을 수 없는 파일의 나머지 필드를 검사하는 것은 뜻이
+            // 없고, 그 오류 목록은 사람을 엉뚱한 곳으로 보낸다.
+            if (!MapSchema.IsReadable(data.Version))
+            {
+                errors.Add(
+                    $"스키마 버전 {MapSchema.Effective(data.Version)} 은 이 서버가 모른다" +
+                    $"(아는 최대 {MapSchema.Current}). 서버가 오래됐거나 맵이 새 도구로 만들어졌다.");
+                return false;
+            }
+
             if (data.Boxes == null || data.Boxes.Length == 0)
             {
                 errors.Add("콜리전 박스가 없다. 이대로면 플레이어가 지형을 통과한다.");
