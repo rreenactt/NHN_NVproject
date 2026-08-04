@@ -56,6 +56,15 @@ namespace NV.Client.Net.Session
 
         private void EnterGame()
         {
+            // **이미 들어와 있으면 아무것도 묻지 않는다.** `Update` 는 매치가 도는 동안 계속
+            // 이 함수를 부르고, `SceneFor` 는 카탈로그를 `Resources.Load` 로 찾아 훑는다 —
+            // 판정 순서를 뒤집으면 그 조회가 매 프레임 돈다. 답이 필요한 것은 씬을 바꿀지
+            // 정하는 한 번뿐이다.
+            if (_enteredGame)
+            {
+                return;
+            }
+
             var scene = SceneFor(_session.Room.MapName);
 
             if (string.IsNullOrEmpty(scene))

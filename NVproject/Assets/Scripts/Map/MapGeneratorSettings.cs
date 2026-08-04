@@ -18,9 +18,10 @@ namespace NV.Client.Map
     /// </remarks>
     public abstract class MapGeneratorSettings : ScriptableObject
     {
-        [Tooltip("Export filename, server Game:Maps key and MapSceneTable entry. All four have to " +
-                 "agree — a level whose name drifts is judged against a stale export, and the only " +
-                 "symptom is a map-hash mismatch on connect.")]
+        [Tooltip("Export filename, baked asset name and the server's map id. The server registers " +
+                 "every file in its map directory under that file's own name, so this one string is " +
+                 "the map's identity everywhere — a level whose name drifts is judged against a " +
+                 "stale export, and the only symptom is a map-hash mismatch on connect.")]
         public string mapName = string.Empty;
 
         [Tooltip("Fixed layout. Levels that draw no randomness ignore it.")]
@@ -70,7 +71,7 @@ namespace NV.Client.Map
         {
             if (!string.IsNullOrEmpty(mapName)) return null;
 
-            return "맵 이름이 비어 있다. 이 값이 곧 export 파일명이자 서버의 Game:Maps 키다.";
+            return "맵 이름이 비어 있다. 이 값이 곧 export 파일명이자 서버의 맵 id 다.";
         }
 
         /// <summary>

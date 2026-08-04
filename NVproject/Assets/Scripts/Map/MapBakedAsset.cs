@@ -17,7 +17,8 @@ namespace NV.Client.Map
     /// </summary>
     public sealed class MapBakedAsset : ScriptableObject
     {
-        [Tooltip("Export filename, server Game:Maps key and MapSceneTable entry.")]
+        [Tooltip("Export filename and the server's map id — the server registers each file in its " +
+                 "map directory under that file's own name.")]
         [SerializeField] private string mapName = "unnamed";
 
         [Tooltip("Collision, in the order the generator emitted it. The order is part of the map hash.")]

@@ -107,8 +107,14 @@ namespace NV.Client.EditorTools
             plan.SerializedKey = ComparisonKey(plan.Serialized);
             plan.ExistingKey = ComparisonKey(plan.ExistingText);
 
-            CheckRegistration(plan);
-
+            // **등록 여부를 더 이상 묻지 않는다.** 서버가 이 디렉터리를 훑으므로 여기에 쓰는
+            // 것이 곧 등록이다(`MapCatalogLoader`). 예전에는 `appsettings.json` 의 `Game:Maps`
+            // 에 한 줄이 더 필요했고 이 함수가 그것을 경고했는데, 그 표는 이제 **별칭 표**다 —
+            // 같은 검사를 남겨 두면 등록된 맵을 "등록되지 않았다" 고 말하고, 붙여 넣으라고
+            // 내주는 조각은 아무 일도 하지 않는다. 틀린 경고는 없는 경고보다 나쁘다.
+            //
+            // 출력 폴더가 정말 이 저장소의 서버인지는 `ResolveOutputDirectory` 가 본다.
+            // 등록에 대해 확인할 것이 그것 하나로 줄었다.
             return plan;
         }
 
@@ -240,57 +246,6 @@ namespace NV.Client.EditorTools
                     "격자에 몸이 들어가는 셀(FreeFloor)이 하나도 없다. 격자와 콜리전 박스가 " +
                     "서로 다른 좌표계를 말하고 있다 — 원점, 셀 크기, CellIndex 의 축 순서를 본다.");
             }
-        }
-
-        /// 이 맵 id 가 서버에 등록되어 있는가.
-        ///
-        /// **경고까지만 한다.** 등록은 서버 설정의 몫이고, 에디터가 서버 설정을 고치는 것은
-        /// 되돌리기 어렵다. 다만 등록하지 않으면 그 맵으로 방을 만들 수 없고(등록되지 않은 맵
-        /// id 는 기본 맵으로 열리지 않고 거절된다), export 한 사람은 자기 파일이 왜 안 먹는지
-        /// 알 수 없다 — `backrooms2f` 가 정확히 그렇게 죽었다.
-        ///
-        /// 판정은 문자열 검색이다. Unity 에는 JSON 파서가 없고, 이 답은 조언이지 관문이
-        /// 아니므로 파서를 하나 더 들일 값은 아니다. 못 읽으면 아무 말도 하지 않는다 —
-        /// 틀린 경고는 없는 경고보다 나쁘다.
-        private static void CheckRegistration(MapExportPlan plan)
-        {
-            var settings = Path.GetFullPath(Path.Combine(Application.dataPath, RelativeSettingsPath));
-
-            if (!File.Exists(settings))
-            {
-                return;
-            }
-
-            var text = File.ReadAllText(settings);
-            var maps = text.IndexOf("\"Maps\"", StringComparison.Ordinal);
-
-            if (maps < 0)
-            {
-                return;
-            }
-
-            var open = text.IndexOf('{', maps);
-            var close = open < 0 ? -1 : text.IndexOf('}', open);
-
-            if (open < 0 || close < 0)
-            {
-                return;
-            }
-
-            var section = text.Substring(open, close - open);
-
-            plan.RegistrationKnown = true;
-            plan.Registered = section.IndexOf($"\"{plan.Data.Name}\"", StringComparison.Ordinal) >= 0;
-
-            if (plan.Registered)
-            {
-                return;
-            }
-
-            // `default` 로 등록된 파일이 이 맵일 수 있다. 그때는 이름으로 등록되어 있지
-            // 않아도 서버가 이 맵을 쓰고 있으므로, 확정해 말하지 않고 조각만 내놓는다.
-            plan.RegistrationSnippet =
-                $"\"{plan.Data.Name}\": \"../MapData/{plan.Data.Name}.json\"";
         }
 
         /// 출력 폴더를 정하고 **그것이 정말 이 저장소의 서버인지 확인한다.**
@@ -598,14 +553,6 @@ namespace NV.Client.EditorTools
         public string SerializedKey { get; set; }
 
         public string ExistingKey { get; set; }
-
-        /// 서버 설정을 읽을 수 있었는가. 못 읽었으면 등록 여부를 말하지 않는다.
-        public bool RegistrationKnown { get; set; }
-
-        public bool Registered { get; set; }
-
-        /// 등록되어 있지 않을 때 붙여 넣을 조각.
-        public string RegistrationSnippet { get; set; }
 
         /// 씬에 레벨이 둘 이상일 때, 이름이 겹치는 것이 있으면 그 이름.
         public string DuplicateName

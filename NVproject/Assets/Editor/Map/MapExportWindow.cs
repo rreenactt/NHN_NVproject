@@ -223,25 +223,25 @@ namespace NV.Client.EditorTools
             }
         }
 
+        /// 이 파일을 쓰면 그것으로 등록이 끝난다는 것을 알린다.
+        ///
+        /// **예전에는 경고였다.** `appsettings.json` 의 `Game:Maps` 에 한 줄이 더 필요했고, 그
+        /// 줄을 빠뜨리면 export 는 성공했다고 말하는데 그 맵으로 방을 만들 수 없었다
+        /// (`backrooms2f` 가 그렇게 죽었다). 서버가 이제 맵 디렉터리를 훑으므로 그 단계가
+        /// 없어졌고, 같은 경고를 남겨 두면 등록된 맵을 등록되지 않았다고 말한다.
         private void DrawRegistration()
         {
-            if (_plan.Data == null || !_plan.RegistrationKnown || _plan.Registered)
+            if (_plan.Data == null || _plan.OutputPath == null)
             {
                 return;
             }
 
             EditorGUILayout.Space();
             EditorGUILayout.HelpBox(
-                $"서버 설정(Game:Maps)에 \"{_plan.Data.Name}\" 이 없다. 등록하지 않으면 이 맵으로 " +
-                "방을 만들 수 없다 — 등록되지 않은 맵 id 는 기본 맵으로 열리지 않고 거절된다. " +
-                "(default 항목이 이 파일을 가리키고 있다면 이 경고는 무시해도 된다.)",
-                MessageType.Warning);
-
-            if (GUILayout.Button("appsettings 조각 복사"))
-            {
-                EditorGUIUtility.systemCopyBuffer = _plan.RegistrationSnippet;
-                Debug.Log("[NV] 클립보드에 복사했다: " + _plan.RegistrationSnippet);
-            }
+                $"서버는 이 디렉터리의 *.json 을 전부 등록한다 — 이 파일을 쓰면 맵 id " +
+                $"\"{_plan.Data.Name}\" 로 등록된다. 서버를 다시 띄우면 방 만들기 목록에 나온다.\n" +
+                "설정 파일에 손으로 넣을 것은 없다(Game:Maps 는 이제 default 같은 별칭 표다).",
+                MessageType.Info);
         }
 
         /// 격자 미리보기.

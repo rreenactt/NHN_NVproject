@@ -144,6 +144,9 @@ namespace NV.Realtime.Contracts
             return _aliases.TryGetValue(mapId!, out var target) ? target : null;
         }
 
+        /// **빈 id 는 등록된 것으로 답한다** — 기본 맵으로 풀리기 때문이고, `ByMapId` 가 예전부터
+        /// 그렇게 답해 왔다. 예전 구현은 여기서만 false 였는데, 두 함수가 같은 질문에 다르게
+        /// 답하는 것이 그 자체로 함정이다.
         public bool IsRegistered(string? mapId)
         {
             return ResolveId(mapId) != null;

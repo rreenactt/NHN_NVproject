@@ -119,7 +119,10 @@ namespace NV.Client.Net.Session
                     return new SessionFailure(
                         kind,
                         "서버에 등록되지 않은 맵이다." + Detail(detail),
-                        "서버 설정의 Game:Maps 를 확인한다.",
+
+                        // 등록은 파일이다 — 서버가 `MapData/` 를 훑는다. 설정 파일을 보라고
+                        // 하면 별칭 표(`Game:Maps`)를 뒤지게 되고 거기에는 답이 없다.
+                        "NVserver/MapData/ 에 그 맵을 export 했는지, 서버를 다시 띄웠는지 확인한다.",
                         false);
 
                 case SessionFailureKind.RoomFull:

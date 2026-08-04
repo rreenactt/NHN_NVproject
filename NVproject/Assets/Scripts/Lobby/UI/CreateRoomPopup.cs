@@ -22,7 +22,7 @@ namespace NV.Client.Lobby.UI
         {
             var element = MainLobbyAssets.Clone("CreateRoomPopup");
 
-            if (element == null || host == null)
+            if (element == null || host == null || maps == null)
             {
                 return;
             }

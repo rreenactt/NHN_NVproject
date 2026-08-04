@@ -480,14 +480,14 @@ namespace NV.Client.EditorTools
                 EditorGUILayout.HelpBox(_exportNotes[index], MessageType.Warning);
             }
 
-            if (_exportPlan.RegistrationKnown && !_exportPlan.Registered)
+            // 등록 경고가 있던 자리다. 서버가 맵 디렉터리를 훑게 된 뒤로 쓰는 것이 곧 등록이고,
+            // 그 경고를 남겨 두면 등록된 맵을 등록되지 않았다고 말한다.
+            if (_exportPlan.Data != null)
             {
                 EditorGUILayout.HelpBox(
-                    "이 맵 id 가 서버의 Game:Maps 에 없다. 등록하지 않으면 이 맵으로 방을 만들 수 " +
-                    "없고, export 한 사람은 자기 파일이 왜 안 먹는지 알 수 없다.\n\n" +
-                    "NVserver/Api/appsettings.json 의 Game:Maps 에 넣는다:\n  " +
-                    _exportPlan.RegistrationSnippet,
-                    MessageType.Warning);
+                    $"쓰면 맵 id \"{_exportPlan.Data.Name}\" 로 등록된다. 서버를 다시 띄우면 " +
+                    "방 만들기 목록에 나온다 — 설정 파일에 손으로 넣을 것은 없다.",
+                    MessageType.Info);
             }
 
             using (new EditorGUI.DisabledScope(!_exportPlan.CanExport || _exportPlan.Unchanged))

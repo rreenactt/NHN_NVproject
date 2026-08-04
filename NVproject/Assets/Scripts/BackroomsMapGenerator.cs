@@ -122,8 +122,8 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
     /// <inheritdoc />
     ///
     /// This name is load-bearing in three places at once and they all have to agree:
-    /// it is the export filename (<c>MapData/backrooms.json</c>), the key the server
-    /// registers the map under (<c>Game:Maps</c>), and what
+    /// it is the export filename (<c>MapData/backrooms.json</c>), the map id the server
+    /// registers that file under, and what
     /// <c>SessionSceneRouter.SceneByMap</c> looks up to decide that this scene is the
     /// one to open. Two of those already said "backrooms" while this said
     /// "backrooms2f", so a room made through the lobby opened this scene, built this

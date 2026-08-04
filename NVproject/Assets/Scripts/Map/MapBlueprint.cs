@@ -21,8 +21,10 @@ namespace NV.Client.Map
     public sealed class MapBlueprint
     {
         /// <summary>
-        /// Export filename, server <c>Game:Maps</c> key and <c>MapSceneTable</c> entry, all at
-        /// once. Those four have to agree; <c>backrooms2f</c> is what happens when they do not.
+        /// Export filename, baked asset name and the server's map id, all at once — the server
+        /// registers every file in its map directory under that file's name and refuses to start if
+        /// the two disagree, so these cannot drift apart silently any more. <c>backrooms2f</c> is
+        /// what the old model looked like when they did.
         /// </summary>
         public string MapName;
 

@@ -196,6 +196,10 @@ namespace NV.Client.Net.Session
         ///
         /// 프로토콜 버전을 붙이지 않는다. 서버도 이 경로에서는 그것을 요구하지 않는다 —
         /// 접속 전 화면을 그리는 값이고, 버전 불일치는 접속 시점에 426 으로 정확히 갈린다.
+        ///
+        /// **방 목록과 분당 예산(`RateLimit:ListPerMinute`, 30)을 나눠 쓴다.** 그래서 이것을
+        /// 주기적으로 부르지 않는다 — 한 세션에 한 번이고(`MapChoiceService` 가 캐시한다) 서버가
+        /// 바뀔 때만 다시 받는다. 팝업을 열 때마다 받으면 새로고침 예산을 팝업이 쓴다.
         public IEnumerator Maps(Action<MapListResult> done)
         {
             using var request = UnityWebRequest.Get(_baseUrl + "/maps");

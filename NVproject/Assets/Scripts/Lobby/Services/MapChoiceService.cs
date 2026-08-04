@@ -40,13 +40,28 @@ namespace NV.Client.Lobby.Services
 
         public bool HasChoices => _choices != null && _choices.Count > 0;
 
-        /// 목록을 가져온다. 이미 있으면 아무것도 하지 않는다.
+        /// 목록이 바뀌면 부를 것들. 조회가 도는 중에 팝업이 하나 더 열릴 수 있다.
+        ///
+        /// **모아 두어야 한다.** 처음에는 이미 조회 중이면 그냥 돌아갔는데, 그러면 그 사이에
+        /// 열린 팝업의 갱신 콜백이 버려져 **화면이 "맵 목록을 받는 중…" 에서 영원히 멈춘다** —
+        /// 팝업을 열고 닫고 다시 여는 것만으로 재현된다. 앞서 열린 팝업의 콜백은 이미 떼어진
+        /// 요소를 만지지만 그것은 무해하고, 버려진 콜백은 무해하지 않다.
+        private readonly List<Action> _waiting = new List<Action>();
+
+        /// 목록을 가져온다. 이미 있으면 그것으로 바로 답한다.
         ///
         /// <param name="onChanged">목록이 바뀌었을 때. 로딩이 시작될 때도 한 번 온다.</param>
         public void Ensure(Action onChanged)
         {
             if (IsLoading)
             {
+                // 돌고 있는 조회에 얹는다. 새로 시작하면 같은 응답을 두 번 받는다.
+                if (onChanged != null)
+                {
+                    _waiting.Add(onChanged);
+                    onChanged();
+                }
+
                 return;
             }
 
@@ -59,16 +74,14 @@ namespace NV.Client.Lobby.Services
             }
 
             IsLoading = true;
-            onChanged?.Invoke();
 
-            _pending = _runner.StartCoroutine(FetchRoutine(host, onChanged));
-        }
+            if (onChanged != null)
+            {
+                _waiting.Add(onChanged);
+                onChanged();
+            }
 
-        /// 다음 `Ensure` 가 다시 받도록 한다. 환경을 바꾼 뒤에 부른다.
-        public void Invalidate()
-        {
-            _choices = null;
-            _fetchedFrom = null;
+            _pending = _runner.StartCoroutine(FetchRoutine(host));
         }
 
         public void Stop()
@@ -80,9 +93,10 @@ namespace NV.Client.Lobby.Services
             }
 
             IsLoading = false;
+            _waiting.Clear();
         }
 
-        private IEnumerator FetchRoutine(string host, Action onChanged)
+        private IEnumerator FetchRoutine(string host)
         {
             var api = new RoomApi(host, NetSession.Current != null && NetSession.Current.Secure);
             var result = default(MapListResult);
@@ -100,7 +114,15 @@ namespace NV.Client.Lobby.Services
             IsLoading = false;
             _pending = null;
 
-            onChanged?.Invoke();
+            // 목록을 먼저 세우고 나서 알린다. 콜백이 `Choices` 를 읽으므로 순서가 뒤집히면
+            // 화면이 이전 목록을 그린다.
+            var waiting = _waiting.ToArray();
+            _waiting.Clear();
+
+            for (var index = 0; index < waiting.Length; index++)
+            {
+                waiting[index]();
+            }
         }
 
         // ==================================================== 마지막 선택
