@@ -491,6 +491,12 @@ namespace NV.Client.Tests
                 return grid;
             }
 
+            /// <summary>
+            /// Authored lobby text this fixture has none of, which is the normal answer for a level
+            /// that is not a baked asset. The server falls back to the map id.
+            /// </summary>
+            public MapMetaInfo BuildMeta() => null;
+
             public string DescribeExportBlocker() => null;
         }
     }

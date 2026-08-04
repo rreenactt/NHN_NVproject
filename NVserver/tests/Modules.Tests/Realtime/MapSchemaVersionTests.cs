@@ -76,6 +76,48 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(without.Hash, with.Hash);
         }
 
+        /// 로비에 보여 줄 값도 같은 규칙이다 — 읽히지만 해시를 바꾸지 않는다.
+        ///
+        /// **이 테스트가 실증하는 가정은 export 가 쓰는 JSON 모양이 서버가 읽는 모양과 같다는
+        /// 것이다.** export 는 JSON 을 손으로 쓰므로(`MapExportPipeline.AppendMeta`) 이름이나
+        /// 중첩이 어긋나면 서버는 그 블록을 조용히 `null` 로 읽고, 증상은 로비의 맵 목록에
+        /// 표시용 이름이 안 뜨는 것뿐이다.
+        [Fact]
+        public void meta_는_읽히지만_해시를_바꾸지_않는다()
+        {
+            var without = LoadJson("{ \"name\": \"v\", " + BoxesAndSpawns + " }");
+
+            var with = LoadJson(
+                "{ \"version\": 2, \"name\": \"v\", " +
+                "\"meta\": { \"displayName\": \"백룸\", \"description\": \"2층 미로\", " +
+                "\"recommendedPlayersMin\": 3, \"recommendedPlayersMax\": 6, " +
+                "\"tags\": [\"match\", \"dev\"] }, " +
+                BoxesAndSpawns + " }");
+
+            Assert.NotNull(with.Data.Meta);
+            Assert.Equal("백룸", with.Data.Meta.DisplayName);
+            Assert.Equal("2층 미로", with.Data.Meta.Description);
+            Assert.Equal(3, with.Data.Meta.RecommendedPlayersMin);
+            Assert.Equal(6, with.Data.Meta.RecommendedPlayersMax);
+            Assert.Equal(new[] { "match", "dev" }, with.Data.Meta.Tags);
+
+            Assert.Null(without.Data.Meta);
+            Assert.Equal(without.Hash, with.Hash);
+        }
+
+        /// 설명에 따옴표가 들어가도 파싱된다. export 가 이스케이프해서 쓴다.
+        [Fact]
+        public void 설명의_따옴표가_파일을_깨지_않는다()
+        {
+            var map = LoadJson(
+                "{ \"version\": 2, \"name\": \"v\", " +
+                "\"meta\": { \"displayName\": \"a \\\"b\\\" c\", \"description\": \"1\\\\2\" }, " +
+                BoxesAndSpawns + " }");
+
+            Assert.Equal("a \"b\" c", map.Data.Meta.DisplayName);
+            Assert.Equal("1\\2", map.Data.Meta.Description);
+        }
+
         /// 버전이 다르기만 해도 해시는 같다. 스키마는 지형이 아니다.
         [Fact]
         public void 버전은_해시를_바꾸지_않는다()

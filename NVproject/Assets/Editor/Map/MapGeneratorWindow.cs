@@ -351,7 +351,7 @@ namespace NV.Client.EditorTools
         private void Bake()
         {
             var generator = MapGeneratorRegistry.ForSettings(_settings);
-            var result = MapBakePipeline.Bake(_preview, generator, _writePrefab);
+            var result = MapBakePipeline.Bake(_preview, _settings, generator, _writePrefab);
 
             _statusIsError = !result.Ok;
 
@@ -517,7 +517,7 @@ namespace NV.Client.EditorTools
             // 만들지 않는다 — HideAndDontSave 라 씬이 더러워지지도, 저장되지도 않는다.
             var asset = ScriptableObject.CreateInstance<MapBakedAsset>();
             asset.hideFlags = HideFlags.HideAndDontSave;
-            asset.Fill(_preview, generator.DisplayName, string.Empty);
+            asset.Fill(_preview, _settings, generator.DisplayName, string.Empty);
 
             var host = new GameObject("__NVMapExportProbe") { hideFlags = HideFlags.HideAndDontSave };
             var source = host.AddComponent<BakedMapSource>();

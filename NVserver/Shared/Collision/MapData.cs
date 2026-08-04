@@ -36,6 +36,10 @@ namespace NV.Shared.Collision
         /// **해시에 들어가지 않는다.** 이유는 `MapSourceInfo` 에 있다.
         public MapSourceInfo Source { get; set; }
 
+        /// 사람에게 보여 줄 값(표시용 이름, 설명, 권장 인원). 없을 수 있다 — 스키마 1 파일이다.
+        /// **해시에 들어가지 않는다.** 이유는 `MapMetaInfo` 에 있다.
+        public MapMetaInfo Meta { get; set; }
+
         public bool HasGrid => Grid != null && Grid.Cells != null;
 
         public Aabb[] ToAabbArray()
@@ -70,7 +74,7 @@ namespace NV.Shared.Collision
         /// 생김" 으로만 나타난다. 이동 판정은 격자를 쓰지 않으므로 그 불일치는
         /// 걸어 다니는 동안에는 아무 신호도 내지 않는다.
         ///
-        /// **`Version` 과 `Source` 는 일부러 들어가지 않는다.** 이 값은 "클라이언트와 서버가
+        /// **`Version`·`Source`·`Meta` 는 일부러 들어가지 않는다.** 이 값은 "클라이언트와 서버가
         /// 같은 지형을 보고 있는가" 를 답해야 하고, 스키마 버전과 export 시각은 지형이 아니다.
         /// 넣으면 재-export 마다 해시가 바뀌어 대조가 뜻을 잃는다. 반대로 **지형에 영향을 주는
         /// 필드를 새로 넣는다면 반드시 여기에도 넣어야 한다** — 빼면 지형이 다른데 해시가 맞고,

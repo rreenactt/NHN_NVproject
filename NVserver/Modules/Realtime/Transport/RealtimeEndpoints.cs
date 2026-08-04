@@ -153,7 +153,11 @@ namespace NV.Realtime.Transport
         ///
         /// 판정은 아니다. `/ws` 가 같은 검사를 다시 하며, 이 응답과 실제 접속 사이에
         /// 정원이 찰 수 있다.
-        private static IResult GetRoom(string code, HttpRequest request, RoomRegistry rooms)
+        private static IResult GetRoom(
+            string code,
+            HttpRequest request,
+            RoomRegistry rooms,
+            MapListPayload maps)
         {
             if (!TryReadVersion(request.Query, out var version) || version != ProtocolInfo.Version)
             {
@@ -194,6 +198,7 @@ namespace NV.Realtime.Transport
             {
                 Code = summary.RoomId,
                 MapName = summary.MapName,
+                MapDisplayName = maps.DisplayNameOf(summary.MapName),
                 MapHash = summary.MapHash,
                 Phase = (byte)summary.Phase,
                 PlayerCount = summary.PlayerCount,
@@ -230,7 +235,7 @@ namespace NV.Realtime.Transport
         /// 대신 **요청 속도 제한이 붙었다.** 플래그가 사라지면 이 경로는 상시 열린 공개
         /// 엔드포인트가 되는데, 지금까지 제한이 없었던 것은 개발 설정에서만 열렸기
         /// 때문이다. 그 전제가 바뀌었으므로 제한이 그 자리를 대신한다.
-        private static IResult ListRooms(RoomRegistry rooms)
+        private static IResult ListRooms(RoomRegistry rooms, MapListPayload maps)
         {
             var summaries = rooms.ListPublicRooms();
             var body = new RoomInfoResponse[summaries.Count];
@@ -242,6 +247,7 @@ namespace NV.Realtime.Transport
                 {
                     Code = summary.RoomId,
                     MapName = summary.MapName,
+                    MapDisplayName = maps.DisplayNameOf(summary.MapName),
                     MapHash = summary.MapHash,
                     Phase = (byte)summary.Phase,
                     PlayerCount = summary.PlayerCount,

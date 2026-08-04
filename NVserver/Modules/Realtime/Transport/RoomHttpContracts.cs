@@ -28,6 +28,10 @@ namespace NV.Realtime.Transport
         public string Map { get; set; } = string.Empty;
 
         /// 서버가 로드한 맵의 이름. 클라이언트가 어느 씬을 열지 이것으로 정한다.
+        ///
+        /// `Map` 과 같은 값이다 — 맵 id 가 맵 이름이므로(`MapCatalogLoader`) 둘이 갈릴 수 없다.
+        /// 그래도 둘 다 싣는 이유는 클라이언트가 이 두 값을 서로 다른 이유로 읽기 때문이다:
+        /// `Map` 은 "무엇을 요청했는가" 의 답이고 `MapName` 은 "어느 씬을 여는가" 의 근거다.
         public string MapName { get; set; } = string.Empty;
 
         public uint MapHash { get; set; }
@@ -51,6 +55,12 @@ namespace NV.Realtime.Transport
         public string Code { get; set; } = string.Empty;
 
         public string MapName { get; set; } = string.Empty;
+
+        /// 그 맵의 표시용 이름. 맵이 적지 않았으면 `MapName` 과 같다.
+        ///
+        /// **판정에 쓰지 않는다.** 씬을 정하는 것은 계속 `MapName` 이다 — 표시용 이름은 사람이
+        /// 고치는 값이고, 그것으로 라우팅하면 이름을 다듬는 것이 방을 열 수 없게 만든다.
+        public string MapDisplayName { get; set; } = string.Empty;
 
         public uint MapHash { get; set; }
 

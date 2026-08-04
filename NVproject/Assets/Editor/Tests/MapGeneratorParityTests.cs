@@ -338,7 +338,9 @@ namespace NV.Client.Tests
             Assert.IsNull(blueprint.Blocker, "이 설정으로는 구울 수 없다: " + blueprint.Blocker);
 
             var asset = ScriptableObject.CreateInstance<MapBakedAsset>();
-            asset.Fill(blueprint, generatorName, "1970-01-01T00:00:00Z");
+            // 설정을 넘기지 않는다 — 이 검사가 보는 것은 지형이고, 로비에 보여 줄 값은
+            // 해시에도 `boxes`/`spawns` 비교에도 들어가지 않는다.
+            asset.Fill(blueprint, null, generatorName, "1970-01-01T00:00:00Z");
             _spawned.Add(asset);
 
             var host = new GameObject("BakedMapSourceUnderTest");

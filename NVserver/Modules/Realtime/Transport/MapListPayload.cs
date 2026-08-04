@@ -58,16 +58,43 @@ namespace NV.Realtime.Transport
             return list;
         }
 
+        /// 이 맵 id 의 표시용 이름. 모르는 id 는 그 문자열을 그대로 돌려준다.
+        ///
+        /// 방 목록과 참가 전 조회가 이것을 쓴다. 룸은 `WorldMap` 만 들고 살고 그 안에 meta 가
+        /// 있지만, 그 값을 꺼내는 식을 세 엔드포인트에 각각 두면 대신하는 규칙(meta 가 없으면
+        /// id)이 세 곳에 생긴다.
+        public string DisplayNameOf(string? mapId)
+        {
+            if (string.IsNullOrEmpty(mapId))
+            {
+                return string.Empty;
+            }
+
+            for (var index = 0; index < Maps.Length; index++)
+            {
+                if (string.Equals(Maps[index].Id, mapId, StringComparison.Ordinal))
+                {
+                    return Maps[index].DisplayName;
+                }
+            }
+
+            return mapId!;
+        }
+
         private static MapInfoResponse Describe(RoomMaps maps, string id)
         {
             var map = maps.ByMap[id];
             var grid = map.Data?.Grid;
+            var meta = map.Data?.Meta;
 
             var info = new MapInfoResponse
             {
                 Id = id,
-                DisplayName = id,
-                Description = string.Empty,
+
+                // meta 가 없는 맵(스키마 1)은 id 로 답한다. 빈 문자열을 주면 화면에 빈 줄이
+                // 생기고, 그것은 "이름 없는 맵" 이 아니라 "화면이 고장난 것" 으로 읽힌다.
+                DisplayName = Text(meta?.DisplayName, id),
+                Description = Text(meta?.Description, string.Empty),
                 Hash = map.Hash,
                 SchemaVersion = MapSchema.Effective(map.Data == null ? 0 : map.Data.Version),
                 IsDefault = string.Equals(maps.DefaultId, id, StringComparison.Ordinal),
@@ -80,8 +107,15 @@ namespace NV.Realtime.Transport
                 SpawnCount = map.SpawnCount,
                 HasGrid = map.HasGrid,
 
-                RecommendedPlayersMin = RealtimeConstants.Rooms.MinPlayersToStart,
-                RecommendedPlayersMax = RealtimeConstants.Rooms.MaxPlayers,
+                // **맵이 적지 않았으면 서버의 값이다.** 0 을 그대로 내주면 화면이 "0–0명" 을
+                // 적는다. 맵 파일이 정원을 정하지도 않는다 — 정원과 최소 시작 인원은 서버가
+                // 판정하는 값이고, 편집할 수 있는 파일이 규칙을 정하면 안 된다.
+                RecommendedPlayersMin = Count(
+                    meta?.RecommendedPlayersMin, RealtimeConstants.Rooms.MinPlayersToStart),
+                RecommendedPlayersMax = Count(
+                    meta?.RecommendedPlayersMax, RealtimeConstants.Rooms.MaxPlayers),
+
+                Tags = meta?.Tags ?? Array.Empty<string>(),
             };
 
             if (grid != null)
@@ -93,6 +127,17 @@ namespace NV.Realtime.Transport
             }
 
             return info;
+        }
+
+        private static string Text(string? value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value) ? fallback : value!;
+        }
+
+        /// 0 과 음수는 "적지 않았다" 다. 맵 파일은 손으로도 고칠 수 있으므로 음수가 올 수 있다.
+        private static int Count(int? value, int fallback)
+        {
+            return value == null || value.Value <= 0 ? fallback : value.Value;
         }
 
         /// 본문에서 만든다. 맵 해시를 모아 만들지 않는다 — 그러면 표시용 필드가 바뀌었을 때

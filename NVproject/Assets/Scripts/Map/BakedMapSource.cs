@@ -72,6 +72,9 @@ namespace NV.Client.Map
         public MapGridData BuildGrid() => asset == null ? null : asset.BuildGrid();
 
         /// <inheritdoc />
+        public MapMetaInfo BuildMeta() => asset == null ? null : asset.BuildMeta();
+
+        /// <inheritdoc />
         ///
         /// <remarks>
         /// A baked level reproduces by definition — it is not generated again, it is read. The one

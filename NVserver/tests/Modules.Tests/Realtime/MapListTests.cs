@@ -130,6 +130,78 @@ namespace NV.Modules.Tests.Realtime
 
             Assert.Equal("alpha", payload.Maps[0].DisplayName);
             Assert.Equal(string.Empty, payload.Maps[0].Description);
+            Assert.Equal("alpha", payload.DisplayNameOf("alpha"));
+        }
+
+        // ==================================================== meta
+
+        [Fact]
+        public void meta_가_있으면_그것을_보여_준다()
+        {
+            var payload = new MapListPayload(WithMeta(new MapMetaInfo
+            {
+                DisplayName = "백룸",
+                Description = "2층 미로",
+                RecommendedPlayersMin = 3,
+                RecommendedPlayersMax = 6,
+                Tags = new[] { "match" },
+            }));
+
+            Assert.Equal("백룸", payload.Maps[0].DisplayName);
+            Assert.Equal("2층 미로", payload.Maps[0].Description);
+            Assert.Equal(3, payload.Maps[0].RecommendedPlayersMin);
+            Assert.Equal(6, payload.Maps[0].RecommendedPlayersMax);
+            Assert.Equal(new[] { "match" }, payload.Maps[0].Tags);
+            Assert.Equal("백룸", payload.DisplayNameOf("alpha"));
+        }
+
+        /// 0 은 "적지 않았다" 다. 그대로 내주면 화면이 "0–0명" 을 적는다. 음수도 같다 —
+        /// 맵 파일은 손으로도 고칠 수 있다.
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        public void 권장_인원을_적지_않았으면_서버의_값이다(int authored)
+        {
+            var payload = new MapListPayload(WithMeta(new MapMetaInfo
+            {
+                DisplayName = "백룸",
+                RecommendedPlayersMin = authored,
+                RecommendedPlayersMax = authored,
+            }));
+
+            Assert.Equal(RealtimeConstants.Rooms.MinPlayersToStart, payload.Maps[0].RecommendedPlayersMin);
+            Assert.Equal(RealtimeConstants.Rooms.MaxPlayers, payload.Maps[0].RecommendedPlayersMax);
+        }
+
+        /// 빈 문자열을 적은 것도 적지 않은 것이다. 그러지 않으면 화면에 빈 줄이 남는다.
+        [Fact]
+        public void 표시용_이름이_비어_있으면_id_다()
+        {
+            var payload = new MapListPayload(WithMeta(new MapMetaInfo { DisplayName = "  " }));
+
+            Assert.Equal("alpha", payload.Maps[0].DisplayName);
+        }
+
+        /// **이 테스트가 지키는 규칙이 meta 를 도입할 수 있게 한 근거다.** 표시용 값이 해시에
+        /// 들어가면 이름을 다듬는 것이 맵 해시를 바꾸고, 그러면 그 해시가 "클라이언트와 서버가
+        /// 같은 지형을 보고 있는가" 를 답하는 기능을 잃는다.
+        [Fact]
+        public void meta_는_맵_해시를_바꾸지_않는다()
+        {
+            var without = new WorldMap(Data("alpha")).Hash;
+
+            var data = Data("alpha");
+            data.Version = MapSchema.Current;
+            data.Meta = new MapMetaInfo
+            {
+                DisplayName = "백룸",
+                Description = "무엇이든",
+                RecommendedPlayersMin = 3,
+                RecommendedPlayersMax = 6,
+                Tags = new[] { "match", "dev" },
+            };
+
+            Assert.Equal(without, new WorldMap(data).Hash);
         }
 
         [Fact]
@@ -179,9 +251,29 @@ namespace NV.Modules.Tests.Realtime
                 new Dictionary<string, string>(StringComparer.Ordinal) { ["default"] = "alpha" });
         }
 
+        /// meta 를 실은 맵 하나. `default` 가 그것을 가리킨다.
+        private static RoomMaps WithMeta(MapMetaInfo meta)
+        {
+            var data = Data("alpha");
+            data.Version = MapSchema.Current;
+            data.Meta = meta;
+
+            return new RoomMaps(
+                new Dictionary<string, WorldMap>(StringComparer.Ordinal)
+                {
+                    ["alpha"] = new WorldMap(data),
+                },
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["default"] = "alpha" });
+        }
+
         private static WorldMap Map(string name)
         {
-            return new WorldMap(new MapData
+            return new WorldMap(Data(name));
+        }
+
+        private static MapData Data(string name)
+        {
+            return new MapData
             {
                 Name = name,
                 Boxes = new[]
@@ -189,7 +281,7 @@ namespace NV.Modules.Tests.Realtime
                     new MapBox { MinX = -8f, MinY = -1f, MinZ = -8f, MaxX = 8f, MaxY = 0f, MaxZ = 8f },
                 },
                 Spawns = new[] { new MapSpawn { X = 0f, Y = 0f, Z = 0f, Yaw = 0f } },
-            });
+            };
         }
     }
 }

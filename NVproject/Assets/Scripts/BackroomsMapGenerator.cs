@@ -325,6 +325,15 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
     /// over them), yet they are exactly where a route crosses between storeys, so a path solver
     /// needs them marked even though nothing stands there.
     /// </remarks>
+    /// <inheritdoc />
+    ///
+    /// <remarks>
+    /// A runtime generator has nowhere to keep authored lobby text — <c>MapBakedAsset</c> is that
+    /// place, and this component is the path that predates it. The server falls back to the map id
+    /// and its own room limits.
+    /// </remarks>
+    public MapMetaInfo BuildMeta() => null;
+
     public MapGridData BuildGrid()
     {
         EnsureGrid();

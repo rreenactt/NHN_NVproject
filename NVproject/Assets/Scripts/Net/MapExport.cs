@@ -98,6 +98,12 @@ namespace NV.Client.Net
                 Name = source.MapName,
                 Boxes = new MapBox[boxes.Count],
                 Spawns = new MapSpawn[spawns.Count],
+
+                // **출처(`Source`)와 달리 여기서 붙인다.** 출처는 export 라는 *사건* 에 대한
+                // 값이므로 파일을 쓰는 쪽이 찍지만, 이것은 맵이 원래 가진 값이다. 런타임이
+                // 만든 `MapData` 에도 들어 있어야 파일과 런타임의 자료가 같은 모양이 된다.
+                // 해시에는 들어가지 않으므로 해시 대조에는 아무 영향이 없다.
+                Meta = source.BuildMeta(),
             };
 
             for (var index = 0; index < boxes.Count; index++)

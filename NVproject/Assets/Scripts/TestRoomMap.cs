@@ -109,6 +109,15 @@ public class TestRoomMap : MonoBehaviour, INetworkMapSource
     /// <inheritdoc />
     ///
     /// <remarks>
+    /// A runtime level has nowhere to keep authored text — the baked asset is that place. The
+    /// server falls back to the map id and its own room limits, which is exactly what this map
+    /// would have said anyway.
+    /// </remarks>
+    public MapMetaInfo BuildMeta() => null;
+
+    /// <inheritdoc />
+    ///
+    /// <remarks>
     /// Always reproducible. Every box and spawn here is derived from serialized fields with no
     /// random draw anywhere, so two exports of the same scene produce the same bytes.
     /// </remarks>

@@ -31,6 +31,22 @@ namespace NV.Client.Map
                  "describe terrain that will never be built again.")]
         public bool randomizeSeed;
 
+        [Header("Shown in the lobby — never used for judgement")]
+        [Tooltip("Human-readable name for the create-room list. Blank means the lobby shows mapName.")]
+        public string displayName = string.Empty;
+
+        [Tooltip("One line under the name in the create-room list.")]
+        public string description = string.Empty;
+
+        [Tooltip("Advice printed as \"2-8명\". 0 means the server's own min/capacity. A map does not " +
+                 "get to set the room size — that is the server's judgement.")]
+        public int recommendedPlayersMin;
+
+        public int recommendedPlayersMax;
+
+        [Tooltip("Free-form labels the lobby may filter on, e.g. match, dev, small.")]
+        public string[] tags = new string[0];
+
         /// <summary>
         /// Why a level made from these settings would not reproduce, or <c>null</c> if it would.
         ///

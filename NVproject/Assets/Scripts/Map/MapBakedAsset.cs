@@ -44,12 +44,24 @@ namespace NV.Client.Map
         [SerializeField] private float gridOriginZ;
         [SerializeField] private byte[] gridCells = new byte[0];
 
+        [Header("Shown in the lobby — never used for judgement")]
+        [SerializeField] private string displayName = string.Empty;
+        [SerializeField] private string description = string.Empty;
+        [SerializeField] private int recommendedPlayersMin;
+        [SerializeField] private int recommendedPlayersMax;
+        [SerializeField] private string[] tags = new string[0];
+
         [Header("Provenance — for people, never for judgement")]
         [SerializeField] private string generator;
         [SerializeField] private int usedSeed;
         [SerializeField] private string bakedAtUtc;
 
         public string MapName => mapName;
+
+        /// <summary>What the lobby shows. Falls back to <see cref="MapName"/>.</summary>
+        public string DisplayName => string.IsNullOrEmpty(displayName) ? mapName : displayName;
+
+        public string Description => description ?? string.Empty;
 
         public IReadOnlyList<Bounds> Boxes => boxes;
 
@@ -106,15 +118,57 @@ namespace NV.Client.Map
         }
 
         /// <summary>
+        /// What the lobby shows for this map, or <c>null</c> if nothing was authored.
+        ///
+        /// **Returning null rather than a struct of empty strings matters.** The export writes this
+        /// block into the map file, and a block full of blanks would make the server prefer those
+        /// blanks over the fallback it computes from the map itself — the lobby would then show an
+        /// unnamed row instead of the map's id.
+        /// </summary>
+        public MapMetaInfo BuildMeta()
+        {
+            var authored = !string.IsNullOrEmpty(displayName)
+                || !string.IsNullOrEmpty(description)
+                || recommendedPlayersMin > 0
+                || recommendedPlayersMax > 0
+                || (tags != null && tags.Length > 0);
+
+            if (!authored) return null;
+
+            return new MapMetaInfo
+            {
+                DisplayName = displayName ?? string.Empty,
+                Description = description ?? string.Empty,
+                RecommendedPlayersMin = recommendedPlayersMin,
+                RecommendedPlayersMax = recommendedPlayersMax,
+                Tags = tags ?? new string[0],
+            };
+        }
+
+        /// <summary>
         /// Overwrites this asset from a blueprint. The bake pipeline is the only caller — an asset
         /// that anything else could write would stop being the single description of the level.
+        ///
+        /// <paramref name="settings"/> carries the authored lobby text. It is passed rather than
+        /// read off the blueprint because a blueprint is the *solved geometry* — putting a display
+        /// name through the solver would make every generator copy a value it never reads.
         /// </summary>
-        public void Fill(MapBlueprint blueprint, string generatorName, string bakedAt)
+        public void Fill(
+            MapBlueprint blueprint, MapGeneratorSettings settings, string generatorName, string bakedAt)
         {
             mapName = blueprint.MapName;
             generator = generatorName;
             usedSeed = blueprint.UsedSeed;
             bakedAtUtc = bakedAt;
+
+            if (settings != null)
+            {
+                displayName = settings.displayName ?? string.Empty;
+                description = settings.description ?? string.Empty;
+                recommendedPlayersMin = settings.recommendedPlayersMin;
+                recommendedPlayersMax = settings.recommendedPlayersMax;
+                tags = settings.tags ?? new string[0];
+            }
 
             var collected = new List<Bounds>(blueprint.Pieces.Count);
             blueprint.CollectCollisionBoxes(collected);

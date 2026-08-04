@@ -207,7 +207,8 @@ namespace NV.Client.EditorTools
         /// export 도구의 버전. 바이트가 달라지는 변경을 할 때 올린다.
         ///
         /// 1 = 창과 검사가 붙고 스키마 버전·출처가 실리기 시작한 버전.
-        public const int ExporterVersion = 1;
+        /// 2 = 로비에 보여 줄 값(`meta`)이 실리기 시작한 버전.
+        public const int ExporterVersion = 2;
 
         /// 격자 보고를 오류로 옮긴다.
         ///
@@ -331,6 +332,7 @@ namespace NV.Client.EditorTools
                 .Append(",\n  \"name\": \"").Append(data.Name).Append("\",\n");
 
             AppendSource(text, data.Source);
+            AppendMeta(text, data.Meta);
 
             text.Append("  \"boxes\": [\n");
 
@@ -389,6 +391,76 @@ namespace NV.Client.EditorTools
                 .Append("\", \"exportedAtUtc\": \"").Append(source.ExportedAtUtc)
                 .Append("\", \"exporterVersion\": ").Append(source.ExporterVersion)
                 .Append(" },\n");
+        }
+
+        /// 로비에 보여 줄 값을 쓴다. 없으면 아무것도 쓰지 않는다 — 서버가 그때 맵 자체에서
+        /// 합성한다(표시용 이름은 맵 id).
+        ///
+        /// **여기 들어가는 문자열은 사람이 적는다.** 그래서 `AppendSource` 와 달리 이스케이프가
+        /// 필요하다 — 설명에 따옴표를 하나 넣는 것으로 맵 파일이 파싱되지 않게 되고, 증상은
+        /// "export 한 뒤로 서버가 안 뜬다" 가 된다.
+        ///
+        /// **비교(`ComparisonKey`)에서 빼지 않는다.** 출처의 시각은 매번 달라지므로 빼지만,
+        /// 이 값은 사람이 고쳤을 때만 달라지고 그때는 파일을 다시 쓰는 것이 맞다.
+        private static void AppendMeta(StringBuilder text, MapMetaInfo meta)
+        {
+            if (meta == null) return;
+
+            text.Append("  \"meta\": {\n")
+                .Append("    \"displayName\": ").Append(Quoted(meta.DisplayName)).Append(",\n")
+                .Append("    \"description\": ").Append(Quoted(meta.Description)).Append(",\n")
+                .Append("    \"recommendedPlayersMin\": ").Append(meta.RecommendedPlayersMin).Append(",\n")
+                .Append("    \"recommendedPlayersMax\": ").Append(meta.RecommendedPlayersMax).Append(",\n")
+                .Append("    \"tags\": [");
+
+            var tags = meta.Tags ?? new string[0];
+
+            for (var index = 0; index < tags.Length; index++)
+            {
+                if (index > 0) text.Append(", ");
+                text.Append(Quoted(tags[index]));
+            }
+
+            text.Append("]\n  },\n");
+        }
+
+        /// JSON 문자열 하나. `null` 은 빈 문자열로 쓴다.
+        ///
+        /// 이스케이프하는 것은 역슬래시·따옴표와 제어문자다. 줄바꿈은 `\n` 으로 쓴다 —
+        /// 그대로 넣으면 문자열 리터럴이 줄을 넘어 파싱이 깨지고, 게다가 `ComparisonKey` 가
+        /// 줄 단위로 도는 함수라 비교까지 어긋난다.
+        private static string Quoted(string value)
+        {
+            var text = new StringBuilder((value == null ? 0 : value.Length) + 2);
+            text.Append('"');
+
+            for (var index = 0; value != null && index < value.Length; index++)
+            {
+                var character = value[index];
+
+                switch (character)
+                {
+                    case '\\': text.Append("\\\\"); break;
+                    case '"': text.Append("\\\""); break;
+                    case '\n': text.Append("\\n"); break;
+                    case '\r': text.Append("\\r"); break;
+                    case '\t': text.Append("\\t"); break;
+                    default:
+                        if (character < ' ')
+                        {
+                            text.Append("\\u").Append(((int)character).ToString("x4", CultureInfo.InvariantCulture));
+                        }
+                        else
+                        {
+                            text.Append(character);
+                        }
+
+                        break;
+                }
+            }
+
+            text.Append('"');
+            return text.ToString();
         }
 
         /// 격자를 쓴다. 없으면 아무것도 쓰지 않는다 — 필드가 없으면 서버가 `null` 로 읽고,

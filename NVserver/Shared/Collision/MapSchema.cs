@@ -13,7 +13,9 @@ namespace NV.Shared.Collision
     public static class MapSchema
     {
         /// 지금 export 가 쓰는 버전.
-        public const int Current = 1;
+        ///
+        /// 2 = `meta`(표시용 이름·설명·권장 인원)가 실리기 시작한 버전.
+        public const int Current = 2;
 
         /// 버전 필드가 없는 파일. 버전을 도입하기 전의 파일이 전부 이것이다.
         ///
@@ -61,5 +63,44 @@ namespace NV.Shared.Collision
 
         /// export 를 돌린 도구의 버전. 도구가 바뀌어 바이트가 달라졌을 때 그것을 구별한다.
         public int ExporterVersion { get; set; }
+    }
+
+    /// 사람에게 보여 줄 값. **판정에 쓰이지 않는다.**
+    ///
+    /// 이것이 맵 파일 안에 있는 이유는 맵 목록 화면의 출처가 하나여야 하기 때문이다. 예전에는
+    /// 표시용 이름과 설명이 **클라이언트 코드의 배열**에 있었고(`CreateRoomPopup`), 서버의
+    /// 등록 목록과 손으로 맞춰야 했다 — 어긋나면 고를 수 있는데 만들 수 없는 맵이 된다.
+    /// 지형과 같은 파일에 실으면 그 둘이 갈릴 자리가 없다.
+    ///
+    /// **사이드카 파일(`{name}.meta.json`)로 두지 않는다.** export 는 한 파일을 원자적으로
+    /// 쓰므로 파일이 하나면 반쯤 갱신된 상태가 생기지 않는다. 둘이면 한쪽만 오래된 상태가
+    /// 생기고, 그것을 감지할 방법이 없다.
+    ///
+    /// **해시에 들어가지 않는다.** `Source` 와 같은 이유다 — 맵 해시는 "클라이언트와 서버가 같은
+    /// 지형을 보고 있는가" 를 답해야 하고 표시용 문장은 지형이 아니다. 그래서 이 블록을 도입하는
+    /// 것만으로 기존 맵의 해시가 바뀌지 않고, 재-export 가 강제되지 않는다.
+    ///
+    /// **없을 수 있다.** 스키마 1 로 만들어진 파일에는 없고, 그것을 거절하지 않는다 — 서버가
+    /// 맵 자체에서 합성한다(이름은 맵 id, 크기는 격자). `MapSchema.Unversioned` 를 받아 주는
+    /// 것과 같은 논리다.
+    public sealed class MapMetaInfo
+    {
+        /// 사람이 읽는 이름. 비어 있으면 맵 id 로 대신한다.
+        public string DisplayName { get; set; }
+
+        /// 한 줄 설명. 비어 있을 수 있다.
+        public string Description { get; set; }
+
+        /// 권장 인원. **0 은 "적지 않았다" 이고 서버의 기본값으로 대신한다.**
+        ///
+        /// 맵이 정원을 정하지 않는다. 정원과 최소 시작 인원은 서버가 판정하는 값이고
+        /// (`RealtimeConstants.Rooms`), 맵 파일이 그것을 말하면 클라이언트가 편집할 수 있는
+        /// 파일이 규칙을 정하게 된다. 이 값은 화면에 "2–8명" 을 적기 위한 조언이다.
+        public int RecommendedPlayersMin { get; set; }
+
+        public int RecommendedPlayersMax { get; set; }
+
+        /// 분류용 꼬리표. `match`, `dev` 같은 것이고 화면이 걸러 보여 줄 때 쓴다.
+        public string[] Tags { get; set; }
     }
 }
