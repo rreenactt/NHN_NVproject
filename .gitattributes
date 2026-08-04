@@ -1,0 +1,11 @@
+# 맵 콜리전 파일은 줄바꿈을 LF 로 고정한다.
+#
+# Unity 의 export 가 "\n" 으로 쓰고, export 는 쓰기 전에 지금 파일과 텍스트를 비교해 내용이
+# 같으면 쓰지 않는다. core.autocrlf 가 켜진 클론에서 체크아웃이 CRLF 를 돌려주면 그 비교가
+# 영구히 "다르다" 가 되고, 매번 다시 쓰면서 다시 LF 로 쓰므로 git 이 파일 전체를 변경으로
+# 보여 준다 — 다시 쓰지 않으려고 만든 장치가 오히려 매번 전체 diff 를 만든다.
+NVserver/MapData/*.json text eol=lf
+
+# Unity 의 .meta 도 같은 이유로 고정한다. Unity 가 LF 로 쓰고, CRLF 로 돌아오면 에디터를
+# 열기만 해도 전부 변경으로 잡힌다.
+*.meta text eol=lf
