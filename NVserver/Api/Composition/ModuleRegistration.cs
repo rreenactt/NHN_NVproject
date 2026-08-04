@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using NV.Infrastructure.FileSystem;
 using NV.Realtime;
 using NV.Realtime.Contracts;
@@ -17,22 +18,29 @@ namespace NV.Api.Composition
     /// 여기서는 AddXxx / MapXxx 를 부르고, 모듈이 만들지 않는 것만 준비한다.
     internal static class ModuleRegistration
     {
-        /// 등록된 맵. `Game:Maps:{맵 id}` 가 그 맵의 파일이다.
+        /// 맵이 사는 디렉터리. **여기 있는 `*.json` 전부가 등록된 맵이다.**
         ///
-        /// 키가 룸 id 가 아니라 맵 id 다. 룸은 초대 코드로 만들어지므로 설정 파일이
-        /// 룸 id 를 미리 알 수 없고, 룸 id 로 맵을 찾는 구조에서는 모든 초대 코드
-        /// 방이 조용히 기본 맵으로 열린다. 룸을 만들 때 맵 id 를 받는다.
+        /// 예전에는 `Game:Maps` 에 한 줄을 적는 것이 등록이었고, 그것을 빠뜨리면 export 한
+        /// 맵으로 방을 만들 수 없었다 — 증상은 `400 unknownMap` 이고, export 도구는 그것을
+        /// 경고할 수만 있었다(에디터가 서버 설정을 고치는 것은 되돌릴 자리가 없다).
+        /// 이제 파일을 놓는 것이 등록이다.
+        private const string MapDirectoryKey = "Game:MapDirectory";
+
+        /// 별칭. `Game:Maps:{별칭} = {맵 id}` 다. **등록이 아니라 이름표다.**
+        ///
+        /// 값이 `.json` 으로 끝나면 예전처럼 경로로 읽는다 — 디렉터리 밖의 맵을 하나 더
+        /// 등록하는 경로이고, 옛 설정 파일이 그 형태다.
         private const string MapsKey = "Game:Maps";
 
         /// 미리 열어 두는 룸. `Game:StaticRooms:{룸 id}` 가 그 룸의 맵 id 다.
         private const string StaticRoomsKey = "Game:StaticRooms";
 
-        /// 단일 맵으로 쓸 때의 하위 호환 키.
+        /// 단일 맵으로 쓸 때의 하위 호환 키. `default` 별칭의 대상으로 읽는다.
         private const string LegacyMapPathKey = "Game:MapPath";
 
-        /// 클라이언트가 실제로 그리는 레벨이다. Unity 의
-        /// Tools ▸ NV ▸ Map ▸ Export Map Collision 이 이 파일을 만든다.
-        private const string DefaultMapPath = "../MapData/backrooms.json";
+        /// 클라이언트가 실제로 그리는 레벨이 사는 곳이다. Unity 의
+        /// Tools ▸ NV ▸ Map ▸ Export Map Collision 이 이 디렉터리에 파일을 만든다.
+        private const string DefaultMapDirectory = "../MapData";
 
         /// 브라우저에서 방 만들기·조회를 호출할 수 있게 하는 정책 이름.
         public const string CorsPolicy = "nv-web";
@@ -206,6 +214,10 @@ namespace NV.Api.Composition
         /// 맵도 정상 로드되고 이동 판정도 정상이라, 없는 것은 "매치에 열쇠도 문도 생기지
         /// 않는다" 로만 드러난다.
         ///
+        /// **맵 이름을 따로 찍지 않는다.** id 가 곧 이름이고(`MapCatalogLoader` 가 그것을
+        /// 검사한다) 두 번 찍으면 다음에 한쪽만 고치게 된다. 대신 별칭을 찍는다 — 그쪽이
+        /// 이제 "이 맵을 다른 이름으로도 부를 수 있는가" 에 답하는 값이다.
+        ///
         /// `AddModules` 가 아니라 여기서 하는 이유는 로거다 — 맵 로드는 컨테이너를 만드는
         /// 중에 일어나고 그 시점에는 아직 로거가 없다.
         public static WebApplication LogLoadedMaps(this WebApplication app)
@@ -221,9 +233,9 @@ namespace NV.Api.Composition
                     : "격자 없음";
 
                 app.Logger.LogInformation(
-                    "맵 로드: id={MapId} 이름={MapName} 박스={BoxCount} 스폰={SpawnCount} {Grid} 해시={MapHash:X8}",
+                    "맵 로드: id={MapId}{Aliases} 박스={BoxCount} 스폰={SpawnCount} {Grid} 해시={MapHash:X8}",
                     pair.Key,
-                    map.Name,
+                    DescribeAliases(maps, pair.Key),
                     map.Collision.BoxCount,
                     map.SpawnCount,
                     grid,
@@ -233,6 +245,33 @@ namespace NV.Api.Composition
             return app;
         }
 
+        /// 이 맵을 가리키는 별칭들. 없으면 빈 문자열.
+        ///
+        /// **찍어야 하는 값이다.** `default` 가 어느 맵을 가리키는지는 설정 세 곳(디렉터리의
+        /// 파일, `Game:Maps`, 하위 호환 키)이 합쳐져 정해지고, 맵을 지정하지 않은 요청 전부가
+        /// 그 답으로 열린다.
+        private static string DescribeAliases(RoomMaps maps, string mapId)
+        {
+            var names = new List<string>();
+
+            foreach (var pair in maps.Aliases)
+            {
+                if (string.Equals(pair.Value, mapId, StringComparison.Ordinal))
+                {
+                    names.Add(pair.Key);
+                }
+            }
+
+            if (names.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            names.Sort(StringComparer.Ordinal);
+
+            return $"(별칭 {string.Join(", ", names)})";
+        }
+
         public static WebApplication MapModules(this WebApplication app)
         {
             app.MapRealtime();
@@ -240,36 +279,91 @@ namespace NV.Api.Composition
             return app;
         }
 
-        /// 설정에 적힌 맵을 전부 읽는다.
+        /// 맵 디렉터리를 훑고 설정의 별칭을 얹는다.
         ///
         /// 하나라도 못 읽으면 기동을 멈춘다. 빈 콜리전이나 없는 맵으로 조용히 올라가면
-        /// 플레이어가 지형을 통과하고, 증상이 클라이언트 버그처럼 보인다.
+        /// 플레이어가 지형을 통과하고, 증상이 클라이언트 버그처럼 보인다. **디렉터리를 훑게 된
+        /// 뒤로는 그 판단이 한 가지를 더 뜻한다** — 반쯤 쓰인 실험용 파일을 그 폴더에 두면
+        /// 서버가 뜨지 않는다. 그래도 조용히 건너뛰지 않는다. 그 폴더의 파일은 사고가 아니라
+        /// 누군가 export 를 돌린 결과이고, export 는 원자적으로 쓰므로(`MapExportPipeline`)
+        /// 정상 경로에서 반쯤 쓰인 파일이 생기지 않는다.
         ///
         /// `GetChildren()` 으로 읽는다. 사전 바인딩(`Get&lt;Dictionary&gt;`)을 쓰면 키 대소문자
         /// 처리가 설정 제공자에 맡겨지는데, 맵 id 는 소문자만 쓰므로 원문 그대로 받아야 한다.
         private static RoomMaps LoadMaps(IConfiguration configuration)
         {
-            var section = configuration.GetSection(MapsKey);
-            var byMapId = new Dictionary<string, WorldMap>(StringComparer.Ordinal);
+            var directory = configuration[MapDirectoryKey];
 
-            foreach (var child in section.GetChildren())
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                directory = DefaultMapDirectory;
+            }
+
+            var catalog = MapCatalogLoader.Load(directory, ReadDeclarations(configuration));
+            var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            foreach (var pair in catalog.Aliases)
+            {
+                aliases[pair.Key] = pair.Value;
+            }
+
+            EnsureDefaultAlias(catalog, aliases);
+
+            return new RoomMaps(catalog.Maps, aliases);
+        }
+
+        /// `Game:Maps` 와 하위 호환 키를 한 사전으로 모은다.
+        private static Dictionary<string, string> ReadDeclarations(IConfiguration configuration)
+        {
+            var declared = new Dictionary<string, string>(StringComparer.Ordinal);
+            var legacyPath = configuration[LegacyMapPathKey];
+
+            if (!string.IsNullOrWhiteSpace(legacyPath))
+            {
+                // 단일 맵 설정이다. 그 파일이 곧 기본 맵이므로 `default` 의 대상으로 읽는다.
+                declared[RoomMaps.DefaultMapId] = legacyPath!;
+            }
+
+            foreach (var child in configuration.GetSection(MapsKey).GetChildren())
             {
                 if (string.IsNullOrWhiteSpace(child.Value))
                 {
-                    throw new InvalidOperationException($"{MapsKey}:{child.Key} 에 맵 경로가 없다.");
+                    throw new InvalidOperationException($"{MapsKey}:{child.Key} 에 값이 없다.");
                 }
 
-                byMapId[child.Key] = MapLoader.Load(child.Value);
+                declared[child.Key] = child.Value!;
             }
 
-            if (!byMapId.ContainsKey(RoomMaps.DefaultMapId))
+            return declared;
+        }
+
+        /// `default` 가 아무것도 가리키지 않는 설정을 여기서 잡는다.
+        ///
+        /// 맵이 하나뿐이면 그것을 가리킨다 — 단일 맵 배포에서 별칭 한 줄을 요구할 이유가 없다.
+        /// 둘 이상이면 **고르지 않는다.** 이름 순으로 첫 번째를 잡는 것 같은 규칙을 두면 맵을
+        /// 하나 추가하는 것이 기본 맵을 바꿀 수 있고, 그 변화는 어디에도 적히지 않는다.
+        ///
+        /// `RoomMaps` 의 생성자가 같은 것을 다시 검사한다. 여기서 먼저 하는 이유는 메시지다 —
+        /// 그쪽은 등록된 맵 목록을 모르므로 무엇을 고를 수 있는지 말해 줄 수 없다.
+        private static void EnsureDefaultAlias(MapCatalog catalog, Dictionary<string, string> aliases)
+        {
+            if (catalog.Maps.ContainsKey(RoomMaps.DefaultMapId)
+                || aliases.ContainsKey(RoomMaps.DefaultMapId))
             {
-                // Maps 를 쓰지 않는 설정과 예전 설정 파일을 위한 경로다.
-                var legacyPath = configuration[LegacyMapPathKey] ?? DefaultMapPath;
-                byMapId[RoomMaps.DefaultMapId] = MapLoader.Load(legacyPath);
+                return;
             }
 
-            return new RoomMaps(byMapId);
+            var ids = catalog.SortedIds();
+
+            if (ids.Count == 1)
+            {
+                aliases[RoomMaps.DefaultMapId] = ids[0];
+                return;
+            }
+
+            throw new InvalidOperationException(
+                $"기본 맵이 정해지지 않았다. {MapsKey}:{RoomMaps.DefaultMapId} 에 맵 id 를 적는다. " +
+                $"등록된 맵: {string.Join(", ", ids)}");
         }
 
         private static StaticRooms LoadStaticRooms(IConfiguration configuration)

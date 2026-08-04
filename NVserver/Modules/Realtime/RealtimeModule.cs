@@ -27,6 +27,11 @@ namespace NV.Realtime
             services.AddSingleton<NetworkConditionSimulator>();
             services.AddSingleton<SessionRegistry>();
             services.AddSingleton<RoomRegistry>();
+
+            // 맵 목록 응답은 기동 때 한 번 만든다. 맵은 로드 후 변하지 않으므로 요청마다
+            // 직렬화할 이유가 없다. `RoomMaps` 는 Api 가 등록하며, 등록 순서는 상관없다 —
+            // 컨테이너가 처음 이 타입을 요구할 때 해석된다.
+            services.AddSingleton<MapListPayload>();
             services.AddSingleton<IRoomQuery>(provider => provider.GetRequiredService<RoomRegistry>());
 
             // 송신 경로는 항상 조건 주입 데코레이터를 지난다.

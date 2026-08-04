@@ -36,6 +36,61 @@ namespace NV.Realtime.Transport
             // 이제 상시 열려 있다. 코드 시도와 양동이를 나눈 이유는 반대다 — 목록을
             // 자주 새로고침하는 것이 정작 방에 들어갈 예산을 깎으면 안 된다.
             endpoints.MapGet("/rooms", ListRooms).RequireRateLimiting(RateLimitPolicies.RoomList);
+
+            // 방 목록과 양동이를 나눠 쓴다. 맵 목록은 로비 화면에 들어올 때 한 번 부르는
+            // 것이고 성질이 방 목록과 같다 — 코드를 찍어 보는 경로가 아니다. 새 정책을
+            // 만들면 설정 키가 하나 늘고 얻는 것이 없다.
+            endpoints.MapGet("/maps", ListMaps).RequireRateLimiting(RateLimitPolicies.RoomList);
+        }
+
+        /// 등록된 맵 전부. 방 만들기 화면이 이것으로 목록을 만든다.
+        ///
+        /// **프로토콜 버전을 요구하지 않는다.** `GET /rooms/{code}` 는 접속 직전 조회라 버전이
+        /// 다르면 426 으로 끊는 것이 맞지만, 맵 목록은 접속 전 화면을 그리는 값이다. 버전이 다른
+        /// 클라이언트에게도 답해 주는 편이 낫고, 그쪽의 실패는 접속 시점에 정확히 갈린다.
+        ///
+        /// 본문은 기동 때 만들어져 있다(`MapListPayload`). 맵은 로드 후 변하지 않으므로
+        /// 요청마다 직렬화할 이유가 없고, 불변이므로 ETag 로 두 번째 조회를 304 로 끝낼 수 있다.
+        private static IResult ListMaps(HttpContext context, MapListPayload payload)
+        {
+            if (MatchesETag(context.Request, payload.ETag))
+            {
+                return Results.StatusCode((int)HttpStatusCode.NotModified);
+            }
+
+            context.Response.Headers.ETag = payload.ETag;
+
+            // 짧게 잡는다. 서버를 다시 띄우면 목록이 바뀔 수 있고(맵 파일을 놓는 것이 등록이다)
+            // 그때 오래된 캐시를 들고 있는 클라이언트는 없는 맵으로 방을 만들려 한다.
+            context.Response.Headers.CacheControl = "public, max-age=60";
+
+            return Results.Text(payload.Json, "application/json");
+        }
+
+        /// 클라이언트가 들고 있는 것이 지금 본문과 같은가.
+        ///
+        /// `If-None-Match` 는 값이 여러 개일 수 있고 `*` 도 올 수 있다. 문자열 하나와
+        /// 그대로 비교하면 여러 개를 보낸 클라이언트가 매번 전체 본문을 받는다.
+        private static bool MatchesETag(HttpRequest request, string etag)
+        {
+            var candidates = request.Headers.IfNoneMatch;
+
+            for (var index = 0; index < candidates.Count; index++)
+            {
+                var candidate = candidates[index];
+
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                if (candidate == "*" || candidate.Trim() == etag)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// 방을 만든다. 코드와 방장 토큰을 돌려준다.
@@ -70,12 +125,15 @@ namespace NV.Realtime.Transport
 
             var map = maps.ByMapId(mapId)!;
 
+            // **요청한 id 가 아니라 해석된 id 를 돌려준다.** `default` 로 만든 클라이언트도
+            // 자기 방의 맵이 `backrooms` 라는 것을 알아야 한다 — 그것이 곧 씬을 정하는 이름이고,
+            // 맵 id 는 맵 이름과 같으므로(`MapCatalogLoader`) `map.Name` 이 그 값이다.
             return Results.Json(
                 new CreateRoomResponse
                 {
                     Code = code,
                     HostToken = hostToken,
-                    Map = mapId,
+                    Map = map.Name,
                     MapName = map.Name,
                     MapHash = map.Hash,
                     Capacity = RealtimeConstants.Rooms.MaxPlayers,
