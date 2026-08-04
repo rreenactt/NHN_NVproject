@@ -1,9 +1,11 @@
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using NV.Client.EditorTools;
 using NV.Client.Net;
 using NV.Shared.Collision;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace NV.Client.Tests
 {
@@ -60,6 +62,11 @@ namespace NV.Client.Tests
         [Test]
         public void 크기가_어긋난_격자는_거절되고_이유가_남는다()
         {
+            // `AttachGrid` 는 이것을 콘솔 에러로도 남긴다. 그것이 의도이므로(런타임에서 격자가
+            // 사라진 것을 사람이 알아야 한다) 테스트가 그 로그를 기대한다고 말해 둔다 —
+            // 말하지 않으면 프레임워크가 예상 못한 에러 로그로 테스트를 실패시킨다.
+            LogAssert.Expect(LogType.Error, new Regex("격자가 잘못됐다"));
+
             MapExport.BuildMapData(new FlatRoom { BreakGridSize = true }, out var report);
 
             Assert.IsTrue(report.GridOffered);

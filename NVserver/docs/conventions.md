@@ -309,6 +309,25 @@ export 는 그중 격자 하나만 봤다. 검사가 두 곳에 있으면 한쪽
 쓰는 코드가 `Shared` 에 있으면 Unity 에서도 그대로 돌고, export 는 커밋 전이며 `dotnet test` 는
 커밋 뒤다.
 
+### Unity EditMode 테스트는 예상하지 못한 `LogError` 만으로 실패한다
+
+**증상.** 단정이 전부 통과하는데 테스트가 실패한다. 메시지는
+`Unhandled log message: '[Error] …'. Use UnityEngine.TestTools.LogAssert.Expect` 다.
+
+**원인.** Unity 의 테스트 프레임워크는 테스트가 도는 동안 나온 `Debug.LogError` 를 실패로 센다.
+검사 대상 코드가 **의도적으로** 에러를 남기는 경우(여기서는 `MapExport.AttachGrid` 가 격자를
+버렸다는 것을 사람에게 알린다)에도 그렇다.
+
+**대응.** 그 로그를 기대한다고 미리 말한다:
+`LogAssert.Expect(LogType.Error, new Regex("격자가 잘못됐다"))`. 로그를 없애는 쪽으로 고치면 안
+된다 — 그 로그가 런타임에서 격자가 사라진 것을 알리는 유일한 신호다.
+
+**곁들여.** 이 프로젝트에는 EditMode 테스트를 CLI 로 돌리는 길이 없지만, MCP 로
+`TestRunnerApi.Execute(new ExecutionSettings(new Filter { testMode = TestMode.EditMode }))` 를
+띄우고 `[태그]` 를 붙여 `Debug.Log` 로 결과를 남기면 콘솔 로그로 받아볼 수 있다. 콜백은
+`ICommandScript` 에 **직접** 구현한다 — 중첩 클래스는 MCP 의 커맨드 래퍼가 네임스페이스 밖으로
+복제해 `CS1527` 이 된다.
+
 ### 브로드페이즈는 필요 없다 — 재기 전의 추정이 한 자리 이상 틀렸다
 
 **측정값** (Release, `backrooms.json` 736박스 / 2450셀):
