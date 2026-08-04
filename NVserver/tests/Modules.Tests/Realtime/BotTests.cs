@@ -275,6 +275,33 @@ namespace NV.Modules.Tests.Realtime
         }
 
         [Fact]
+        public void 요약이_봇을_따로_센다()
+        {
+            // 로비의 온라인 인원 표시가 이 값을 쓴다. 인원에서 빼지 않는 이유는
+            // 봇도 슬롯을 차지하므로 `PlayerCount` 가 정원 판정의 근거여야 하기 때문이다.
+            var room = RoomFixture.WithBots();
+
+            RoomFixture.JoinHuman(room, 1, isHost: true);
+            RoomFixture.SettleBots(room);
+
+            var summary = room.Summarize();
+
+            Assert.Equal(2, summary.PlayerCount);
+            Assert.Equal(1, summary.BotCount);
+        }
+
+        [Fact]
+        public void 봇이_없으면_요약의_봇_수가_0이다()
+        {
+            var room = RoomFixture.Create(isStatic: true);
+
+            RoomFixture.JoinHuman(room, 1, isHost: true);
+            RoomFixture.SettleBots(room);
+
+            Assert.Equal(0, room.Summarize().BotCount);
+        }
+
+        [Fact]
         public void 정원을_넘겨_채우지_않는다()
         {
             // 설정이 정원보다 큰 값을 요구해도 룸이 자른다.

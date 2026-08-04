@@ -18,7 +18,8 @@ namespace NV.Realtime.Contracts
             byte hostPlayerId,
             string mapName,
             uint mapHash,
-            bool isPublic)
+            bool isPublic,
+            int botCount = 0)
         {
             RoomId = roomId;
             Tick = tick;
@@ -29,6 +30,7 @@ namespace NV.Realtime.Contracts
             MapName = mapName;
             MapHash = mapHash;
             IsPublic = isPublic;
+            BotCount = botCount;
         }
 
         public string RoomId { get; }
@@ -55,6 +57,14 @@ namespace NV.Realtime.Contracts
         /// 목록에 실릴지만 정한다. 비공개 방도 코드를 아는 사람은 그대로 들어온다 —
         /// 참가 전 조회와 접속은 이 값을 보지 않는다.
         public bool IsPublic { get; }
+
+        /// 그중 몇 명이 봇인가. 개발 설정이 꺼진 배포에서는 항상 0 이다.
+        ///
+        /// **`PlayerCount` 에서 빼지 않는다.** 봇은 슬롯을 차지하고 정원 판정에 들어가는
+        /// 진짜 참가자이므로, 인원에서 빼면 `IsFull` 이 거짓이 되어 들어갈 수 없는 방이
+        /// 자리가 있다고 답한다. 따로 세는 이유는 로비의 온라인 인원 표시다 — 그쪽은
+        /// 사람 수를 보여야 하고, 뺄셈에 필요한 값이 여기 있어야 뺄 수 있다.
+        public int BotCount { get; }
 
         public bool IsFull => PlayerCount >= Capacity;
     }

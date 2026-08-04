@@ -60,6 +60,13 @@ namespace NV.Realtime.Transport
 
         public int PlayerCount { get; set; }
 
+        /// 그중 봇의 수. 개발 설정이 꺼진 배포에서는 항상 0 이다.
+        ///
+        /// 인원에서 빼지 않고 따로 싣는다. 봇도 슬롯을 차지하므로 `PlayerCount` 는
+        /// "이 방에 자리가 몇 남았는가" 의 근거여야 하고, 로비의 온라인 인원 표시는
+        /// 사람 수를 보여야 한다 — 두 질문의 답이 달라 값이 둘이어야 한다.
+        public int BotCount { get; set; }
+
         public int Capacity { get; set; }
 
         /// 방장의 PlayerId. 없으면 `RoomStateHeader.NoPlayer`(255) 다.

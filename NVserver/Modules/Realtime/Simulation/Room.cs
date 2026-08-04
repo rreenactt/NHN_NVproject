@@ -117,6 +117,9 @@ namespace NV.Realtime.Simulation
 
         /// int 로 둔다. 조회 스레드가 Volatile 로 읽으며, 정렬된 int 읽기는 원자적이라
         /// 찢어진 값을 보지 않는다. `_playerCount` 와 같은 규칙이다.
+        /// 그중 봇의 수. `_playerCount` 와 같은 규칙으로 틱 루프가 쓰고 조회 스레드가 읽는다.
+        private int _botCount;
+
         private int _phase = (int)RoomPhase.Waiting;
         private int _hostPlayerId = RoomStateHeader.NoPlayer;
 
@@ -186,6 +189,9 @@ namespace NV.Realtime.Simulation
         public RoomPhase Phase => (RoomPhase)Volatile.Read(ref _phase);
 
         public int PlayerCount => Volatile.Read(ref _playerCount);
+
+        /// 참가자 중 봇의 수. 개발 설정이 꺼져 있으면 항상 0 이다.
+        public int BotCount => Volatile.Read(ref _botCount);
 
         /// 설정으로 미리 열어 둔 룸. 방장이 없고 비어도 회수되지 않는다.
         public bool IsStatic => _isStatic;
@@ -287,7 +293,8 @@ namespace NV.Realtime.Simulation
                 (byte)Volatile.Read(ref _hostPlayerId),
                 _map.Name,
                 _map.Hash,
-                _isPublic);
+                _isPublic,
+                Volatile.Read(ref _botCount));
         }
 
         /// 틱 루프에서만 호출한다.
@@ -371,6 +378,11 @@ namespace NV.Realtime.Simulation
             }
 
             Volatile.Write(ref _playerCount, _players.Count);
+
+            // 봇 수도 매 틱 다시 센다. 봇이 늘거나 줄는 자리마다 갱신하는 것보다
+            // 근거가 되는 값에서 유도하는 편이 어긋날 자리가 없다 — `MatchFlagsFor` 와
+            // 같은 규칙이고, 8명 순회는 이 틱에서 가장 싼 일이다.
+            Volatile.Write(ref _botCount, _players.Count - HumanCount);
         }
 
         /// 틱 루프에서만 호출한다.
