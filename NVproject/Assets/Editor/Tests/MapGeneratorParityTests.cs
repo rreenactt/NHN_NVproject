@@ -147,6 +147,26 @@ namespace NV.Client.Tests
         }
 
         /// <summary>
+        /// The format abstraction must not become a second serializer.
+        ///
+        /// <c>JsonMapWriter</c> exists so the export can grow a second format later, and the way it
+        /// would go wrong is somebody "tidying" it by moving the serialization into it. That
+        /// function writes floats round-trip, the grid as base64, and the provenance as exactly one
+        /// line — and <c>MapExportPipeline.ComparisonKey</c>, which decides whether a file needs
+        /// rewriting at all, depends on that last one. A copy is a copy that gets fixed once.
+        /// </summary>
+        [Test]
+        public void JSON_작성기가_파이프라인과_같은_바이트를_낸다()
+        {
+            var data = BuildBackrooms();
+
+            var buffer = new System.Text.StringBuilder();
+            new NV.Client.EditorTools.Writers.JsonMapWriter().Write(buffer, data);
+
+            Assert.AreEqual(MapExportPipeline.Serialize(data), buffer.ToString());
+        }
+
+        /// <summary>
         /// The registry finds generators by type rather than from a list, so a new one appears in
         /// the window by existing. This is the assertion that catches a generator with no default
         /// constructor, which the registry can only skip.

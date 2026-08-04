@@ -512,3 +512,22 @@ Runner 가 정확히 놓인다 — 반대로 뽑히면 아무도 없다. 실행 
 (`MapExportPipeline` 이 하는 일이 그것이고, 같은 도구가 쓴 두 파일을 비교하므로 옳다). **두 경로가
 같은 지형을 말하는지**를 물을 때는 숫자로 파싱해 비교한다 — `MapGeneratorParityTests` 가 그렇게
 한다. 텍스트로 비교했다면 이미 맞는 생성기를 "고치러" 갔을 것이다.
+
+### `Collider.bounds` 는 방금 만든 오브젝트에서 기본 박스를 돌려준다
+
+**증상.** 씬의 지형이 구운 에셋과 같은지 보는 검사(`MapSceneBuilder.DescribeDrift`)가 **갓 구운
+레벨 전체를 "손댔다" 로** 보고했다. 첫 조각부터 어긋났다.
+
+**원인.** `Collider.bounds` 는 물리 씬에서 나오고, 물리 씬은 트랜스폼 변경을 그 프레임에 반영하지
+않는다. 방금 `CreatePrimitive` 하고 위치·스케일을 준 큐브에 물으면 스케일이 반영되기 전의
+`(-0.5, -0.5, -0.5)…(0.5, 0.5, 0.5)` 가 돌아온다. 에디트 모드라 FixedUpdate 가 돌지 않아 영영
+그대로다.
+
+**대응.** 트랜스폼에서 직접 계산한다 —
+`new Bounds(transform.TransformPoint(collider.center), Vector3.Scale(transform.lossyScale, collider.size))`.
+`Physics.SyncTransforms()` 를 부르면 고쳐지지만, 검사 하나를 위해 물리 씬을 건드리는 것보다
+곱셈 두 번이 싸고 확실하다.
+
+**일반화.** 에디터 코드에서 물리·렌더러가 **파생시켜 캐시하는** 값(`Collider.bounds`,
+`Renderer.bounds`, `NavMesh` 질의)을 방금 만든 오브젝트에 묻지 않는다. 그 값들은 프레임 경계에서
+갱신되고, 에디트 모드에는 그 경계가 없다.

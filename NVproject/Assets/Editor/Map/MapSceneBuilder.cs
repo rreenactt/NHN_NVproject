@@ -70,6 +70,78 @@ namespace NV.Client.EditorTools
             }
         }
 
+        /// 씬에 서 있는 레벨이 그 에셋과 같은 지형인가. 같으면 <c>null</c>.
+        ///
+        /// **왜 이 검사가 필요한가.** 서버가 보는 박스는 `MapBakedAsset` 에서 나오고 씬은 보이는
+        /// 쪽일 뿐이다. 그래서 씬에서 벽 하나를 밀면 **클라이언트에는 그 지형이 있고 서버에는
+        /// 없는데 맵 해시는 그때도 일치한다** — export 가 이미 알고 있는 실패 모양이고
+        /// (`RejectedVolumes`), 여기서는 손으로 고친 뒤 다시 굽지 않는 것이 그 원인이다.
+        ///
+        /// 자동으로 맞추지 않는다. 손으로 고치는 것을 막을 이유는 없고, **다시 굽지 않은 것만**
+        /// 막으면 된다.
+        public static string DescribeDrift(GameObject root, MapBakedAsset asset)
+        {
+            if (root == null || asset == null)
+            {
+                return null;
+            }
+
+            var colliders = root.GetComponentsInChildren<BoxCollider>(true);
+            var boxes = asset.Boxes;
+
+            if (colliders.Length != boxes.Count)
+            {
+                return $"씬의 콜리전이 {colliders.Length}개인데 구운 에셋은 {boxes.Count}개다. " +
+                       "씬을 고친 뒤 다시 굽지 않았다 — 지금 export 하면 씬에 보이는 지형이 아니라 " +
+                       "에셋의 지형이 서버로 간다.";
+            }
+
+            for (var index = 0; index < colliders.Length; index++)
+            {
+                var transform = colliders[index].transform;
+
+                // 회전한 조각은 AABB 가 같아도 다른 지형이다. 생성기는 아무것도 돌리지 않으므로
+                // 돌아 있다는 것 자체가 손댄 표시다.
+                if (transform.rotation != Quaternion.identity)
+                {
+                    return $"씬의 '{colliders[index].name}' 이 회전해 있다. 서버는 축에 정렬된 " +
+                           "박스만 알므로 돌린 지형은 서버에 전달되지 않는다.";
+                }
+
+                if (Approximately(WorldBox(colliders[index]), boxes[index])) continue;
+
+                return $"씬의 '{colliders[index].name}' 이 구운 에셋의 같은 자리 박스와 다르다. " +
+                       "씬을 고친 뒤 다시 굽지 않았다.";
+            }
+
+            return null;
+        }
+
+        /// 콜라이더가 차지하는 월드 박스를 **트랜스폼에서** 계산한다.
+        ///
+        /// `Collider.bounds` 를 쓰지 않는다. 그 값은 물리 씬에서 나오고 물리 씬은 트랜스폼 변경을
+        /// 그 프레임에 반영하지 않으므로, 방금 만든 오브젝트에 물으면 크기 1 짜리 기본 박스가
+        /// 돌아온다 — 실제로 그렇게 나와서 갓 구운 레벨 전체가 "손댔다" 로 보고됐다.
+        /// `Physics.SyncTransforms()` 를 부르면 고쳐지지만, 검사 하나를 위해 물리 씬을 건드리는
+        /// 것보다 곱셈 두 번이 싸고 확실하다.
+        private static Bounds WorldBox(BoxCollider collider)
+        {
+            var transform = collider.transform;
+
+            return new Bounds(
+                transform.TransformPoint(collider.center),
+                Vector3.Scale(transform.lossyScale, collider.size));
+        }
+
+        /// 박스 두 개가 같은가. 밀리미터면 충분하다 — 사람이 옮긴 벽은 이것보다 훨씬 많이 움직인다.
+        private static bool Approximately(Bounds left, Bounds right)
+        {
+            const float tolerance = 0.001f;
+
+            return (left.min - right.min).sqrMagnitude < tolerance * tolerance
+                && (left.max - right.max).sqrMagnitude < tolerance * tolerance;
+        }
+
         /// 콜리전을 갖는 조각은 **하나씩 세운다.**
         ///
         /// 합칠 수도 있지만 합치지 않는다. 벽 하나를 손으로 옮기거나 지우는 것이 레벨을 다듬는
