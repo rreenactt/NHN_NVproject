@@ -25,7 +25,15 @@
         <ui:Label name="room-map" class="panel-meta" />
         <ui:Label name="room-visibility" class="panel-meta" />
 
-        <ui:Label class="field-label" text="PLAYERS" />
+        <!--
+            The header carries the capacity. Without it the roster is a list of however many rows
+            the server happened to send, so a room holding two of eight reads the same as a full
+            one — and a dev room filled to the minimum by bots reads as broken.
+        -->
+        <ui:VisualElement class="roster-header">
+            <ui:Label class="field-label" text="PLAYERS" />
+            <ui:Label name="room-players-count" class="field-label roster-count" />
+        </ui:VisualElement>
         <ui:VisualElement name="room-roster" class="roster" />
 
         <ui:Label name="room-note" class="hint" />

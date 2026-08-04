@@ -1,6 +1,7 @@
 using System;
 using NV.Client.Net;
 using NV.Client.Net.Session;
+using NV.Shared.Contracts.Messages;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -27,6 +28,7 @@ namespace NV.Client.Lobby.UI
         private readonly Label _visibility;
         private readonly Label _note;
         private readonly Label _copyResult;
+        private readonly Label _playersCount;
         private readonly VisualElement _roster;
         private readonly Button _start;
 
@@ -46,6 +48,7 @@ namespace NV.Client.Lobby.UI
             _visibility = Root.Q<Label>("room-visibility");
             _note = Root.Q<Label>("room-note");
             _copyResult = Root.Q<Label>("room-copy-result");
+            _playersCount = Root.Q<Label>("room-players-count");
             _roster = Root.Q<VisualElement>("room-roster");
             _start = Root.Q<Button>("room-start");
 
@@ -106,6 +109,28 @@ namespace NV.Client.Lobby.UI
             _note.text = StartNote();
         }
 
+        /// 인원과 정원을 함께 쓴다.
+        ///
+        /// **채워진 수만 보여주면 안 된다.** 명단은 서버가 보낸 줄 수만큼 그려지므로, 8칸 중
+        /// 2칸인 방과 정원이 2인 방이 화면에서 같은 모습이 된다. 봇으로 최소 인원만 채운
+        /// 개발용 방이 "봇이 하나뿐" 으로 읽히는 것이 그 증상이었다.
+        ///
+        /// 채워진 수는 **명단(`RosterCount`)에서 센다.** `Room.PlayerCount` 는 접속 전 조회의
+        /// 값이라 방에 들어온 뒤로 갱신되지 않는다 — 그 값을 쓰면 남이 들어오고 나가는 것이
+        /// 화면에 반영되지 않는다. 정원은 반대로 방이 사는 동안 바뀌지 않으므로 조회 값을 쓴다.
+        private void RefreshPlayersCount(int filled, int capacity)
+        {
+            if (_playersCount == null)
+            {
+                return;
+            }
+
+            _playersCount.text = capacity > 0 ? filled + " / " + capacity : filled.ToString();
+
+            // 정원이 찼다는 것은 색으로 먼저 말한다. 두 숫자를 비교하게 하지 않는다.
+            _playersCount.EnableInClassList("roster-count-full", capacity > 0 && filled >= capacity);
+        }
+
         private void RefreshRoster()
         {
             _roster.Clear();
@@ -114,8 +139,11 @@ namespace NV.Client.Lobby.UI
 
             if (client == null)
             {
+                RefreshPlayersCount(0, _session.Room.Capacity);
                 return;
             }
+
+            RefreshPlayersCount(client.RosterCount, _session.Room.Capacity);
 
             for (var index = 0; index < client.RosterCount; index++)
             {
@@ -141,6 +169,45 @@ namespace NV.Client.Lobby.UI
                 var tag = new Label(Tag(entry.PlayerId, client, isSelf));
                 tag.AddToClassList("roster-tag");
                 row.Add(tag);
+
+                _roster.Add(row);
+            }
+
+            AddEmptySlots(client.RosterCount);
+        }
+
+        /// 남은 자리를 몇 줄 그린다. **정원 전체를 나열하지 않는다.**
+        ///
+        /// 8칸을 다 그리면 팝업이 그만큼 길어지고, `.popup-frame` 은 `max-height: 84%` 에
+        /// 스크롤이 없어 아래의 시작 버튼이 잘린다. 정원은 이미 제목 줄의 숫자가 말하므로
+        /// 여기서 할 일은 남은 자리의 **성격**을 말하는 것뿐이다.
+        ///
+        /// 그래서 줄 수가 두 경우로 갈린다. 최소 인원에 못 미치면 **모자란 만큼** 그려
+        /// 몇 명이 더 필요한지 세지 않고 보이게 하고, 이미 시작할 수 있으면 자리가 남았다는
+        /// 사실만 한 줄로 말한다.
+        private void AddEmptySlots(int filled)
+        {
+            var spare = _session.Room.Capacity - filled;
+
+            if (spare <= 0)
+            {
+                return;
+            }
+
+            var needed = _session.MinPlayers - filled;
+            var rows = needed > 0 ? Math.Min(needed, spare) : 1;
+
+            for (var index = 0; index < rows; index++)
+            {
+                var row = new VisualElement();
+                row.AddToClassList("roster-row");
+                row.AddToClassList("roster-empty");
+
+                // 필요한 자리와 남은 자리는 다른 말이다. 같은 문구로 쓰면 시작할 수 없는
+                // 이유가 명단에 있는데도 보이지 않는다.
+                var label = new Label(needed > 0 ? "─ 한 명 더 필요 ─" : "─ 빈 자리 ─");
+                label.AddToClassList("roster-name");
+                row.Add(label);
 
                 _roster.Add(row);
             }
@@ -173,7 +240,16 @@ namespace NV.Client.Lobby.UI
 
             if (!_session.IsHost)
             {
-                return "방장이 시작하기를 기다린다.";
+                // **"방장을 기다린다" 는 방장이 있을 때만 참이다.** 방장 자리가 비어 있으면
+                // 아무리 기다려도 시작되지 않으므로, 그 경우를 같은 문구로 덮으면 화면이
+                // 거짓말을 한다. 실제로 그랬다 — 정적 룸(`test`)이 방장 없이 열려 있던
+                // 서버에서 이 줄이 "기다린다" 를 띄웠고, 기다릴 대상이 없었다.
+                //
+                // 서버는 이제 정적 룸에서 받는 사람 자신을 방장으로 싣는다. 이 갈래는
+                // 그보다 오래된 서버에 붙었을 때를 위한 것이며, 그 사실을 말해 준다.
+                return HasNoHost()
+                    ? "이 방에 방장이 없어 아무도 시작할 수 없다. 서버가 오래된 빌드일 수 있다."
+                    : "방장이 시작하기를 기다린다.";
             }
 
             var count = _session.Client != null ? _session.Client.RosterCount : 0;
@@ -181,6 +257,19 @@ namespace NV.Client.Lobby.UI
             return count < _session.MinPlayers
                 ? $"{_session.MinPlayers}명부터 시작할 수 있다. 지금 {count}명."
                 : "시작할 수 있다.";
+        }
+
+        /// 서버가 방장을 아무에게도 배정하지 않았는가.
+        ///
+        /// 명단 전문이 아직 오지 않은 동안은 거짓이다 — 그때는 "모른다" 이고,
+        /// 모르는 것을 "방장이 없다" 로 말하면 접속 직후 한순간 잘못된 문구가 뜬다.
+        private bool HasNoHost()
+        {
+            var client = _session.Client;
+
+            return client != null
+                && client.HasRoomState
+                && client.RoomState.HostPlayerId == RoomStateHeader.NoPlayer;
         }
 
         private void CopyCode()

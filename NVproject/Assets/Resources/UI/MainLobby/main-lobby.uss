@@ -542,6 +542,24 @@
     margin-bottom: 6px;
 }
 
+/* 인원/정원을 명단 제목과 같은 줄의 반대쪽 끝에 둔다. */
+.roster-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* 정원은 제목보다 밝다. 읽으러 오는 값은 이쪽이다. */
+.roster-count {
+    color: rgb(242, 231, 194);
+    letter-spacing: 2px;
+}
+
+/* 정원이 찬 방은 색으로 먼저 말한다 — 줄을 세어 알게 하면 안 된다. */
+.roster-count-full {
+    color: rgb(214, 108, 96);
+}
+
 .roster {
     flex-direction: column;
     min-height: 110px;
@@ -565,6 +583,13 @@
     color: rgb(168, 146, 78);
     font-size: 10px;
     letter-spacing: 2px;
+}
+
+/* 빈 자리는 사람 이름과 같은 무게로 읽히면 안 된다. 자리가 있다는 사실만 말한다. */
+.roster-empty .roster-name {
+    color: rgb(112, 100, 62);
+    font-size: 12px;
+    -unity-font-style: italic;
 }
 
 /* 나 자신은 눈에 띄어야 한다. 8명 명단에서 자기 줄을 세어 찾게 하면 안 된다. */
