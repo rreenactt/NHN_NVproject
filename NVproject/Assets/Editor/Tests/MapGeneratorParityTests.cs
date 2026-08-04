@@ -31,7 +31,7 @@ namespace NV.Client.Tests
     /// </summary>
     public sealed class MapGeneratorParityTests
     {
-        private const string GoldenPath = "/../../NVserver/MapData/test-room.json";
+        private const string GoldenDirectory = "/../../NVserver/MapData/";
 
         private readonly List<Object> _spawned = new List<Object>();
 
@@ -49,11 +49,64 @@ namespace NV.Client.Tests
         [Test]
         public void 테스트룸_생성기가_배포된_맵과_같은_지형을_내놓는다()
         {
-            var golden = ReadGolden();
+            var golden = ReadGolden("test-room");
             var produced = MapExportPipeline.Serialize(BuildThroughNewPipeline());
 
             AssertSectionsMatch(golden, produced, "boxes");
             AssertSectionsMatch(golden, produced, "spawns");
+        }
+
+        /// <summary>
+        /// The same check for the level that actually matters.
+        ///
+        /// **This is the assertion the Backrooms port exists to pass.** Its grid solver draws from
+        /// one seeded <c>System.Random</c>, and a single extra or missing draw — a rejected room
+        /// candidate that stops consuming its four values, a loop roll moved inside a branch —
+        /// produces a completely different but perfectly plausible level. Nothing about the result
+        /// looks wrong; the terrain simply stops being the terrain the server was given.
+        ///
+        /// The grid rides along: it is in the map hash whenever it is present, so a solver that
+        /// drifted would show up here even if every box happened to land in the same place.
+        /// </summary>
+        [Test]
+        public void 백룸_생성기가_배포된_맵과_같은_지형을_내놓는다()
+        {
+            var golden = ReadGolden("backrooms");
+            var data = BuildBackrooms();
+            var produced = MapExportPipeline.Serialize(data);
+
+            AssertSectionsMatch(golden, produced, "boxes");
+            AssertSectionsMatch(golden, produced, "spawns");
+
+            Assert.AreEqual(GridCells(golden), GridCells(produced),
+                "격자 셀이 다르다. 격자는 있을 때 맵 해시에 들어가므로 이것만 어긋나도 접속이 경고를 낸다.");
+        }
+
+        /// <summary>
+        /// Everything else <c>MapData.ComputeHash</c> mixes in: the name, and the grid's shape and
+        /// origin.
+        ///
+        /// **Checked as inputs rather than by recomputing the shipped file's hash**, which would
+        /// need a second reader for this schema — and refusing to have one of those is a deliberate
+        /// decision the export pipeline already made, for the good reason that a second reader is a
+        /// second place for the schema to drift. Together with the boxes and cells above, these are
+        /// the whole of the hash: matching all of them is matching it.
+        /// </summary>
+        [Test]
+        public void 백룸_생성기가_해시에_들어가는_나머지_값도_맞춘다()
+        {
+            var golden = ReadGolden("backrooms");
+            var data = BuildBackrooms();
+
+            var produced = MapExportPipeline.Serialize(data);
+
+            Assert.AreEqual("backrooms", data.Name);
+            StringAssert.Contains("\"name\": \"backrooms\"", golden);
+
+            foreach (var field in new[] { "floors", "width", "depth", "cellSize", "floorHeight", "originX", "originZ" })
+            {
+                Assert.AreEqual(Scalar(golden, field), Scalar(produced, field), $"격자의 {field} 가 다르다.");
+            }
         }
 
         /// <summary>
@@ -126,10 +179,28 @@ namespace NV.Client.Tests
         /// </summary>
         private NV.Shared.Collision.MapData BuildThroughNewPipeline()
         {
-            var blueprint = new TestRoomGenerator().Generate(NewSettings());
+            return Bake(new TestRoomGenerator().Generate(NewSettings()), "Test Room");
+        }
+
+        /// <summary>
+        /// The Backrooms at its shipped settings — which is to say at every default, since
+        /// <c>SampleScene</c>'s serialized values match the code's.
+        /// </summary>
+        private NV.Shared.Collision.MapData BuildBackrooms()
+        {
+            var settings = ScriptableObject.CreateInstance<BackroomsSettings>();
+            settings.mapName = "backrooms";
+            _spawned.Add(settings);
+
+            return Bake(new BackroomsGenerator().Generate(settings), "Backrooms");
+        }
+
+        private NV.Shared.Collision.MapData Bake(MapBlueprint blueprint, string generatorName)
+        {
+            Assert.IsNull(blueprint.Blocker, "이 설정으로는 구울 수 없다: " + blueprint.Blocker);
 
             var asset = ScriptableObject.CreateInstance<MapBakedAsset>();
-            asset.Fill(blueprint, "Test Room", "1970-01-01T00:00:00Z");
+            asset.Fill(blueprint, generatorName, "1970-01-01T00:00:00Z");
             _spawned.Add(asset);
 
             var host = new GameObject("BakedMapSourceUnderTest");
@@ -150,14 +221,41 @@ namespace NV.Client.Tests
             return settings;
         }
 
-        private static string ReadGolden()
+        private static string ReadGolden(string mapName)
         {
-            var path = Path.GetFullPath(Application.dataPath + GoldenPath);
+            var path = Path.GetFullPath(Application.dataPath + GoldenDirectory + mapName + ".json");
 
             Assert.IsTrue(File.Exists(path),
                 $"배포된 맵 파일이 없다: {path}. NVproject 와 NVserver 가 같은 저장소에 나란히 있는지 본다.");
 
             return File.ReadAllText(path).Replace("\r\n", "\n");
+        }
+
+        /// <summary>
+        /// The grid's base64 cell block. Compared as text on purpose — it is base64, so equal text
+        /// is equal bytes and there is nothing to round-trip.
+        /// </summary>
+        private static string GridCells(string text)
+        {
+            var open = text.IndexOf("\"cells\": \"", System.StringComparison.Ordinal);
+            Assert.GreaterOrEqual(open, 0, "격자의 cells 를 찾지 못했다.");
+
+            open += "\"cells\": \"".Length;
+            var close = text.IndexOf('"', open);
+
+            return text.Substring(open, close - open);
+        }
+
+        /// <summary>One <c>"name": value</c> as written, without the trailing comma.</summary>
+        private static string Scalar(string text, string name)
+        {
+            var open = text.IndexOf($"\"{name}\": ", System.StringComparison.Ordinal);
+            Assert.GreaterOrEqual(open, 0, $"\"{name}\" 를 찾지 못했다.");
+
+            open += name.Length + 4;
+            var close = text.IndexOfAny(new[] { ',', '\n' }, open);
+
+            return text.Substring(open, close - open).Trim();
         }
 
         /// <summary>

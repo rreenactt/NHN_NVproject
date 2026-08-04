@@ -40,6 +40,11 @@ namespace NV.Client.EditorTools.Generators
                 MapName = room.mapName,
                 UsedSeed = 0,                     // draws no randomness; a seed here would be a lie
                 Grid = null,
+
+                // The arena is centred on the origin and the spawn ring surrounds it. Nothing reads
+                // this today — the match rules never run here — but leaving it at a default that
+                // happens to be right by accident would be worse than saying so.
+                SpawnCentre = Vector3.zero,
                 Blocker = room.DescribeBlocker(),
             };
 

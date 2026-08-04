@@ -27,6 +27,9 @@ namespace NV.Client.Map
 
         [SerializeField] private float[] spawnYaws = new float[0];
 
+        [Tooltip("Where the match puts the Seeker at the start of a round.")]
+        [SerializeField] private Vector3 spawnCentre;
+
         [Header("Walkability grid — absent is a normal answer")]
         [SerializeField] private bool hasGrid;
         [SerializeField] private int gridFloors;
@@ -48,6 +51,8 @@ namespace NV.Client.Map
         public IReadOnlyList<Bounds> Boxes => boxes;
 
         public int SpawnCount => spawnPositions == null ? 0 : spawnPositions.Length;
+
+        public Vector3 SpawnCentre => spawnCentre;
 
         public string Generator => generator;
 
@@ -110,6 +115,7 @@ namespace NV.Client.Map
             blueprint.CollectCollisionBoxes(collected);
             boxes = collected.ToArray();
 
+            spawnCentre = blueprint.SpawnCentre;
             spawnPositions = new Vector3[blueprint.Spawns.Count];
             spawnYaws = new float[blueprint.Spawns.Count];
 

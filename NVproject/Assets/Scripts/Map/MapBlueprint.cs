@@ -42,6 +42,16 @@ namespace NV.Client.Map
         public readonly List<MapSpawnPoint> Spawns = new List<MapSpawnPoint>();
 
         /// <summary>
+        /// Where the match puts the Seeker at the start of a round.
+        ///
+        /// Recorded rather than derived from <see cref="Spawns"/>. The centroid of a spawn ring is
+        /// *nearly* its room's centre and would look right in every test, which is exactly the kind
+        /// of near-miss that survives review — the generator knows the actual rectangle, so it says
+        /// so.
+        /// </summary>
+        public Vector3 SpawnCentre;
+
+        /// <summary>
         /// The walkability grid, or <c>null</c> for a level that does not offer one.
         ///
         /// <c>null</c> is a normal answer, not a gap: a level that never runs the match rules has
