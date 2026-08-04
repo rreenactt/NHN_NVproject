@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using NV.Infrastructure.Json;
@@ -48,38 +49,28 @@ namespace NV.Infrastructure.FileSystem
             return new WorldMap(data);
         }
 
+        /// 검사 자체는 `Shared` 의 `MapDataValidator` 에 있다.
+        ///
+        /// **여기서 다시 쓰지 않는 이유.** 클라이언트도 export 하기 전에 같은 검사를 해야
+        /// 하는데, 두 곳에 쓰면 갈린다. 실제로 갈려 있었다 — 서버가 네 가지를 보는 동안
+        /// export 는 격자 하나만 봤고, 그래서 export 가 통과시킨 파일이 서버 기동을 멈출 수
+        /// 있었다. 이 함수의 몫은 오류 목록을 예외로 바꾸고 어느 파일인지 붙이는 것뿐이다.
+        ///
+        /// 시뮬레이션 검산(`InspectSimulation`)은 부르지 않는다. 격자가 있는 맵에서 셀마다
+        /// 겹침 해소를 부르므로 기동 시간에 얹을 비용이 아니고, 그것은 export 시점과
+        /// `ExportedMapTests` 가 맡는다.
         private static void Validate(MapData data, string path)
         {
-            if (data.Boxes == null || data.Boxes.Length == 0)
+            var errors = new List<string>();
+
+            if (MapDataValidator.TryValidateSchema(data, errors))
             {
-                throw new InvalidOperationException($"맵에 콜리전 박스가 없다: {path}");
+                return;
             }
 
-            for (var index = 0; index < data.Boxes.Length; index++)
-            {
-                var box = data.Boxes[index];
-
-                // min > max 인 박스는 스윕에서 조용히 무시되어 벽이 사라진 것처럼 보인다.
-                if (box.MinX > box.MaxX || box.MinY > box.MaxY || box.MinZ > box.MaxZ)
-                {
-                    throw new InvalidOperationException(
-                        $"박스 {index} 의 min 이 max 보다 크다: {path}");
-                }
-            }
-
-            if (data.Spawns == null || data.Spawns.Length == 0)
-            {
-                throw new InvalidOperationException($"맵에 스폰 지점이 없다: {path}");
-            }
-
-            // 격자는 없어도 된다 — 이동 판정은 박스만으로 되고, 격자를 요구하는 것은
-            // 목표물 배치처럼 나중에 붙는 기능이다. 다만 **있으면서 어긋난** 격자는
-            // 거절한다. 그대로 받으면 서버가 그것을 신뢰하고, 잘못은 한참 뒤 배치
-            // 단계에서 "열쇠가 벽 안에 생김" 으로만 드러난다.
-            if (data.Grid != null && !data.Grid.TryValidate(out var gridError))
-            {
-                throw new InvalidOperationException($"맵의 격자가 잘못됐다: {gridError} ({path})");
-            }
+            throw new InvalidOperationException(
+                $"맵 파일이 잘못됐다: {path}{Environment.NewLine}  · " +
+                string.Join($"{Environment.NewLine}  · ", errors));
         }
     }
 }

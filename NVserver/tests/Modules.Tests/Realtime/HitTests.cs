@@ -54,9 +54,11 @@ namespace NV.Modules.Tests.Realtime
         {
             var world = Duel();
 
-            // `FireAtRunner` 가 Runner 를 사수 앞 2m 에 세운다. 맞은 뒤 그 자리에 있으면
-            // 순간이동이 일어나지 않은 것이다.
-            var shotAt = world.PositionOf(world.Seeker) + new Vector3(0f, 0f, 2f);
+            // `FireAtRunner` 가 Runner 를 사수 앞에 세운다. 맞은 뒤 그 자리에 있으면
+            // 순간이동이 일어나지 않은 것이다. 그 자리가 격자 셀 중심이 아니어야 이 비교가
+            // 성립한다 — 이유는 `FireAtRunner` 에 적혀 있다.
+            var shotAt = world.PositionOf(world.Seeker)
+                       + new Vector3(0f, 0f, HitWorld.OffLatticeRange);
 
             world.FireAtRunner();
 
@@ -317,9 +319,25 @@ namespace NV.Modules.Tests.Realtime
             /// **자리를 정해 놓고 쏘는 것이 의도다.** 피격 순간이동의 착지점은 무작위이고
             /// 픽스처 맵에는 벽(x 5~6)이 있으므로, 옮겨진 자리를 그대로 조준하면 검사가
             /// "벽 뒤로 옮겨졌는지" 에 따라 흔들린다. 여기서 확인하는 것은 판정이다.
+            /// 사수와 표적의 거리. 픽스처 격자의 셀 중심(4m 간격)에 걸리지 않아야 한다.
+            /// 이유는 <see cref="FireAtRunner"/> 에 적혀 있다.
+            public const float OffLatticeRange = 2.5f;
+
+            /// 사수 앞으로 Runner 를 세우고 한 발 쏜다.
+            ///
+            /// **거리가 2.5m 인 것은 격자를 피하기 위해서다.** 픽스처의 셀 중심은 4m 간격의
+            /// {-10,-6,-2,2,6,10} 이고 스폰 하나가 (-2,0,0) 이므로, 2m 앞은 (-2,0,2) 즉
+            /// **X 와 Z 가 모두 셀 중심**이다. 피격 순간이동은 무작위 `FreeFloor` 셀 중심으로
+            /// 보내므로 그 셀이 뽑히면 사격 전후의 좌표가 같아지고, "옮겨졌다" 를 좌표 비교로
+            /// 확인하는 테스트가 간헐적으로 실패한다. 원인이 격자에 있다는 신호는 어디에도
+            /// 없어서 순간이동이 안 일어난 것처럼 읽힌다.
+            ///
+            /// 스폰을 옮기지 않는 이유는 다른 테스트들이 두 스폰의 2m 간격에 기대고 있기
+            /// 때문이다(`EscapeTests` 의 반경, 이 클래스의 "한 틱 안에 닿는다"). 한 틱에
+            /// 총알이 4m 가므로 2.5m 도 같은 틱에 닿는다.
             public void FireAtRunner()
             {
-                var target = PositionOf(Seeker) + new Vector3(0f, 0f, 2f);
+                var target = PositionOf(Seeker) + new Vector3(0f, 0f, OffLatticeRange);
                 Teleport(Runner, target);
 
                 // 요 0 이 +Z 다(`PlayerMovement.Forward`).

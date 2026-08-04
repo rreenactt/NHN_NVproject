@@ -84,7 +84,12 @@ namespace NV.Modules.Tests.Realtime
             room.Broadcast(transport);
 
             // 전문은 Runner 사본으로 확인한다 — Seeker 사본에서는 열쇠 진행도가 0 이다.
-            Assert.True(transport.TryLastMatchState(2, out var header, out _));
+            //
+            // **누가 Runner 인지 물어봐야 한다.** `Room.PickSeeker` 는 `Random.Shared` 로
+            // 고르므로 세션 2가 Seeker 인 경우가 절반이고, 그때 이 테스트는 열쇠 진행도가
+            // 0 이라고 실패한다. 원인이 역할 배정에 있다는 신호는 어디에도 없어서 "종료 뒤
+            // 수치가 사라진다" 로 읽힌다.
+            Assert.True(transport.TryLastMatchState(RunnerSessionOf(transport), out var header, out _));
 
             Assert.Equal(MatchPhase.Ended, header.Phase);
             Assert.Equal(2, header.KeysInserted);
@@ -142,6 +147,27 @@ namespace NV.Modules.Tests.Realtime
             room.Advance();
 
             Assert.Equal(RoomPhase.Ended, room.Phase);
+        }
+
+        /// Runner 한 명의 세션 id. 술래가 무작위로 정해지므로 물어봐야 안다.
+        ///
+        /// `RoomFixture.FillAndStart` 는 세션 `n` 을 playerId `n-1` 로 넣으므로 둘의 변환은
+        /// +1 이다. 룸 상태는 어느 사본이든 같은 `SeekerPlayerId` 를 싣는다(정적 룸의 host
+        /// 바이트만 수신자별로 다르다).
+        private static int RunnerSessionOf(RecordingTransport transport)
+        {
+            Assert.True(transport.TryLastRoomState(1, out var header, out var players));
+
+            for (var index = 0; index < players.Length; index++)
+            {
+                if (players[index].PlayerId != header.SeekerPlayerId)
+                {
+                    return players[index].PlayerId + 1;
+                }
+            }
+
+            Assert.Fail("명단에 Runner 가 없다.");
+            return 0;
         }
 
         private static int OutcomeOf(Room room, RecordingTransport transport)

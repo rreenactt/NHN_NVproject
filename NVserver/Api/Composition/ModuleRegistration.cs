@@ -196,6 +196,43 @@ namespace NV.Api.Composition
             return configuration.GetSection(AllowedOriginsKey).Get<string[]>() ?? Array.Empty<string>();
         }
 
+        /// 로드한 맵을 전부 남긴다.
+        ///
+        /// **룸마다 맵이 다를 수 있으므로 하나만 찍어서는 아무 말도 못 한다.** 클라이언트가
+        /// 맵 해시 불일치를 보고했을 때 그 해시를 어느 맵과 비교해야 할지 알아야 하고, 그
+        /// 답이 로그에 없으면 서버를 다시 띄워 확인하는 것 말고 방법이 없다.
+        ///
+        /// 격자 유무를 함께 찍는 이유는 그것이 조용히 사라지는 값이기 때문이다. 격자 없는
+        /// 맵도 정상 로드되고 이동 판정도 정상이라, 없는 것은 "매치에 열쇠도 문도 생기지
+        /// 않는다" 로만 드러난다.
+        ///
+        /// `AddModules` 가 아니라 여기서 하는 이유는 로거다 — 맵 로드는 컨테이너를 만드는
+        /// 중에 일어나고 그 시점에는 아직 로거가 없다.
+        public static WebApplication LogLoadedMaps(this WebApplication app)
+        {
+            var maps = app.Services.GetRequiredService<RoomMaps>();
+
+            foreach (var pair in maps.ByMap)
+            {
+                var map = pair.Value;
+                var grid = map.HasGrid
+                    ? $"격자 {map.Data.Grid.Floors}층 {map.Data.Grid.Width}×{map.Data.Grid.Depth}, " +
+                      $"몸이 들어가는 셀 {map.Grid.FreeFloorCount}개"
+                    : "격자 없음";
+
+                app.Logger.LogInformation(
+                    "맵 로드: id={MapId} 이름={MapName} 박스={BoxCount} 스폰={SpawnCount} {Grid} 해시={MapHash:X8}",
+                    pair.Key,
+                    map.Name,
+                    map.Collision.BoxCount,
+                    map.SpawnCount,
+                    grid,
+                    map.Hash);
+            }
+
+            return app;
+        }
+
         public static WebApplication MapModules(this WebApplication app)
         {
             app.MapRealtime();

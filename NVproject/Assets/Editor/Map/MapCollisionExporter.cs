@@ -70,6 +70,12 @@ namespace NV.Client.EditorTools
                 return;
             }
 
+            if (!TryAcceptData(data, out var dataError))
+            {
+                Refuse(dataError);
+                return;
+            }
+
             var path = Path.Combine(directory, data.Name + ".json");
             File.WriteAllText(path, Serialize(data), new UTF8Encoding(false));
 
@@ -180,6 +186,50 @@ namespace NV.Client.EditorTools
 
             error = null;
             return true;
+        }
+
+        /// 서버가 로드할 때 하는 검사와 서버 테스트가 하는 검산을 **쓰기 전에** 돌린다.
+        ///
+        /// 검사 자체는 `Shared` 의 `MapDataValidator` 다. 여기서 다시 쓰면 두 판정이 갈리고,
+        /// export 가 통과시킨 파일이 서버 기동을 멈춘다 — 그것이 이 함수가 생긴 이유다.
+        ///
+        /// 시점이 요점이다. `ExportedMapTests` 가 같은 검산을 하지만 그것은 맵을 커밋한 뒤에
+        /// 돌고, export 는 커밋 전이다. 판정 코드가 전부 `Shared` 라 Unity 에서도 그대로 돈다.
+        ///
+        /// 경고는 막지 않는다. 박스가 많다거나 후보 셀이 적다는 것은 판정의 정확성 문제가
+        /// 아니라 재어 볼 일이다.
+        private static bool TryAcceptData(MapData data, out string error)
+        {
+            var errors = new List<string>();
+            var warnings = new List<string>();
+
+            if (MapDataValidator.TryValidateSchema(data, errors))
+            {
+                MapDataValidator.InspectSimulation(data, errors, warnings);
+            }
+
+            for (var index = 0; index < warnings.Count; index++)
+            {
+                Debug.LogWarning("[NV] 맵 검사 경고: " + warnings[index]);
+            }
+
+            if (errors.Count == 0)
+            {
+                error = null;
+                return true;
+            }
+
+            var text = new StringBuilder($"맵 검사에서 {errors.Count}건이 걸렸다.\n");
+
+            for (var index = 0; index < errors.Count; index++)
+            {
+                text.Append("\n  · ").Append(errors[index]);
+            }
+
+            text.Append("\n\n파일을 쓰지 않았다.");
+
+            error = text.ToString();
+            return false;
         }
 
         /// 출력 폴더를 정하고 **그것이 정말 이 저장소의 서버인지 확인한다.**

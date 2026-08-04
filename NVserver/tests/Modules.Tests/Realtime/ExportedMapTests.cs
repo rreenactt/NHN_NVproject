@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
 using NV.Infrastructure.FileSystem;
@@ -18,31 +19,82 @@ namespace NV.Modules.Tests.Realtime
     /// 맵 파일 단계에서 잡는다.
     public sealed class ExportedMapTests
     {
-        /// 서버가 로드할 수 있는 맵 전부. 어느 쪽으로 돌려도 플레이 가능해야 한다.
-        /// `backrooms` 는 게임, `test-room` 은 멀티플레이 확인용이다.
-        public static TheoryData<string, string> Maps => new TheoryData<string, string>
+        /// `MapData/` 에 있는 맵 **전부**. 목록을 적지 않고 디렉터리를 훑는다.
+        ///
+        /// **하드코딩이었고, 그것이 두 가지를 놓쳤다.** 새로 export 한 맵은 목록에 넣기
+        /// 전까지 아무 검사도 받지 않았고, 반대로 아무도 쓰지 않는 고아 파일이 디렉터리에
+        /// 남아 있어도 알려주는 것이 없었다(`backrooms2f.json` 과 `arena.json` 이 그렇게
+        /// 남아 있었다). 이제 파일을 놓으면 검사 대상이 되고, 검사를 통과하지 못하는 파일은
+        /// 지우거나 고쳐야 한다.
+        ///
+        /// 맵 이름은 인자로 받지 않는다 — 파일명과 `name` 필드가 맞는지는 그 자체로 검사할
+        /// 값이고, 밖에서 적어 두면 두 곳이 갈린다.
+        public static TheoryData<string> Maps
         {
-            { "backrooms.json", "backrooms" },
-            { "test-room.json", "test-room" },
-        };
+            get
+            {
+                var data = new TheoryData<string>();
+
+                foreach (var path in Directory.GetFiles(FindMapDirectory(), "*.json"))
+                {
+                    data.Add(Path.GetFileName(path));
+                }
+
+                return data;
+            }
+        }
 
         [Theory]
         [MemberData(nameof(Maps))]
-        public void Export된_맵이_로드되고_해시가_0이_아니다(string file, string name)
+        public void Export된_맵이_로드되고_해시가_0이_아니다(string file)
         {
             var map = Load(file);
 
-            Assert.Equal(name, map.Name);
             Assert.True(map.Collision.BoxCount > 0, "박스가 없다.");
             Assert.NotEqual(0u, map.Hash);
             Assert.Equal(8, map.SpawnCount);
         }
 
+        /// 파일명과 `name` 필드가 같아야 한다.
+        ///
+        /// export 는 `MapName` 으로 파일명을 정하므로 원래 같지만, 파일을 손으로 복사하거나
+        /// 고치면 갈린다. 갈리면 `Game:Maps` 에 어느 이름으로 등록해야 하는지가 모호해지고,
+        /// 증상은 등록한 맵 id 로 방을 만들 수 없는 것으로만 나타난다.
         [Theory]
         [MemberData(nameof(Maps))]
-        public void 모든_스폰이_지형과_겹치지_않는다(string file, string name)
+        public void 맵_이름이_파일명과_같다(string file)
         {
-            _ = name;
+            var map = Load(file);
+
+            Assert.Equal(Path.GetFileNameWithoutExtension(file), map.Name);
+        }
+
+        /// 서버가 로드할 때 하는 검사와 **같은 검사**를 여기서도 통과해야 한다.
+        ///
+        /// `MapLoader.Load` 가 이미 부르므로 중복처럼 보이지만, 이 테스트가 잡는 것은
+        /// 그 검사를 클라이언트도 export 전에 부른다는 사실이다 — 두 곳이 갈리면 export 가
+        /// 통과시킨 파일이 여기서 걸린다.
+        [Theory]
+        [MemberData(nameof(Maps))]
+        public void 스키마_검사와_시뮬레이션_검산을_통과한다(string file)
+        {
+            var map = Load(file);
+            var errors = new List<string>();
+            var warnings = new List<string>();
+
+            Assert.True(
+                MapDataValidator.TryValidateSchema(map.Data, errors),
+                string.Join("; ", errors));
+
+            MapDataValidator.InspectSimulation(map.Data, errors, warnings);
+
+            Assert.True(errors.Count == 0, string.Join("; ", errors));
+        }
+
+        [Theory]
+        [MemberData(nameof(Maps))]
+        public void 모든_스폰이_지형과_겹치지_않는다(string file)
+        {
             var map = Load(file);
 
             for (var index = 0; index < map.SpawnCount; index++)
@@ -58,9 +110,8 @@ namespace NV.Modules.Tests.Realtime
 
         [Theory]
         [MemberData(nameof(Maps))]
-        public void 스폰에서_가만히_있으면_바닥에_선다(string file, string name)
+        public void 스폰에서_가만히_있으면_바닥에_선다(string file)
         {
-            _ = name;
             var map = Load(file);
 
             for (var index = 0; index < map.SpawnCount; index++)
@@ -88,9 +139,8 @@ namespace NV.Modules.Tests.Realtime
 
         [Theory]
         [MemberData(nameof(Maps))]
-        public void 스폰_지점에서_앞으로_걸어도_지형을_통과하지_않는다(string file, string name)
+        public void 스폰_지점에서_앞으로_걸어도_지형을_통과하지_않는다(string file)
         {
-            _ = name;
             var map = Load(file);
             var state = PlayerState.Spawn(map.SpawnPosition(0), map.SpawnYaw(0), 100);
 
@@ -115,12 +165,28 @@ namespace NV.Modules.Tests.Realtime
 
         // ==================================================== 격자
 
-        /// 격자를 내놓는 맵. `test-room` 은 매치 규칙을 돌리지 않으므로 격자가 없고,
-        /// 그것이 정상이다.
-        public static TheoryData<string> GriddedMaps => new TheoryData<string>
+        /// 격자를 내놓는 맵. 목록을 적지 않고 **파일을 읽어 골라낸다.**
+        ///
+        /// 격자가 없는 것은 정상이므로(`test-room` 이 그렇다) 없는 맵을 여기 넣을 수는 없고,
+        /// 그렇다고 이름을 적어 두면 격자를 새로 갖게 된 맵이 검사에서 빠진다. 격자가 있는지는
+        /// 파일이 알고 있으니 파일에 묻는다.
+        public static TheoryData<string> GriddedMaps
         {
-            "backrooms.json",
-        };
+            get
+            {
+                var data = new TheoryData<string>();
+
+                foreach (var path in Directory.GetFiles(FindMapDirectory(), "*.json"))
+                {
+                    if (MapLoader.Load(path).HasGrid)
+                    {
+                        data.Add(Path.GetFileName(path));
+                    }
+                }
+
+                return data;
+            }
+        }
 
         [Theory]
         [MemberData(nameof(GriddedMaps))]
@@ -290,19 +356,18 @@ namespace NV.Modules.Tests.Realtime
 
         private static WorldMap Load(string file)
         {
-            return MapLoader.Load(FindMapPath(file));
+            return MapLoader.Load(Path.Combine(FindMapDirectory(), file));
         }
 
         /// 테스트는 artifacts/ 아래에서 실행되므로 저장소 루트를 거슬러 찾는다.
-        private static string FindMapPath(string file)
+        private static string FindMapDirectory()
         {
-            var relative = Path.Combine("MapData", file);
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
 
             while (directory != null)
             {
-                var candidate = Path.Combine(directory.FullName, relative);
-                if (File.Exists(candidate))
+                var candidate = Path.Combine(directory.FullName, "MapData");
+                if (Directory.Exists(candidate))
                 {
                     return candidate;
                 }
@@ -310,7 +375,7 @@ namespace NV.Modules.Tests.Realtime
                 directory = directory.Parent;
             }
 
-            throw new FileNotFoundException($"MapData/{file} 를 찾지 못했다.");
+            throw new DirectoryNotFoundException("MapData 를 찾지 못했다.");
         }
     }
 }

@@ -18,6 +18,10 @@ var app = builder.Build();
 
 app.UseExceptionHandling();
 
+// 어느 맵이 어느 id 로 올라왔는지 남긴다. 룸마다 맵이 다를 수 있으므로, 클라이언트가
+// 보고한 맵 해시를 어느 쪽과 비교할지는 이 로그에만 있다.
+app.LogLoadedMaps();
+
 // 오리진을 지정하지 않은 배포는 전부 허용으로 올라간다. 방 만들기가 아무 페이지에서나
 // 호출될 수 있다는 뜻이므로, 조용히 넘기지 않고 기동 로그에 남긴다.
 if (ModuleRegistration.ReadAllowedOrigins(builder.Configuration).Length == 0)
