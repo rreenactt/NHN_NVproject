@@ -1,6 +1,11 @@
-using NV.Shared.Collision;
+using System;
+using System.IO;
+using System.Text;
+using NV.Client.Net;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace NV.Client.EditorTools
 {
@@ -63,6 +68,117 @@ namespace NV.Client.EditorTools
             }
 
             Debug.Log("[NV] " + message);
+        }
+
+        /// 표에 있는 맵을 전부 내보낸다. 씬을 하나씩 열며 돈다.
+        ///
+        /// **표를 새로 만들지 않는다.** 어느 씬을 열어야 그 맵이 나오는지는 `MapSceneTable` 이
+        /// 이미 알고 있고, 세션 라우터가 같은 표를 읽는다. 표가 둘이면 갈리고, 이 표가 갈리는
+        /// 방식은 조용하다 — 맵 A 를 보고 씬 B 를 열면 다른 지형이 나오고 증상은 맵 해시 불일치
+        /// 하나다.
+        ///
+        /// Play 중에는 하지 않는다. 씬을 여는 것이 플레이 세션을 끊고, 그 상태에서 무엇이
+        /// export 되는지가 명확하지 않다.
+        [MenuItem("Tools/NV/Map/Export All Maps", priority = 63)]
+        public static void ExportAll()
+        {
+            if (Application.isPlaying)
+            {
+                Refuse("Play 중에는 배치 export 를 하지 않는다. 씬을 여는 것이 플레이 세션을 끊는다.");
+                return;
+            }
+
+            // 열려 있던 씬에 저장하지 않은 변경이 있으면 먼저 묻는다. 묻지 않고 씬을 열면
+            // 그 변경이 사라진다.
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+            {
+                Debug.Log("[NV] 배치 export 를 취소했다.");
+                return;
+            }
+
+            var opened = SceneManager.GetActiveScene().path;
+            var written = 0;
+            var failed = 0;
+            var report = new StringBuilder();
+
+            for (var index = 0; index < MapSceneTable.Count; index++)
+            {
+                var mapName = MapSceneTable.MapNameAt(index);
+                var sceneName = MapSceneTable.SceneNameAt(index);
+                var scenePath = $"Assets/Scenes/{sceneName}.unity";
+
+                if (!File.Exists(scenePath))
+                {
+                    failed++;
+                    report.Append($"\n  ✗ {mapName} — 씬이 없다: {scenePath}");
+                    continue;
+                }
+
+                EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+
+                var plan = MapExportPipeline.Plan();
+
+                if (!plan.CanExport)
+                {
+                    failed++;
+                    report.Append($"\n  ✗ {mapName} ({sceneName}) — {FirstLine(Explain(plan))}");
+                    continue;
+                }
+
+                if (!string.Equals(plan.Data.Name, mapName, StringComparison.Ordinal))
+                {
+                    // 표가 말하는 맵과 그 씬이 내놓는 맵이 다르다. 이것을 넘기면 표가 거짓인
+                    // 채로 남고, 라우터는 그 표를 믿는다.
+                    failed++;
+                    report.Append(
+                        $"\n  ✗ {mapName} ({sceneName}) — 이 씬의 레벨은 \"{plan.Data.Name}\" 이다. " +
+                        "MapSceneTable 과 MapName 이 어긋났다.");
+                    continue;
+                }
+
+                if (!MapExportPipeline.TryWrite(plan, out var message))
+                {
+                    failed++;
+                    report.Append($"\n  ✗ {mapName} — {FirstLine(message)}");
+                    continue;
+                }
+
+                written++;
+                report.Append($"\n  ✓ {mapName} ({sceneName}) — {plan.Describe()}");
+
+                if (plan.Unchanged)
+                {
+                    report.Append(" [변경 없음]");
+                }
+            }
+
+            // 시작한 씬으로 돌아온다. 배치 작업이 사람의 작업 상태를 바꿔 놓지 않는다.
+            if (!string.IsNullOrEmpty(opened) && File.Exists(opened))
+            {
+                EditorSceneManager.OpenScene(opened, OpenSceneMode.Single);
+            }
+
+            var summary = $"[NV] 배치 export: 성공 {written}건, 실패 {failed}건.{report}";
+
+            if (failed > 0)
+            {
+                Debug.LogError(summary);
+                EditorUtility.DisplayDialog("NV — 배치 export", summary, "확인");
+                return;
+            }
+
+            Debug.Log(summary);
+        }
+
+        private static string FirstLine(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return string.Empty;
+            }
+
+            var end = text.IndexOf('\n');
+            return end < 0 ? text : text.Substring(0, end);
         }
 
         /// 왜 쓸 수 없는지를 사람이 읽을 문장으로 만든다.

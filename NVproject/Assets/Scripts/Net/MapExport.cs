@@ -76,11 +76,19 @@ namespace NV.Client.Net
         {
             // 런타임에는 레벨 생성이 이미 채워 두었다. 에디터 export 는 지오메트리를
             // 만들지 않는 경로로 같은 목록을 다시 계산한다.
-            var boxes = source.CollisionBoxes;
-            if (boxes == null || boxes.Count == 0)
+            var levelBoxes = source.CollisionBoxes;
+            if (levelBoxes == null || levelBoxes.Count == 0)
             {
-                boxes = source.ComputeCollision();
+                levelBoxes = source.ComputeCollision();
             }
+
+            var boxes = new List<Bounds>(levelBoxes.Count + 8);
+            for (var index = 0; index < levelBoxes.Count; index++)
+            {
+                boxes.Add(levelBoxes[index]);
+            }
+
+            var volumes = AppendSceneVolumes(boxes, out var rejectedVolumes);
 
             var spawns = new List<(Vector3 position, float yaw)>(8);
             source.GetSpawns(spawns);
@@ -125,7 +133,88 @@ namespace NV.Client.Net
 
             AttachGrid(data, source, out report);
 
+            report.SceneVolumes = volumes;
+            report.RejectedVolumes = rejectedVolumes;
+
             return data;
+        }
+
+        /// 씬에 손으로 놓은 `NVCollisionVolume` 을 박스 목록에 더한다.
+        ///
+        /// **격자를 붙이기 전에 불려야 한다.** `FreeFloor` 는 이 목록으로 판정하므로, 프랍이
+        /// 차지한 셀이 배치 후보에서 빠지려면 그 프랍이 이미 목록에 있어야 한다.
+        ///
+        /// **순서를 고정한다.** `FindObjectsByType` 의 순서는 규정되지 않았고, 박스 목록의
+        /// 순서는 맵 해시에 그대로 들어간다(`MapData.ComputeHash` 가 순서대로 섞는다). 정렬하지
+        /// 않으면 같은 씬에서 export 한 파일과 런타임이 계산한 해시가 실행마다 달라지고, 증상은
+        /// 재현되지 않는 맵 해시 불일치다.
+        ///
+        /// 회전한 볼륨은 **건너뛴다.** 그것이 서버와 일치하는 유일한 선택이다 — 서버는 export
+        /// 된 목록만 아니까, 양쪽이 똑같이 빼면 판정이 갈리지 않는다. 사람에게는 export 가
+        /// 거절로 알린다.
+        private static int AppendSceneVolumes(List<Bounds> into, out List<string> rejected)
+        {
+            rejected = null;
+
+            var volumes = Object.FindObjectsByType<NVCollisionVolume>(FindObjectsSortMode.None);
+            if (volumes.Length == 0)
+            {
+                return 0;
+            }
+
+            var accepted = new List<Bounds>(volumes.Length);
+
+            for (var index = 0; index < volumes.Length; index++)
+            {
+                var reason = volumes[index].DescribeRejection();
+
+                if (reason != null)
+                {
+                    rejected = rejected ?? new List<string>();
+                    rejected.Add($"{volumes[index].name}: {reason}");
+                    continue;
+                }
+
+                if (volumes[index].TryGetWorldBounds(out var bounds))
+                {
+                    accepted.Add(bounds);
+                }
+            }
+
+            accepted.Sort(CompareBounds);
+
+            for (var index = 0; index < accepted.Count; index++)
+            {
+                into.Add(accepted[index]);
+            }
+
+            return accepted.Count;
+        }
+
+        /// 박스의 전순서. 같은 자리에 겹친 두 볼륨까지 가리도록 max 까지 본다.
+        private static int CompareBounds(Bounds left, Bounds right)
+        {
+            var order = Compare(left.min.x, right.min.x);
+            if (order != 0) return order;
+
+            order = Compare(left.min.y, right.min.y);
+            if (order != 0) return order;
+
+            order = Compare(left.min.z, right.min.z);
+            if (order != 0) return order;
+
+            order = Compare(left.max.x, right.max.x);
+            if (order != 0) return order;
+
+            order = Compare(left.max.y, right.max.y);
+            if (order != 0) return order;
+
+            return Compare(left.max.z, right.max.z);
+        }
+
+        private static int Compare(float left, float right)
+        {
+            return left < right ? -1 : left > right ? 1 : 0;
         }
 
         /// 레벨의 격자를 싣고 `FreeFloor` 를 채운다.
@@ -224,6 +313,16 @@ namespace NV.Client.Net
 
         /// `FreeFloor` 로 표시된 셀 수. 격자가 실렸을 때만 뜻이 있다.
         public int FreeFloorCells { get; private set; }
+
+        /// 박스 목록에 더해진 씬 볼륨의 수.
+        public int SceneVolumes { get; set; }
+
+        /// 실을 수 없어 건너뛴 씬 볼륨과 그 이유. 없으면 <c>null</c>.
+        ///
+        /// **런타임은 그냥 건너뛰고 export 는 거절한다.** 건너뛰는 것이 서버와 일치하는
+        /// 유일한 선택이고(서버는 export 된 목록만 안다), 그런 씬이 배포되지 않게 막는 것은
+        /// export 의 몫이다.
+        public List<string> RejectedVolumes { get; set; }
 
         public bool GridAttached => GridOffered && GridError == null;
 

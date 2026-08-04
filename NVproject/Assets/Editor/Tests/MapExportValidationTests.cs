@@ -196,6 +196,123 @@ namespace NV.Client.Tests
             Assert.IsNull(MapExport.FindInScene());
         }
 
+        // ==================================================== 씬 볼륨
+
+        private readonly List<GameObject> _spawned = new List<GameObject>();
+
+        [TearDown]
+        public void DestroySpawned()
+        {
+            for (var index = 0; index < _spawned.Count; index++)
+            {
+                if (_spawned[index] != null)
+                {
+                    Object.DestroyImmediate(_spawned[index]);
+                }
+            }
+
+            _spawned.Clear();
+        }
+
+        /// <summary>
+        /// A marked box collider reaches the box list. Without this the server never learns about
+        /// anything placed by hand in the scene, and the symptom is being blocked by nothing (or
+        /// walking through something) while the map hash still matches — the hash only sees the
+        /// exported list, so it cannot catch terrain that was never exported.
+        /// </summary>
+        [Test]
+        public void 표시된_씬_볼륨이_박스_목록에_들어간다()
+        {
+            var withoutVolume = MapExport.BuildMapData(new FlatRoom(), out var before);
+
+            Volume(new Vector3(4f, 0.5f, 4f), new Vector3(1f, 1f, 1f), Quaternion.identity);
+
+            var withVolume = MapExport.BuildMapData(new FlatRoom(), out var after);
+
+            Assert.AreEqual(0, before.SceneVolumes);
+            Assert.AreEqual(1, after.SceneVolumes);
+            Assert.AreEqual(withoutVolume.Boxes.Length + 1, withVolume.Boxes.Length);
+            Assert.AreNotEqual(withoutVolume.ComputeHash(), withVolume.ComputeHash());
+        }
+
+        /// <summary>
+        /// A rotated volume is skipped and reported. Skipping is the only choice that keeps client and
+        /// server agreeing — the server knows nothing but the exported list, so leaving it out on both
+        /// sides is consistent. The export refusing is what stops such a scene from shipping.
+        /// </summary>
+        [Test]
+        public void 회전한_씬_볼륨은_건너뛰고_보고된다()
+        {
+            Volume(new Vector3(4f, 0.5f, 4f), new Vector3(1f, 1f, 1f), Quaternion.Euler(0f, 30f, 0f));
+
+            MapExport.BuildMapData(new FlatRoom(), out var report);
+
+            Assert.AreEqual(0, report.SceneVolumes, "회전한 볼륨이 실렸다.");
+            Assert.IsNotNull(report.RejectedVolumes, "건너뛰면서 이유를 남기지 않았다.");
+            Assert.AreEqual(1, report.RejectedVolumes.Count);
+        }
+
+        /// <summary>
+        /// **This is the determinism test, and it is why the volumes are sorted.**
+        ///
+        /// <c>FindObjectsByType</c> does not specify its order, and the box list's order goes straight
+        /// into the map hash (<c>ComputeHash</c> folds the boxes in sequence). Without a sort, the file
+        /// exported from a scene and the hash the client computes at runtime could disagree from run to
+        /// run, and the symptom is a map-hash mismatch that does not reproduce.
+        /// </summary>
+        [Test]
+        public void 씬_볼륨의_순서가_해시를_바꾸지_않는다()
+        {
+            Volume(new Vector3(-6f, 0.5f, -6f), Vector3.one, Quaternion.identity);
+            Volume(new Vector3(6f, 0.5f, 6f), Vector3.one, Quaternion.identity);
+            Volume(new Vector3(0f, 0.5f, 6f), Vector3.one, Quaternion.identity);
+
+            var first = MapExport.BuildMapData(new FlatRoom()).ComputeHash();
+
+            DestroySpawned();
+
+            // 반대 순서로 만든다. 스캔 순서가 만든 순서를 따르는 구현에서는 이것이 다른
+            // 순서를 준다 — 정렬이 없으면 해시가 달라진다.
+            Volume(new Vector3(0f, 0.5f, 6f), Vector3.one, Quaternion.identity);
+            Volume(new Vector3(6f, 0.5f, 6f), Vector3.one, Quaternion.identity);
+            Volume(new Vector3(-6f, 0.5f, -6f), Vector3.one, Quaternion.identity);
+
+            var second = MapExport.BuildMapData(new FlatRoom()).ComputeHash();
+
+            Assert.AreEqual(first, second);
+        }
+
+        /// <summary>
+        /// A volume standing on a walkable cell must remove it from the placement candidates. That is
+        /// the whole reason the volumes are appended before the grid is attached — <c>FreeFloor</c> is
+        /// judged against the box list, so a prop added after would not block anything.
+        /// </summary>
+        [Test]
+        public void 씬_볼륨이_그_자리의_배치_후보를_없앤다()
+        {
+            MapExport.BuildMapData(new FlatRoom(), out var before);
+
+            // 셀 중심은 origin(-12) + (n + 0.5) × 3 이므로 (-10.5, 0, -10.5) 가 한 셀의 중심이다.
+            Volume(new Vector3(-10.5f, 1f, -10.5f), new Vector3(2f, 2f, 2f), Quaternion.identity);
+
+            MapExport.BuildMapData(new FlatRoom(), out var after);
+
+            Assert.AreEqual(before.FreeFloorCells - 1, after.FreeFloorCells);
+        }
+
+        private void Volume(Vector3 position, Vector3 size, Quaternion rotation)
+        {
+            var host = new GameObject("volume");
+            host.transform.SetPositionAndRotation(position, rotation);
+
+            var collider = host.AddComponent<BoxCollider>();
+            collider.size = size;
+
+            host.AddComponent<NVCollisionVolume>();
+
+            _spawned.Add(host);
+        }
+
         // ==================================================== 스키마 드리프트
 
         /// <summary>

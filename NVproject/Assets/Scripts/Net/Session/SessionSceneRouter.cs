@@ -13,24 +13,12 @@ namespace NV.Client.Net.Session
     /// 클라이언트가 그 맵과 다른 씬을 열면 증상이 맵 해시 불일치 하나로만 나타난다.
     public sealed class SessionSceneRouter : MonoBehaviour
     {
-        /// 로비 씬 이름. 매치가 끝나거나 나가면 여기로 돌아온다.
+        /// 로비 씬 이름. 표는 `MapSceneTable` 에 있다.
         ///
-        /// `SceneManager.LoadScene` 이 이름으로 찾으므로 이 씬은 **Build Settings 에
-        /// 등록되어 있어야 한다.** 등록을 빠뜨리면 에디터 플레이 중에도 복귀가 실패하고,
-        /// 증상은 매치가 끝난 뒤 아무 일도 일어나지 않는 것으로만 나타난다.
-        /// `Tools ▸ NV ▸ Scene ▸ Create Main Lobby Scene` 이 등록까지 한다.
-        public const string LobbyScene = "MainLobby";
-
-        /// 맵 이름 → 씬 이름.
-        ///
-        /// 표를 코드에 둔다. 맵을 하나 늘리는 것은 이미 코드(레벨 생성)와 서버 설정을
-        /// 함께 건드리는 일이므로, 여기에 한 줄이 더 붙는 것이 흩어지는 것보다 낫다.
-        /// 맵 이름은 서버가 로드한 `MapData` 의 이름이며, 클라이언트가 export 한 값이다.
-        private static readonly string[,] SceneByMap =
-        {
-            { "backrooms", "SampleScene" },
-            { "test-room", "MultiplayerTest" },
-        };
+        /// **표를 여기에 두지 않는 이유.** 배치 export 도 같은 짝을 알아야 하고(어느 씬을 열어야
+        /// 그 맵이 나오는가), 표가 둘이면 갈린다. 이 표가 갈리는 방식은 특히 조용하다 — 맵 A 를
+        /// 보고 씬 B 를 열면 그 씬은 다른 지형을 만들고, 증상은 맵 해시 불일치 하나다.
+        public const string LobbyScene = MapSceneTable.LobbyScene;
 
         private NetSession _session;
 
@@ -104,20 +92,7 @@ namespace NV.Client.Net.Session
 
         private static string SceneFor(string mapName)
         {
-            if (string.IsNullOrEmpty(mapName))
-            {
-                return string.Empty;
-            }
-
-            for (var index = 0; index < SceneByMap.GetLength(0); index++)
-            {
-                if (string.Equals(SceneByMap[index, 0], mapName, System.StringComparison.Ordinal))
-                {
-                    return SceneByMap[index, 1];
-                }
-            }
-
-            return string.Empty;
+            return MapSceneTable.SceneFor(mapName);
         }
     }
 }

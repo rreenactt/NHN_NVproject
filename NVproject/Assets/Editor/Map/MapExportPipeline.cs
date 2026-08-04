@@ -170,6 +170,17 @@ namespace NV.Client.EditorTools
                     "격자 없이 쓰면 서버가 그것을 정상으로 받아들이고, 매치에 열쇠도 문도 생기지 않는다.");
             }
 
+            if (plan.Report.RejectedVolumes != null)
+            {
+                for (var index = 0; index < plan.Report.RejectedVolumes.Count; index++)
+                {
+                    plan.Errors.Add(
+                        "씬 볼륨을 실을 수 없다 — " + plan.Report.RejectedVolumes[index] +
+                        " 이 상태로 쓰면 클라이언트에는 그 지형이 있고 서버에는 없다. " +
+                        "맵 해시는 그때도 일치한다.");
+                }
+            }
+
             if (plan.Report.GridAttached && plan.Report.FreeFloorCells == 0)
             {
                 plan.Errors.Add(
@@ -512,7 +523,12 @@ namespace NV.Client.EditorTools
                   $" (설 수 있는 셀 {CountFlag(Data.Grid, MapCellFlags.Standable)}개," +
                   $" 몸이 들어가는 셀 {Report.FreeFloorCells}개)";
 
-            return $"박스 {Data.Boxes.Length}개, 스폰 {Data.Spawns.Length}개, {grid}, 해시 {Hash:X8}";
+            var volumes = Report.SceneVolumes == 0
+                ? string.Empty
+                : $" (그중 씬 볼륨 {Report.SceneVolumes}개)";
+
+            return $"박스 {Data.Boxes.Length}개{volumes}, 스폰 {Data.Spawns.Length}개, " +
+                   $"{grid}, 해시 {Hash:X8}";
         }
 
         public static int CountFlag(MapGridData grid, MapCellFlags flag)
