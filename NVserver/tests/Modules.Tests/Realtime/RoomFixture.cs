@@ -115,15 +115,21 @@ namespace NV.Modules.Tests.Realtime
             int fillTo = 0,
             BotRolePreference role = BotRolePreference.Runner,
             bool isStatic = true,
-            bool enabled = true)
+            bool enabled = true,
+            BotBehavior behavior = BotBehavior.Idle,
+            uint seed = 0u,
+            bool withGrid = true)
         {
             return Create(
                 isStatic: isStatic,
+                withGrid: withGrid,
                 bots: new BotOptions
                 {
                     Enabled = enabled,
                     FillTo = fillTo,
                     Role = role,
+                    Behavior = behavior,
+                    Seed = seed,
                 });
         }
 

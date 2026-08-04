@@ -40,6 +40,12 @@ namespace NV.Realtime.Simulation
         /// 지울 참가자의 세션 id 를 모아 두는 자리. 순회 중에 딕셔너리를 바꿀 수 없다.
         private readonly List<int> _removalBuffer = new();
 
+        /// 봇의 마음. 세션 id 로 찾는다. **봇만 여기 있다.**
+        ///
+        /// `PlayerEntity` 에 두지 않는 이유는 `BotMind` 에 적혀 있다. 넣고 빼는 자리가
+        /// 각각 하나뿐(`JoinBot`·`RemoveAllBots`)이라 명단과 어긋날 수 없다.
+        private readonly Dictionary<int, BotMind> _minds = new();
+
         private readonly EntityState[] _entityBuffer = new EntityState[RealtimeConstants.Rooms.MaxPlayers];
         private readonly byte[] _sendBuffer = new byte[MessageCodec.SnapshotWireSize(RealtimeConstants.Rooms.MaxPlayers)];
 
@@ -764,10 +770,37 @@ namespace NV.Realtime.Simulation
         /// 두고 두뇌가 그것을 기준으로 다음 시선을 만든다.
         private void StepBot(PlayerEntity bot)
         {
-            var frame = ApplyFrame(bot, BotBrain.Think(bot.LastInput));
+            if (!_minds.TryGetValue(bot.SessionId, out var mind))
+            {
+                // 마음 없는 봇은 만들 수 없다 — 둘은 같은 자리에서 생긴다. 여기 오는
+                // 것은 그 불변식이 깨졌다는 뜻이므로 서 있게 두고 남긴다.
+                _logger.LogWarning(
+                    "룸 {RoomId}: 봇 세션 {SessionId} 의 마음이 없다. 서 있게 둔다.",
+                    RoomId,
+                    bot.SessionId);
+
+                bot.LastInput = InputValidator.Neutral(bot.LastInput);
+                return;
+            }
+
+            var senses = new BotSenses(bot.State, bot.LastInput, _map);
+            var frame = ApplyFrame(bot, BotBrain.Think(_bots.Behavior, mind, senses));
 
             bot.LastInput = InputValidator.WithoutEdgeButtons(frame);
             bot.RepeatCount = 0;
+        }
+
+        /// 이 봇의 난수 씨드.
+        ///
+        /// 슬롯 번호로 흩는다. 같은 씨드를 나눠 쓰면 봇들이 같은 목표를 뽑아 한 덩어리로
+        /// 움직이고, 그러면 여러 봇을 두는 의미가 없다. 설정이 0 이면 기동마다 달라진다.
+        private int BotSeedFor(byte playerId)
+        {
+            var baseSeed = _bots.Seed != 0u ? (int)_bots.Seed : Random.Shared.Next();
+
+            // 골든 비율 상수로 섞는다. 슬롯 번호를 그대로 XOR 하면 인접한 봇의 수열이
+            // 몇 비트만 다르고, `DeterministicSequence` 의 첫 몇 개가 비슷하게 나온다.
+            return baseSeed ^ unchecked((int)(0x9E3779B9u * (playerId + 1u)));
         }
 
         /// 프레임 하나를 검증하고 적용한다. **사람과 봇이 공유하는 유일한 경로다.**
@@ -1631,6 +1664,8 @@ namespace NV.Realtime.Simulation
                 _map.SpawnYaw(playerId),
                 name);
 
+            _minds[sessionId] = new BotMind(BotSeedFor(playerId));
+
             _stateDirty = true;
 
             _logger.LogInformation(
@@ -1671,6 +1706,11 @@ namespace NV.Realtime.Simulation
                 {
                     ReleaseSlot(bot.PlayerId);
                 }
+
+                // 마음도 함께 지운다. 남기면 다음에 같은 세션 id 가 나올 수는 없으므로
+                // 새는 것이지, 잘못 쓰이지는 않는다 — 그래도 명단과 같은 수명을 갖는 것이
+                // "봇만 마음이 있다" 를 유지하는 유일한 방법이다.
+                _minds.Remove(sessionId);
             }
 
             _stateDirty = true;
