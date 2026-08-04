@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using NV.Client.Map;
 using UnityEngine;
 
 namespace NV.Game
@@ -51,7 +52,19 @@ namespace NV.Game
         public event Action<string> Notified;
 
         [SerializeField] private GameConfig config;
-        [SerializeField] private BackroomsMapGenerator map;
+
+        /// <summary>
+        /// The level, held as the Unity object rather than as <see cref="ILevelQuery"/>.
+        ///
+        /// **Unity cannot serialize an interface-typed field**, and this one has to survive a domain
+        /// reload — a plain managed reference would come back null mid-play and every rule that asks
+        /// the level a question would throw for the rest of the session.
+        ///
+        /// Keeping the Unity type here also keeps Unity's own null behaviour: a destroyed component
+        /// compares equal to <c>null</c> through <c>MonoBehaviour</c>, and does not through an
+        /// interface reference. <see cref="Map"/> is the view onto it and does that check itself.
+        /// </summary>
+        [SerializeField] private MonoBehaviour map;
 
         private readonly List<PlayerAgent> _agents = new List<PlayerAgent>();
         private readonly List<KeyPickup> _keys = new List<KeyPickup>();
@@ -77,7 +90,12 @@ namespace NV.Game
         private int _runnersAtStart;
 
         public GameConfig Config => config;
-        public BackroomsMapGenerator Map => map;
+        /// <summary>
+        /// The level, or <c>null</c> if there is none — including the case where the component was
+        /// destroyed, which the <c>map == null</c> here catches through Unity's operator and a bare
+        /// <c>as</c> would not.
+        /// </summary>
+        public ILevelQuery Map => map == null ? null : map as ILevelQuery;
         public IReadOnlyList<PlayerAgent> Agents => _agents;
         public EscapeDoor Door => _door;
 
@@ -192,10 +210,27 @@ namespace NV.Game
             if (Instance == this) Instance = null;
         }
 
-        public void Configure(GameConfig gameConfig, BackroomsMapGenerator level)
+        /// <summary>
+        /// Hands over the balance values and the level. <c>MatchBootstrap</c> is the only caller.
+        ///
+        /// The level arrives as <see cref="ILevelQuery"/> — what the rules actually need — and is
+        /// stored as the Unity object behind it. An implementation that is not a
+        /// <see cref="MonoBehaviour"/> cannot be held across a domain reload, so it is refused
+        /// loudly rather than dropped.
+        /// </summary>
+        public void Configure(GameConfig gameConfig, ILevelQuery level)
         {
             if (gameConfig != null) config = gameConfig;
-            if (level != null) map = level;
+            if (level == null) return;
+
+            if (level is MonoBehaviour behaviour)
+            {
+                map = behaviour;
+                return;
+            }
+
+            Debug.LogError($"[Match] {level.GetType().Name} is not a MonoBehaviour, so it cannot be " +
+                           "held as the level. ILevelQuery implementations have to be components.");
         }
 
         // ============================================================ roster
@@ -241,7 +276,7 @@ namespace NV.Game
 
             // The level's grid is plain managed memory and does not survive a domain reload, while
             // its geometry does. Ask for it back before anything is placed on it.
-            map?.EnsureGrid();
+            Map?.EnsureGrid();
 
             Outcome = MatchOutcome.None;
             KeysInserted = 0;
@@ -277,7 +312,8 @@ namespace NV.Game
 
         private void PlaceAgentsAtStart(PlayerAgent seeker)
         {
-            if (ServerPlacesAgents || map == null || !map.HasGrid) return;
+            ILevelQuery level = Map;
+            if (ServerPlacesAgents || level == null || !level.HasGrid) return;
 
             for (int i = 0; i < _agents.Count; i++)
             {
@@ -286,10 +322,10 @@ namespace NV.Game
 
                 if (agent == seeker)
                 {
-                    agent.TeleportTo(map.SpawnCentre);
+                    agent.TeleportTo(level.SpawnCentre);
                     continue;
                 }
-                if (map.TryRandomPoint(Rng, out Vector3 point)) agent.TeleportTo(point);
+                if (level.TryRandomPoint(Rng, out Vector3 point)) agent.TeleportTo(point);
             }
         }
 
@@ -591,14 +627,15 @@ namespace NV.Game
         /// </summary>
         public void TeleportToRandomPoint(PlayerAgent agent)
         {
-            if (agent == null || map == null || !map.HasGrid) return;
+            ILevelQuery level = Map;
+            if (agent == null || level == null || !level.HasGrid) return;
 
-            if (map.TryRandomPoint(Rng, out Vector3 point))
+            if (level.TryRandomPoint(Rng, out Vector3 point))
             {
                 agent.TeleportTo(point);
                 return;
             }
-            if (map.TryNearestStandablePoint(agent.FeetPosition, out Vector3 fallback))
+            if (level.TryNearestStandablePoint(agent.FeetPosition, out Vector3 fallback))
                 agent.TeleportTo(fallback);
         }
 
@@ -828,7 +865,7 @@ namespace NV.Game
                 return;
             }
 
-            if (map == null || !map.HasGrid)
+            if (Map == null || !Map.HasGrid)
             {
                 Debug.LogWarning("[Match] No level to place the objective in.");
                 return;
@@ -912,7 +949,10 @@ namespace NV.Game
             // Cached: this runs at every match start, and building it walks every grid cell against
             // every collision box. `BackroomsMapGenerator.Generate` invalidates the cache, so a
             // regenerated level is not served a stale grid.
-            var data = NV.Client.Net.MapExport.BuildMapDataCached(map);
+            // The level answers the rules through ILevelQuery and the export through
+            // INetworkMapSource. Both are on the same component; a level that offers only the
+            // former has no grid to export and so has nothing to place against either.
+            var data = NV.Client.Net.MapExport.BuildMapDataCached(map as NV.Client.Net.INetworkMapSource);
             return data != null && data.HasGrid ? new NV.Shared.Collision.MapGrid(data.Grid) : null;
         }
 
@@ -943,9 +983,9 @@ namespace NV.Game
                 {
                     float angle = (float)Rng.NextDouble() * Mathf.PI * 2f;
                     var offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 0.7f;
-                    if (!map.TryNearestStandablePoint(around + offset, out point)) point = around;
+                    if (!Map.TryNearestStandablePoint(around + offset, out point)) point = around;
                 }
-                else if (!map.TryRandomPoint(Rng, out point))
+                else if (!Map.TryRandomPoint(Rng, out point))
                 {
                     continue;
                 }
@@ -971,7 +1011,7 @@ namespace NV.Game
             }
             _objectiveRoot = null;
 
-            map?.SetWallTransparency(1f);
+            Map?.SetWallTransparency(1f);
         }
 
         public void Notify(string message)

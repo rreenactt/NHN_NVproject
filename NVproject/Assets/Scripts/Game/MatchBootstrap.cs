@@ -1,3 +1,4 @@
+using NV.Client.Map;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -20,8 +21,8 @@ namespace NV.Game
                  "still runs — it just cannot be tuned between sessions.")]
         public GameConfig config;
 
-        [Tooltip("The level. Found by type if left empty.")]
-        public BackroomsMapGenerator map;
+        [Tooltip("The level — any component implementing ILevelQuery. Found by itself if left empty.")]
+        public MonoBehaviour map;
 
         [Tooltip("The local player's root, the one carrying FirstPersonController.")]
         public FirstPersonController player;
@@ -39,18 +40,49 @@ namespace NV.Game
         private PlayerAgent _localAgent;
         private Transform _runnerRoot;
 
+        /// <summary>
+        /// The level as the rules see it. Computed rather than cached: a plain
+        /// <see cref="ILevelQuery"/> field does not survive a domain reload, while
+        /// <see cref="map"/> does.
+        /// </summary>
+        private ILevelQuery Level => map == null ? null : map as ILevelQuery;
+
+        /// <summary>
+        /// The one level in the scene. <c>FindFirstObjectByType</c> cannot take an interface, so
+        /// this sweeps the components — the same thing <c>MapExport.FindAllInScene</c> does, and
+        /// like it, this runs once.
+        /// </summary>
+        public static MonoBehaviour FindLevel()
+        {
+            var candidates = FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
+
+            for (int i = 0; i < candidates.Length; i++)
+                if (candidates[i] is ILevelQuery) return candidates[i];
+
+            return null;
+        }
+
         private void Awake()
         {
             if (config == null) config = ScriptableObject.CreateInstance<GameConfig>();
-            if (map == null) map = FindFirstObjectByType<BackroomsMapGenerator>();
+            if (map == null) map = FindLevel();
             if (player == null) player = FindFirstObjectByType<FirstPersonController>();
+
+            if (map != null && !(map is ILevelQuery))
+            {
+                // Serialized as MonoBehaviour, so the inspector accepts anything. Say so here
+                // rather than letting every level query answer "there is no level".
+                Debug.LogError($"[Match] {map.GetType().Name} on '{map.name}' is wired as the level " +
+                               "but does not implement ILevelQuery.");
+                map = null;
+            }
 
             // Order matters: the HUD subscribes to both systems in OnEnable, so both have to
             // exist first. Building them as children of this object keeps the hierarchy honest
             // about what created them.
             _match = Create<MatchManager>("Match Manager");
             _devices = Create<DeviceSystem>("Device System");
-            _match.Configure(config, map);
+            _match.Configure(config, Level);
 
             // UI Toolkit, from Assets/Resources/UI. The document builds its tree when the roles are
             // handed out, because which half of the HUD exists depends on which side you are on.
@@ -140,7 +172,8 @@ namespace NV.Game
 
         private void SpawnPracticeRunners()
         {
-            if (config.practiceRunners <= 0 || map == null || !map.HasGrid) return;
+            ILevelQuery level = Level;
+            if (config.practiceRunners <= 0 || level == null || !level.HasGrid) return;
 
             _runnerRoot = new GameObject("__PracticeRunners").transform;
             _runnerRoot.SetParent(transform, false);
@@ -151,7 +184,7 @@ namespace NV.Game
 
             for (int i = 0; i < config.practiceRunners; i++)
             {
-                if (!map.TryRandomPoint(random, out Vector3 point)) continue;
+                if (!level.TryRandomPoint(random, out Vector3 point)) continue;
                 PracticeRunner.Spawn($"Runner {i + 1}", point, config.practiceRunnerSpeed,
                     _runnerRoot, random.Next());
             }

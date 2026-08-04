@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NV.Client.Map;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -452,7 +453,7 @@ namespace NV.Game.UI
             // sits on its floor while the eye is 1.62 m up, so a raw comparison called every
             // same-floor door "one storey down".
             string storey = string.Empty;
-            BackroomsMapGenerator map = _match.Map;
+            ILevelQuery map = _match.Map;
             if (map != null)
             {
                 int mine = map.FloorIndexAt(_local.FeetPosition.y);

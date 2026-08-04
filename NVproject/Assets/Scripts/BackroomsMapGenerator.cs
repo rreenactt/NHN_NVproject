@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NV.Client.Map;
 using NV.Client.Net;
 using NV.Shared.Collision;
 using Unity.AI.Navigation;
@@ -26,8 +27,13 @@ using UnityEngine;
 /// Layout is solved completely in memory before a single GameObject exists. Placing geometry
 /// first and fixing connectivity afterwards leaves orphaned tiles behind and produces maps the
 /// player cannot finish.
+///
+/// It answers the match layer through <see cref="ILevelQuery"/> rather than by name. Nothing about
+/// this class changes for that — the members were already public and already had these signatures —
+/// but it is what lets a level that was generated in the editor and baked take its place without
+/// the rules noticing.
 /// </summary>
-public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
+public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQuery
 {
     [Header("Footprint")]
     [Tooltip("Cells per side. 35 x 35 at 3 m is a ~105 m square.")]

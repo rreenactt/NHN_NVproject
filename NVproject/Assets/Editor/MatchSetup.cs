@@ -35,7 +35,7 @@ public static class MatchSetup
 
         var bootstrap = Undo.AddComponent<MatchBootstrap>(go);
         bootstrap.config = LoadOrCreateConfig();
-        bootstrap.map = Object.FindFirstObjectByType<BackroomsMapGenerator>();
+        bootstrap.map = MatchBootstrap.FindLevel();
         bootstrap.player = Object.FindFirstObjectByType<FirstPersonController>();
 
         // The bridge from the server's room phase to the match layer. Harmless offline — with no

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NV.Client.Map;
 using UnityEngine;
 
 namespace NV.Game.UI
@@ -23,7 +24,7 @@ namespace NV.Game.UI
 
         public Texture2D Texture => _texture;
 
-        public bool EnsureBuilt(BackroomsMapGenerator map)
+        public bool EnsureBuilt(ILevelQuery map)
         {
             if (map == null) return false;
 
@@ -79,7 +80,7 @@ namespace NV.Game.UI
         public void Refresh(MatchManager match, Role viewerRole)
         {
             if (_texture == null || match == null) return;
-            BackroomsMapGenerator map = match.Map;
+            ILevelQuery map = match.Map;
             if (map == null) return;
 
             System.Array.Copy(_base, _pixels, _base.Length);
