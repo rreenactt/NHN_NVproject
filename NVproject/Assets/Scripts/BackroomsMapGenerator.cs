@@ -150,6 +150,10 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
 
     public void Generate()
     {
+        // The terrain is about to change, so anything derived from it is stale. The cache cannot
+        // notice on its own — the box list is the same List instance emptied and refilled.
+        NV.Client.Net.MapExport.InvalidateCache();
+
         UsedSeed = randomizeSeed ? new System.Random().Next() : seed;
         var random = new System.Random(UsedSeed);
 
@@ -171,6 +175,8 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
     /// </summary>
     public IReadOnlyList<Bounds> ComputeCollision()
     {
+        NV.Client.Net.MapExport.InvalidateCache();
+
         UsedSeed = randomizeSeed ? new System.Random().Next() : seed;
         var random = new System.Random(UsedSeed);
 

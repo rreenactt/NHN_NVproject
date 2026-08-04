@@ -11,9 +11,57 @@ namespace NV.Client.Net
     /// export 와 검증이 서로 다른 계산을 하면 검증이 아무것도 잡지 못한다.
     public static class MapExport
     {
+        private static INetworkMapSource _cachedSource;
+        private static MapData _cachedData;
+
         public static MapData BuildMapData(INetworkMapSource source)
         {
             return BuildMapData(source, out _);
+        }
+
+        /// 런타임용. 같은 레벨에 대해 **한 번만** 만들고 그 뒤로는 같은 것을 돌려준다.
+        ///
+        /// **왜 필요한가.** `AttachGrid` 는 격자 셀마다 겹침 해소를 부르고, 겹침 해소는 박스
+        /// 목록을 선형으로 훑는다(브로드페이즈가 없다). `backrooms` 는 2450셀 × 736박스이므로
+        /// 상한이 수백만 회 AABB 검사다. export 에서 한 번이면 문제가 없는데, 런타임에도 두
+        /// 곳이 이것을 부른다 — 접속 시 맵 해시 대조(`NetworkBootstrap.OnWelcome`)와 오프라인
+        /// 매치 시작(`MatchManager.OfflineGrid`). 앞은 **접속하는 프레임**에 돈다.
+        ///
+        /// **에디터 export 는 이것을 쓰지 않는다.** 그쪽은 파일에 무엇을 쓸지 정하는 경로이고
+        /// 결과를 스탬프로 고치므로, 캐시된 인스턴스를 넘겨주면 런타임이 보는 자료가 함께
+        /// 바뀐다. 매번 새로 만드는 것이 맞고, 그 비용은 사람이 버튼을 누를 때 한 번이다.
+        ///
+        /// 한 칸짜리 캐시다. 씬에 레벨은 하나이고, 둘이면 서로 밀어내며 매번 다시 만든다 —
+        /// 느려지지만 틀리지는 않는다.
+        public static MapData BuildMapDataCached(INetworkMapSource source)
+        {
+            if (source == null)
+            {
+                return null;
+            }
+
+            if (ReferenceEquals(_cachedSource, source) && _cachedData != null)
+            {
+                return _cachedData;
+            }
+
+            _cachedData = BuildMapData(source, out _);
+            _cachedSource = source;
+
+            return _cachedData;
+        }
+
+        /// 지형이 다시 만들어졌다고 알린다. **레벨을 다시 만드는 쪽이 불러야 한다.**
+        ///
+        /// 캐시가 알아서 눈치챌 방법이 없다. 콜리전 목록은 같은 `List` 인스턴스를 비우고 다시
+        /// 채우므로 참조도 그대로이고, 개수만 보는 것은 씨드가 바뀌어도 개수가 같을 수 있으니
+        /// 검사가 아니다. 지형이 바뀐 것을 아는 것은 그것을 바꾼 쪽뿐이다.
+        ///
+        /// 도메인 리로드는 이 정적 필드를 지우므로 그 경로는 저절로 안전하다.
+        public static void InvalidateCache()
+        {
+            _cachedSource = null;
+            _cachedData = null;
         }
 
         /// 만들면서 알게 된 것을 함께 돌려준다.

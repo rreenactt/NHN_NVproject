@@ -909,8 +909,11 @@ namespace NV.Game
         /// </summary>
         private NV.Shared.Collision.MapGrid OfflineGrid()
         {
-            var data = NV.Client.Net.MapExport.BuildMapData(map);
-            return data.HasGrid ? new NV.Shared.Collision.MapGrid(data.Grid) : null;
+            // Cached: this runs at every match start, and building it walks every grid cell against
+            // every collision box. `BackroomsMapGenerator.Generate` invalidates the cache, so a
+            // regenerated level is not served a stale grid.
+            var data = NV.Client.Net.MapExport.BuildMapDataCached(map);
+            return data != null && data.HasGrid ? new NV.Shared.Collision.MapGrid(data.Grid) : null;
         }
 
         private static Vector3 ToUnity(System.Numerics.Vector3 value)

@@ -132,7 +132,29 @@ namespace NV.Client.Net
             _offlineWalkSpeed = _localPlayer.walkSpeed;
             _offlineSprintSpeed = _localPlayer.sprintSpeed;
 
+            PrecomputeMapHash();
+
             Bind();
+        }
+
+        /// 맵 해시를 **미리** 계산한다.
+        ///
+        /// 예전에는 `Welcome` 을 받은 프레임에 계산했다. 그 계산은 격자 셀마다 겹침 해소를
+        /// 부르고 겹침 해소는 박스 목록을 선형으로 훑으므로(브로드페이즈가 없다) `backrooms`
+        /// 에서는 상한이 수백만 회 AABB 검사다. WebGL 은 단일 스레드이므로 그것이 접속하는
+        /// 프레임에 그대로 얹혔다.
+        ///
+        /// 여기서는 레벨이 `Awake` 에 이미 만들어져 있고 아직 아무것도 급하지 않다. 결과는
+        /// `MapExport` 가 캐시하므로 오프라인 배치도 같은 것을 쓴다.
+        private void PrecomputeMapHash()
+        {
+            if (_map == null)
+            {
+                return;
+            }
+
+            var data = MapExport.BuildMapDataCached(_map);
+            _clientMapHash = data == null ? 0u : data.ComputeHash();
         }
 
         /// 세션이 있으면 그 클라이언트를 붙인다. 없으면 오프라인이다.
@@ -392,7 +414,13 @@ namespace NV.Client.Net
             }
 
             _mapHashChecked = true;
-            _clientMapHash = MapExport.BuildMapData(_map).ComputeHash();
+
+            // `Start` 에서 이미 계산했다. 그때 레벨이 없었던 경우만 여기서 채운다 —
+            // 접속 프레임에 수백만 회 AABB 검사를 얹지 않는 것이 이 순서의 요점이다.
+            if (_clientMapHash == 0u)
+            {
+                PrecomputeMapHash();
+            }
 
             if (_clientMapHash == _client.ServerMapHash)
             {
