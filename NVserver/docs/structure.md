@@ -38,6 +38,7 @@ NVserver/
 │   ├── Realtime/                    net10.0 · 프로젝트
 │   │   ├── Contracts/               룸 조회·커맨드 인터페이스, 발행 이벤트
 │   │   ├── Simulation/              룸, 월드 상태, 판정 규칙, 틱 루프
+│   │   │   └── Bots/                봇의 두뇌·시야·목표. 입력만 만든다
 │   │   ├── Transport/               세션, 송수신 펌프, WebSocket
 │   │   ├── RealtimeConstants.cs     판정·용량 상수의 유일한 출처
 │   │   └── Realtime.csproj
@@ -157,6 +158,8 @@ Modules/{모듈}/                      ← .NET 프로젝트 하나
 파일이 10개를 넘어가면 성격에 따라 폴더를 나누되 계층 이름은 쓰지 않는다.
 
 `Realtime`은 파일 수가 많아 처음부터 `Contracts` / `Simulation` / `Transport` 셋으로 나눈다. `DbContext`나 EF Core 참조가 생기려 한다면 설계가 어긋난 신호다.
+
+`Simulation/Bots/` 는 그 아래 한 단계 더 나눈 것이고, 성격이 아니라 **경계** 로 나눈 자리다. 봇 코드가 룸과 같은 폴더에 섞이면 `PlayerEntity` 나 `Objectives` 를 직접 만지는 코드가 자연스럽게 들어오는데, 그것이 봇을 두는 목적을 깨뜨린다 — 봇은 `InputFrame` 만 만들어야 한다. 폴더가 그 선을 눈에 보이게 한다.
 
 ---
 
