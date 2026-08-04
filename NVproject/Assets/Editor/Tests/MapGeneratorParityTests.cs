@@ -147,6 +147,110 @@ namespace NV.Client.Tests
         }
 
         /// <summary>
+        /// The generator window's export button hands the pipeline a level directly instead of
+        /// letting it sweep the scene.
+        ///
+        /// **That path has to reach the same verdict as the menu**, and it has to work in the one
+        /// situation the menu cannot: a scene holding more than one level. That is not a corner
+        /// case while the project is mid-migration — <c>SampleScene</c> legitimately holds the old
+        /// runtime generator *and* whatever the tool just built, and a scene sweep refuses two
+        /// (correctly, since the sweep order is undefined).
+        ///
+        /// A second level is planted here on purpose, so the test fails if somebody "simplifies"
+        /// <c>PlanFor</c> back into a sweep.
+        /// </summary>
+        [Test]
+        public void 도구가_씬을_훑지_않고_바로_export_계획을_세운다()
+        {
+            // 미끼는 BakedMapSource 로 만든다. TestRoomMap 을 붙이면 그 Awake 가 레벨을 통째로
+            // 세우고 RenderSettings 까지 바꾼다 — 이 검사가 알고 싶은 것은 "레벨이 둘일 때" 뿐이다.
+            BakeSource(new TestRoomGenerator().Generate(NewSettings()), "Test Room");
+            BakeSource(new TestRoomGenerator().Generate(NewSettings()), "Test Room");
+
+            Assert.Greater(CountSceneLevels(), 1, "이 검사는 레벨이 둘 이상일 때를 위한 것이다.");
+            Assert.IsFalse(MapExportPipeline.Plan().CanExport,
+                "씬을 훑는 경로가 레벨이 둘인데도 통과했다. 그러면 어느 파일이 쓰일지가 운에 달린다.");
+
+            var plan = MapExportPipeline.PlanFor(BakeSource(
+                new BackroomsGenerator().Generate(NewBackroomsSettings()), "Backrooms"));
+
+            Assert.IsTrue(plan.CanExport, "도구 경로가 막혔다: " + Describe(plan));
+            Assert.AreEqual("backrooms", plan.Data.Name);
+            StringAssert.EndsWith("backrooms.json", plan.OutputPath);
+
+            // 판정이 같은 함수를 지난다는 것의 확인 — 격자가 실렸고 몸이 들어가는 셀이 있다.
+            Assert.IsTrue(plan.Report.GridAttached, "격자가 실리지 않았다.");
+            Assert.Greater(plan.Report.FreeFloorCells, 0, "몸이 들어가는 셀이 하나도 없다.");
+        }
+
+        /// <summary>
+        /// The tool's export must describe the same terrain the menu's would — it is the same file.
+        /// </summary>
+        [Test]
+        public void 도구가_세운_계획이_배포된_맵과_같은_지형이다()
+        {
+            var plan = MapExportPipeline.PlanFor(BakeSource(
+                new BackroomsGenerator().Generate(NewBackroomsSettings()), "Backrooms"));
+
+            var golden = ReadGolden("backrooms");
+
+            AssertSectionsMatch(golden, plan.Serialized, "boxes");
+            AssertSectionsMatch(golden, plan.Serialized, "spawns");
+            Assert.AreEqual(GridCells(golden), GridCells(plan.Serialized));
+        }
+
+        private static int CountSceneLevels()
+        {
+            var found = new List<NV.Client.Net.INetworkMapSource>(4);
+            NV.Client.Net.MapExport.FindAllInScene(found);
+
+            return found.Count;
+        }
+
+        private static string Describe(MapExportPlan plan)
+        {
+            var text = plan.Blocker ?? plan.PathError ?? string.Empty;
+
+            for (var index = 0; index < plan.Errors.Count; index++) text += "\n  " + plan.Errors[index];
+
+            return text;
+        }
+
+        /// <summary>
+        /// Rewriting the provenance must not make a file look changed.
+        ///
+        /// The tool overwrites what the pipeline stamped, because the pipeline can only see the
+        /// throwaway object the tool handed it. **The comparison key must not move when it does**,
+        /// or "the content is the same, so don't write" becomes permanently false and every export
+        /// rewrites the file — which is precisely the fight the export pipeline already settled once
+        /// (it drops the provenance line before comparing, so that the recorded time means "when the
+        /// map last changed" rather than "when export last ran").
+        ///
+        /// This pins the invariant that <c>Restamp</c> exists to keep: the bytes change, the verdict
+        /// does not.
+        /// </summary>
+        [Test]
+        public void 출처를_고쳐도_같은_맵이라는_판정은_그대로다()
+        {
+            var plan = MapExportPipeline.PlanFor(BakeSource(
+                new BackroomsGenerator().Generate(NewBackroomsSettings()), "Backrooms"));
+
+            var keyBefore = plan.SerializedKey;
+            var textBefore = plan.Serialized;
+            var hashBefore = plan.Data.ComputeHash();
+
+            MapExportPipeline.Restamp(plan, "SomeOtherScene", "MapGenerator/Backrooms");
+
+            Assert.AreNotEqual(textBefore, plan.Serialized, "출처를 고쳤는데 파일 내용이 그대로다.");
+            Assert.AreEqual(keyBefore, plan.SerializedKey,
+                "출처가 비교에 들어갔다. 이러면 export 할 때마다 파일을 다시 쓴다.");
+            Assert.AreEqual(hashBefore, plan.Data.ComputeHash(),
+                "출처가 맵 해시에 들어갔다. 그러면 재-export 마다 해시가 바뀌어 대조가 뜻을 잃는다.");
+
+            StringAssert.Contains("MapGenerator/Backrooms", plan.Serialized);
+        }
+
+        /// <summary>
         /// The format abstraction must not become a second serializer.
         ///
         /// <c>JsonMapWriter</c> exists so the export can grow a second format later, and the way it
@@ -208,14 +312,28 @@ namespace NV.Client.Tests
         /// </summary>
         private NV.Shared.Collision.MapData BuildBackrooms()
         {
+            return Bake(new BackroomsGenerator().Generate(NewBackroomsSettings()), "Backrooms");
+        }
+
+        private BackroomsSettings NewBackroomsSettings()
+        {
             var settings = ScriptableObject.CreateInstance<BackroomsSettings>();
             settings.mapName = "backrooms";
             _spawned.Add(settings);
 
-            return Bake(new BackroomsGenerator().Generate(settings), "Backrooms");
+            return settings;
         }
 
         private NV.Shared.Collision.MapData Bake(MapBlueprint blueprint, string generatorName)
+        {
+            return MapExport.BuildMapData(BakeSource(blueprint, generatorName));
+        }
+
+        /// <summary>
+        /// A live <see cref="BakedMapSource"/> over this blueprint — the same thing the generator
+        /// window hands the export pipeline.
+        /// </summary>
+        private BakedMapSource BakeSource(MapBlueprint blueprint, string generatorName)
         {
             Assert.IsNull(blueprint.Blocker, "이 설정으로는 구울 수 없다: " + blueprint.Blocker);
 
@@ -229,7 +347,7 @@ namespace NV.Client.Tests
             var source = host.AddComponent<BakedMapSource>();
             source.asset = asset;
 
-            return MapExport.BuildMapData(source);
+            return source;
         }
 
         private TestRoomSettings NewSettings()

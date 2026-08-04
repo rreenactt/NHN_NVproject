@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NV.Client.EditorTools.Generators;
 using NV.Client.Map;
 using UnityEditor;
@@ -46,6 +47,15 @@ namespace NV.Client.EditorTools
         /// </summary>
         private Texture2D _previewTexture;
 
+        /// <summary>
+        /// 무엇을 서버로 쓸 것인가. `Check Export` 가 채우고 `Write To Server` 가 그것만 쓴다 —
+        /// 검사한 것과 쓰는 것이 같은 물건이어야 "본 대로 쓴다" 가 참이 된다.
+        /// </summary>
+        private MapExportPlan _exportPlan;
+
+        /// 파이프라인이 물을 수 없는 경고들. 이 창만 아는 것들이다.
+        private readonly List<string> _exportNotes = new List<string>();
+
         private string _status;
 
         private bool _statusIsError;
@@ -66,6 +76,7 @@ namespace NV.Client.EditorTools
             DrawSettings();
             DrawPreview();
             DrawActions();
+            DrawExport();
             DrawStatus();
 
             EditorGUILayout.EndScrollView();
@@ -399,10 +410,244 @@ namespace NV.Client.EditorTools
             return -1;
         }
 
+        // ==================================================== 서버로 보내기
+
+        /// 지금 화면의 설정으로 서버 맵 파일을 만든다.
+        ///
+        /// **왜 이 창에 있어야 하는가.** `Tools ▸ NV ▸ Map ▸ Export Map Collision` 은 **씬을
+        /// 훑어** 레벨을 찾고, 둘 이상이면 (옳게) 거절한다. 그런데 이 도구로 세운 레벨이 서 있는
+        /// 씬에는 예전 런타임 생성기도 아직 함께 있는 것이 정상이다 — 갈아타는 중이므로. 그래서
+        /// 그 메뉴로는 방금 만든 것을 내보낼 수 없다.
+        ///
+        /// 판정은 그 메뉴와 **한 글자도 다르지 않다.** 같은 `MapExportPipeline` 을 지나고, 갈리는
+        /// 것은 레벨을 씬에서 찾느냐 손에 든 것을 쓰느냐 한 걸음뿐이다.
+        private void DrawExport()
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("서버로 보내기", EditorStyles.boldLabel);
+
+            using (new EditorGUI.DisabledScope(_preview == null || _preview.Blocker != null))
+            {
+                if (GUILayout.Button("Check Export (쓰지 않는다)"))
+                {
+                    CheckExport();
+                }
+            }
+
+            if (_preview == null)
+            {
+                EditorGUILayout.HelpBox("먼저 Generate Preview 를 누른다.", MessageType.None);
+                return;
+            }
+
+            if (_exportPlan == null)
+            {
+                return;
+            }
+
+            DrawExportPlan();
+        }
+
+        private void DrawExportPlan()
+        {
+            if (_exportPlan.PathError != null)
+            {
+                EditorGUILayout.HelpBox(_exportPlan.PathError, MessageType.Error);
+                return;
+            }
+
+            EditorGUILayout.SelectableLabel(_exportPlan.OutputPath, EditorStyles.textField,
+                GUILayout.Height(EditorGUIUtility.singleLineHeight));
+
+            EditorGUILayout.LabelField("상태", _exportPlan.IsNewFile
+                ? "새 파일"
+                : _exportPlan.Unchanged ? "지금 파일과 같다 — 쓰지 않는다" : "지금 파일과 다르다 — 덮어쓴다");
+
+            EditorGUILayout.LabelField(_exportPlan.Describe(), EditorStyles.wordWrappedLabel);
+
+            for (var index = 0; index < _exportPlan.Errors.Count; index++)
+            {
+                EditorGUILayout.HelpBox(_exportPlan.Errors[index], MessageType.Error);
+            }
+
+            for (var index = 0; index < _exportPlan.Warnings.Count; index++)
+            {
+                EditorGUILayout.HelpBox(_exportPlan.Warnings[index], MessageType.Warning);
+            }
+
+            for (var index = 0; index < _exportNotes.Count; index++)
+            {
+                EditorGUILayout.HelpBox(_exportNotes[index], MessageType.Warning);
+            }
+
+            if (_exportPlan.RegistrationKnown && !_exportPlan.Registered)
+            {
+                EditorGUILayout.HelpBox(
+                    "이 맵 id 가 서버의 Game:Maps 에 없다. 등록하지 않으면 이 맵으로 방을 만들 수 " +
+                    "없고, export 한 사람은 자기 파일이 왜 안 먹는지 알 수 없다.\n\n" +
+                    "NVserver/Api/appsettings.json 의 Game:Maps 에 넣는다:\n  " +
+                    _exportPlan.RegistrationSnippet,
+                    MessageType.Warning);
+            }
+
+            using (new EditorGUI.DisabledScope(!_exportPlan.CanExport || _exportPlan.Unchanged))
+            {
+                if (GUILayout.Button("Write To Server"))
+                {
+                    WriteExport();
+                }
+            }
+        }
+
+        /// 무엇을 쓸지 정하고 **아무것도 쓰지 않는다.**
+        private void CheckExport()
+        {
+            _exportNotes.Clear();
+            _exportPlan = null;
+
+            var generator = MapGeneratorRegistry.ForSettings(_settings);
+            if (generator == null)
+            {
+                _status = $"{_settings.GetType().Name} 을 읽는 생성기가 없다.";
+                _statusIsError = true;
+                return;
+            }
+
+            // 임시 소스. 굽지 않고도 무엇이 나갈지 볼 수 있어야 하므로 프로젝트에 아무것도
+            // 만들지 않는다 — HideAndDontSave 라 씬이 더러워지지도, 저장되지도 않는다.
+            var asset = ScriptableObject.CreateInstance<MapBakedAsset>();
+            asset.hideFlags = HideFlags.HideAndDontSave;
+            asset.Fill(_preview, generator.DisplayName, string.Empty);
+
+            var host = new GameObject("__NVMapExportProbe") { hideFlags = HideFlags.HideAndDontSave };
+            var source = host.AddComponent<BakedMapSource>();
+            source.asset = asset;
+
+            try
+            {
+                _exportPlan = MapExportPipeline.PlanFor(source);
+                StampToolProvenance(generator);
+                CollectExportNotes();
+            }
+            finally
+            {
+                DestroyImmediate(host);
+                DestroyImmediate(asset);
+            }
+
+            _status = _exportPlan.CanExport
+                ? "검사했다. 아직 쓰지 않았다."
+                : "지금은 쓸 수 없다. 위의 빨간 줄을 본다.";
+            _statusIsError = !_exportPlan.CanExport;
+        }
+
+        /// 출처를 이 도구의 것으로 고쳐 적는다. 딸린 값을 함께 고치는 일은 파이프라인이 한다.
+        private void StampToolProvenance(IMapGenerator generator)
+        {
+            MapExportPipeline.Restamp(
+                _exportPlan,
+                UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().name,
+                "MapGenerator/" + generator.DisplayName);
+        }
+
+        /// 파이프라인이 물을 수 없는 것들. **전부 경고이지 관문이 아니다.**
+        ///
+        /// 파이프라인은 넘겨받은 레벨이 옳은지만 본다. "그 레벨이 이 씬의 레벨이 맞는가" 는
+        /// 이 창만 알 수 있는 질문이고, 틀렸을 때의 증상이 특히 조용해서 물어 둘 값이 있다.
+        private void CollectExportNotes()
+        {
+            if (_exportPlan?.Data == null) return;
+
+            var mapName = _exportPlan.Data.Name;
+            var expected = NV.Client.Net.MapSceneTable.SceneFor(mapName);
+            var active = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().name;
+
+            if (string.IsNullOrEmpty(expected))
+            {
+                _exportNotes.Add(
+                    $"\"{mapName}\" 이 MapSceneTable 에 없다. 파일은 쓸 수 있지만, 로비에서 이 맵으로 " +
+                    "방을 만들어도 클라이언트가 어느 씬을 열어야 하는지 모른다.");
+            }
+            else if (!string.Equals(expected, active, System.StringComparison.Ordinal))
+            {
+                // 씬 볼륨이 이 판정에 걸린다. `MapExport` 는 열려 있는 씬의 NVCollisionVolume 을
+                // 박스 목록에 더하므로, 남의 씬을 열어 놓고 내보내면 그 씬의 프랍이 이 맵에 실린다.
+                _exportNotes.Add(
+                    $"\"{mapName}\" 의 씬은 {expected} 인데 지금 열린 씬은 " +
+                    $"{(string.IsNullOrEmpty(active) ? "(이름 없음)" : active)} 다. " +
+                    "export 는 열린 씬의 NVCollisionVolume 을 함께 싣는다 — 지금 쓰면 남의 씬 프랍이 " +
+                    "이 맵의 지형이 된다.");
+            }
+
+            DescribeBakeMismatch(mapName);
+        }
+
+        /// 지금 내보내려는 지형이 구워 둔 에셋과 같은가.
+        ///
+        /// 다르면 **서버는 지금 화면의 값을 받고 프로젝트에는 그 지형이 없다.** 클라이언트가 여는
+        /// 씬은 구운 프리팹이므로 둘이 갈리고, 증상은 접속할 때마다의 맵 해시 불일치 하나다.
+        private void DescribeBakeMismatch(string mapName)
+        {
+            var path = $"{MapBakePipeline.AssetDirectory}/{mapName}.asset";
+            var baked = AssetDatabase.LoadAssetAtPath<MapBakedAsset>(path);
+
+            if (baked == null)
+            {
+                _exportNotes.Add(
+                    $"이 맵을 아직 굽지 않았다({path} 가 없다). 파일은 쓸 수 있지만 그 지형을 " +
+                    "만드는 것이 프로젝트에 없다 — 먼저 Bake 를 누르는 편이 맞다.");
+                return;
+            }
+
+            var boxes = new List<Bounds>(_preview.Pieces.Count);
+            _preview.CollectCollisionBoxes(boxes);
+
+            if (boxes.Count != baked.Boxes.Count)
+            {
+                _exportNotes.Add(
+                    $"구운 에셋과 지형이 다르다(박스 {baked.Boxes.Count} → {boxes.Count}). " +
+                    "설정을 바꾸고 다시 굽지 않았다 — 먼저 Bake 를 누른다.");
+                return;
+            }
+
+            for (var index = 0; index < boxes.Count; index++)
+            {
+                if (boxes[index] == baked.Boxes[index]) continue;
+
+                _exportNotes.Add(
+                    "구운 에셋과 지형이 다르다(박스 수는 같고 값이 다르다). 설정을 바꾸고 다시 " +
+                    "굽지 않았다 — 먼저 Bake 를 누른다.");
+                return;
+            }
+        }
+
+        private void WriteExport()
+        {
+            if (!MapExportPipeline.TryWrite(_exportPlan, out var message))
+            {
+                _status = message;
+                _statusIsError = true;
+                Debug.LogError("[NV] 맵 export 를 하지 않았다. " + message);
+                return;
+            }
+
+            _status = message;
+            _statusIsError = false;
+            Debug.Log("[NV] " + message);
+
+            // 쓴 뒤의 계획은 "쓰기 전" 을 말하고 있다. 다시 검사해 상태를 지금 것으로 바꾼다.
+            CheckExport();
+        }
+
         /// 미리보기를 버린다. **텍스처까지 버린다** — 그것이 미리보기의 일부다.
         private void ClearPreview()
         {
             _preview = null;
+
+            // 계획은 그 미리보기에 대한 것이었다. 남겨 두면 화면의 값과 다른 지형을 두고
+            // "쓰기" 를 누를 수 있게 된다.
+            _exportPlan = null;
+            _exportNotes.Clear();
 
             if (_previewTexture == null) return;
 

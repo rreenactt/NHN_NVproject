@@ -30,6 +30,32 @@ namespace NV.Client.EditorTools
             var sources = new List<INetworkMapSource>(2);
             MapExport.FindAllInScene(sources);
 
+            return PlanFor(sources);
+        }
+
+        /// 주어진 레벨로 계획을 세운다. 씬을 훑지 않는다.
+        ///
+        /// **맵 생성 도구가 쓴다.** 그 도구는 방금 만든 레벨을 손에 들고 있으므로 씬에서 다시
+        /// 찾을 이유가 없고, 찾으려 하면 오히려 막힌다 — `SampleScene` 에는 예전 런타임 생성기가
+        /// 아직 서 있어서 도구가 세운 레벨과 둘이 되고, 씬 스캔은 둘이면 (옳게) 거절한다.
+        ///
+        /// **판정은 하나도 다르지 않다.** 갈라지는 것은 "레벨을 어디서 얻는가" 한 걸음뿐이고
+        /// 나머지는 같은 함수를 지난다. 두 벌이 되면 한쪽만 느슨해지는 날이 오고, 그 느슨한 쪽이
+        /// 쓴 파일은 서버가 그대로 신뢰한다.
+        public static MapExportPlan PlanFor(INetworkMapSource source)
+        {
+            var sources = new List<INetworkMapSource>(1);
+
+            if (source != null)
+            {
+                sources.Add(source);
+            }
+
+            return PlanFor(sources);
+        }
+
+        private static MapExportPlan PlanFor(List<INetworkMapSource> sources)
+        {
             var plan = new MapExportPlan(sources);
 
             if (sources.Count != 1)
@@ -84,6 +110,32 @@ namespace NV.Client.EditorTools
             CheckRegistration(plan);
 
             return plan;
+        }
+
+        /// 출처를 고쳐 적고 **그것에 딸린 값을 전부 다시 계산한다.**
+        ///
+        /// 맵 생성 도구가 쓴다. 그 도구는 임시로 만들었다 지우는 오브젝트를 파이프라인에 건네므로
+        /// `StampProvenance` 가 적는 씬 이름이 비고 컴포넌트 이름이 `BakedMapSource` 가 된다 —
+        /// 나중에 이 파일이 어디서 나왔는지 묻는 사람에게 아무 말도 해 주지 않는다.
+        ///
+        /// **직렬화만 고치면 안 되기 때문에 여기 있다.** 계획은 직렬화 문자열과 그것의 비교용
+        /// 형태를 함께 들고 있고, 둘은 같은 순간에 나와야 한다. 지금은 비교용 형태가 출처 줄을
+        /// 버리므로 한쪽만 고쳐도 답이 같지만, 그것은 `ComparisonKey` 의 현재 구현에 기댄 우연이다
+        /// — 출처를 여러 줄로 쓰게 되는 날 조용히 틀린다.
+        ///
+        /// 맵 해시는 바뀌지 않는다. 출처는 해시에 들어가지 않는다.
+        public static void Restamp(MapExportPlan plan, string scene, string component)
+        {
+            if (plan?.Data?.Source == null)
+            {
+                return;
+            }
+
+            plan.Data.Source.Scene = scene ?? string.Empty;
+            plan.Data.Source.Component = component ?? string.Empty;
+
+            plan.Serialized = Serialize(plan.Data);
+            plan.SerializedKey = ComparisonKey(plan.Serialized);
         }
 
         /// 계획대로 쓴다. 통과하지 않은 계획은 거절한다.
