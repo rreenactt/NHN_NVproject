@@ -46,6 +46,10 @@ namespace NV.Realtime.Simulation
         /// 각각 하나뿐(`JoinBot`·`RemoveAllBots`)이라 명단과 어긋날 수 없다.
         private readonly Dictionary<int, BotMind> _minds = new();
 
+        /// 봇에게 넘길 다른 몸들. 틱마다 다시 채우고 재사용한다 —
+        /// 봇 수 × 8 개의 배열을 매 틱 만들지 않는다. 자기 자신은 빠지므로 정원보다 하나 작다.
+        private readonly BotTarget[] _targetBuffer = new BotTarget[RealtimeConstants.Rooms.MaxPlayers - 1];
+
         private readonly EntityState[] _entityBuffer = new EntityState[RealtimeConstants.Rooms.MaxPlayers];
         private readonly byte[] _sendBuffer = new byte[MessageCodec.SnapshotWireSize(RealtimeConstants.Rooms.MaxPlayers)];
 
@@ -783,11 +787,52 @@ namespace NV.Realtime.Simulation
                 return;
             }
 
-            var senses = new BotSenses(bot.State, bot.LastInput, _map);
-            var frame = ApplyFrame(bot, BotBrain.Think(_bots.Behavior, mind, senses));
+            var frame = ApplyFrame(bot, BotBrain.Think(_bots.Behavior, mind, SenseFor(bot)));
 
             bot.LastInput = InputValidator.WithoutEdgeButtons(frame);
             bot.RepeatCount = 0;
+        }
+
+        /// 이 봇이 이번 틱에 볼 것을 모은다.
+        ///
+        /// 다른 몸은 값으로 복사한다(`BotTarget`). 산 `PlayerEntity` 를 넘기면 두뇌가 위치를
+        /// 직접 옮길 수 있고, 그 순간 봇이 서버 판정을 우회하는 존재가 된다.
+        ///
+        /// **자기 자신은 목록에 넣지 않는다.** 넣으면 술래 봇이 가장 가까운 Runner 를 찾을 때
+        /// 거리 0 인 자기를 집을 수 있고(자기가 Runner 인 경우) 제자리에서 방아쇠를 당긴다.
+        private BotSenses SenseFor(PlayerEntity bot)
+        {
+            var count = 0;
+
+            foreach (var other in _players.Values)
+            {
+                if (other.SessionId == bot.SessionId || count >= _targetBuffer.Length)
+                {
+                    continue;
+                }
+
+                _targetBuffer[count] = new BotTarget(
+                    other.PlayerId,
+                    other.State.Position,
+                    RoleOf(other.PlayerId) == MatchRole.Runner,
+                    !other.Downed && !other.Escaped);
+
+                count++;
+            }
+
+            return new BotSenses(
+                bot.State,
+                bot.LastInput,
+                _map,
+                RoleOf(bot.PlayerId),
+                _match.Phase,
+                bot.CarriedKeys,
+                _objectives.Placed,
+                _match.DoorOpen,
+                _objectives.DoorPosition,
+                _objectives.Keys,
+                _targetBuffer,
+                count);
         }
 
         /// 이 봇의 난수 씨드.
