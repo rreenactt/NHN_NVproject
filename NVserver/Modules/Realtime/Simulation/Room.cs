@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using NV.Realtime.Contracts;
+using NV.Realtime.Simulation.Bots;
 using NV.Realtime.Transport;
 using NV.Shared.Collision;
 using NV.Shared.Contracts.Enums;
@@ -35,6 +36,9 @@ namespace NV.Realtime.Simulation
 
         /// 도착 시점이 아직 안 된 입력. 틱 루프만 만진다.
         private readonly List<InboundInput> _heldInputs = new();
+
+        /// 지울 참가자의 세션 id 를 모아 두는 자리. 순회 중에 딕셔너리를 바꿀 수 없다.
+        private readonly List<int> _removalBuffer = new();
 
         private readonly EntityState[] _entityBuffer = new EntityState[RealtimeConstants.Rooms.MaxPlayers];
         private readonly byte[] _sendBuffer = new byte[MessageCodec.SnapshotWireSize(RealtimeConstants.Rooms.MaxPlayers)];
@@ -95,6 +99,9 @@ namespace NV.Realtime.Simulation
         private readonly ILogger _logger;
         private readonly bool _isStatic;
 
+        /// 봇 참가자 설정. 꺼져 있거나 정적 룸이 아니면 아무 일도 하지 않는다.
+        private readonly BotOptions _bots;
+
         /// 이 방을 `GET /rooms` 목록에 실을 것인가.
         ///
         /// 방을 만든 사람이 정하고 바꿀 수 없다. 만든 뒤에 공개로 돌릴 수 있게 하면,
@@ -114,6 +121,16 @@ namespace NV.Realtime.Simulation
         private int _hostPlayerId = RoomStateHeader.NoPlayer;
 
         private int _hostSessionId;
+
+        /// 다음 봇에게 줄 세션 id. **-1 부터 내려간다.**
+        ///
+        /// 소켓이 없으므로 `SessionRegistry` 에서 받을 수 없고, 받아도 의미가 없다 —
+        /// 그 표는 소켓을 찾는 표다. 음수를 쓰는 이유는 겹치지 않는 것 말고 하나 더
+        /// 있다: 부호가 곧 "봇인가" 라서 로그와 판정이 그것을 유도할 수 있고,
+        /// `IsAuthorized` 가 요구하는 방장 세션 id 는 항상 양수이므로 봇이 방장
+        /// 자격을 얻는 경로가 산술적으로 없다.
+        private int _nextBotSessionId = -1;
+
         private byte _seekerPlayerId = RoomStateHeader.NoPlayer;
         private int _placementSeed;
         private uint _startTick;
@@ -142,7 +159,8 @@ namespace NV.Realtime.Simulation
             NetworkConditionSimulator network,
             ILogger logger,
             bool isStatic = false,
-            bool isPublic = false)
+            bool isPublic = false,
+            BotOptions? bots = null)
         {
             RoomId = roomId;
             _map = map;
@@ -150,6 +168,10 @@ namespace NV.Realtime.Simulation
             _logger = logger;
             _isStatic = isStatic;
             _isPublic = isPublic;
+
+            // 넘기지 않았으면 꺼진 설정이다. null 을 그대로 들고 있으면 봇을 보는 자리마다
+            // null 검사가 하나씩 붙고, 그중 하나를 빼먹는 것이 곧 NRE 다.
+            _bots = bots ?? new BotOptions();
         }
 
         public string RoomId { get; }
@@ -337,6 +359,15 @@ namespace NV.Realtime.Simulation
                 // 무한히 자란다 — 클라이언트가 보내지 않기로 되어 있어도 서버가 그것에
                 // 기대면 안 된다.
                 DiscardInputs();
+
+                // 봇 채우기는 **대기 단계에서만** 돈다. `/ws` 가 사람에게 진행 중 합류를
+                // 막는 것과 같은 이유이고(역할도 배치도 이미 정해져 있어 규칙이 성립하지
+                // 않는다), 이 검사가 여기 있는 것이 그 규칙의 전부다 — `Broadcast` 나
+                // `Sweep` 쪽에 두면 단계가 시야에서 사라진다.
+                if (Phase == RoomPhase.Waiting)
+                {
+                    TopUpBots();
+                }
             }
 
             Volatile.Write(ref _playerCount, _players.Count);
@@ -381,6 +412,14 @@ namespace NV.Realtime.Simulation
 
             foreach (var player in _players.Values)
             {
+                // 봇에게는 보내지 않는다. 위의 엔티티 목록에는 **들어간다** — 사람들이
+                // 봇의 몸을 봐야 한다. 걸러지는 것은 수신자 쪽뿐이고, 그래서 이 함수의
+                // 두 순회가 서로 다른 목록을 돈다.
+                if (player.IsBot)
+                {
+                    continue;
+                }
+
                 var header = new SnapshotHeader(_tick, player.LastProcessedInputTick, (byte)count);
                 var length = MessageCodec.WriteSnapshot(
                     _sendBuffer,
@@ -436,6 +475,11 @@ namespace NV.Realtime.Simulation
 
             foreach (var player in _players.Values)
             {
+                if (player.IsBot)
+                {
+                    continue;
+                }
+
                 transport.TrySend(
                     player.SessionId,
                     new ReadOnlySpan<byte>(_stateBuffer, 0, length),
@@ -509,6 +553,11 @@ namespace NV.Realtime.Simulation
 
             foreach (var player in _players.Values)
             {
+                if (player.IsBot)
+                {
+                    continue;
+                }
+
                 var length = MessageCodec.WriteMatchState(
                     _matchStateBuffer,
                     header,
@@ -583,6 +632,11 @@ namespace NV.Realtime.Simulation
 
             foreach (var player in _players.Values)
             {
+                if (player.IsBot)
+                {
+                    continue;
+                }
+
                 var length = MessageCodec.WriteObjectiveState(
                     _objectiveStateBuffer,
                     header,
@@ -635,29 +689,22 @@ namespace NV.Realtime.Simulation
         /// 반복을 무제한 허용하면 입력을 끊은 클라이언트가 계속 달린다.
         private void StepPlayer(PlayerEntity player)
         {
+            // 봇은 입력 버퍼를 지나지 않는다. 매 틱 정확히 한 프레임을 만들고 그것이
+            // 유실될 경로가 없으므로, 따라잡기 상한·반복·중립화 같은 지터 흡수 장치를
+            // 지날 이유가 없다. **적용은 사람과 같은 함수를 부른다**(`ApplyFrame`) —
+            // 그것을 갈라 두면 이동 잠금 규칙이 두 곳에 생기고, 증상은 "리빌 중에
+            // 봇만 움직인다" 가 된다.
+            if (player.IsBot)
+            {
+                StepBot(player);
+                return;
+            }
+
             var applied = 0;
 
             while (applied < RealtimeConstants.Rooms.MaxInputsPerTick && player.TryTakeNext(out var input))
             {
-                var frame = InputValidator.Sanitize(input.Frame);
-
-                // 역할 공개와 결과 화면에서는 이동을 비운다. 입력은 그래도 **소비한다** —
-                // 버리기만 하면 잠금이 풀리는 순간 쌓인 입력이 한꺼번에 적용되어
-                // 플레이어가 순간이동한다. 시선은 남기므로 리빌 중에도 둘러볼 수 있다.
-                if (_match.MovementLocked)
-                {
-                    frame = InputValidator.Neutral(frame);
-                }
-
-                // 상호작용 요청을 여기서 걷는다. 판정은 이동이 끝난 뒤에 한 번 돌므로
-                // (`InsertKeys`) 같은 틱에 여러 프레임을 따라잡아도 요청은 한 번이다 —
-                // 그것이 맞다. 클라이언트는 키를 한 번 눌렀다.
-                if ((frame.Buttons & ButtonFlags.Interact) != 0)
-                {
-                    player.InteractRequested = true;
-                }
-
-                Simulate(player, frame);
+                var frame = ApplyFrame(player, input.Frame);
 
                 // 엣지 버튼을 지운 프레임을 저장한다. `LastInput` 은 **반복 적용될 값**이므로
                 // 한 번만 발동해야 하는 비트가 남아 있으면 안 된다.
@@ -696,6 +743,48 @@ namespace NV.Realtime.Simulation
                 }
             }
 
+        }
+
+        /// 봇을 한 틱 진행한다. 두뇌가 만든 프레임을 사람과 같은 경로로 적용한다.
+        ///
+        /// `LastInput` 을 저장하는 이유가 사람과 다르다. 사람에게는 새 입력이 없을 때
+        /// 반복할 값이지만, 봇에게는 **다음 틱 두뇌의 입력**이다 — 시선을 여기에 담아
+        /// 두고 두뇌가 그것을 기준으로 다음 시선을 만든다.
+        private void StepBot(PlayerEntity bot)
+        {
+            var frame = ApplyFrame(bot, BotBrain.Think(bot.LastInput));
+
+            bot.LastInput = InputValidator.WithoutEdgeButtons(frame);
+            bot.RepeatCount = 0;
+        }
+
+        /// 프레임 하나를 검증하고 적용한다. **사람과 봇이 공유하는 유일한 경로다.**
+        ///
+        /// 돌려주는 것은 검증·잠금을 지난 프레임이다. 호출자가 그것을 `LastInput` 에
+        /// 저장해야 하며, 원본을 저장하면 잠금 중에 지운 이동 성분이 되살아난다.
+        private InputFrame ApplyFrame(PlayerEntity player, in InputFrame raw)
+        {
+            var frame = InputValidator.Sanitize(raw);
+
+            // 역할 공개와 결과 화면에서는 이동을 비운다. 입력은 그래도 **소비한다** —
+            // 버리기만 하면 잠금이 풀리는 순간 쌓인 입력이 한꺼번에 적용되어
+            // 플레이어가 순간이동한다. 시선은 남기므로 리빌 중에도 둘러볼 수 있다.
+            if (_match.MovementLocked)
+            {
+                frame = InputValidator.Neutral(frame);
+            }
+
+            // 상호작용 요청을 여기서 걷는다. 판정은 이동이 끝난 뒤에 한 번 돌므로
+            // (`InsertKeys`) 같은 틱에 여러 프레임을 따라잡아도 요청은 한 번이다 —
+            // 그것이 맞다. 클라이언트는 키를 한 번 눌렀다.
+            if ((frame.Buttons & ButtonFlags.Interact) != 0)
+            {
+                player.InteractRequested = true;
+            }
+
+            Simulate(player, frame);
+
+            return frame;
         }
 
         /// 이 몸의 와이어 표현을 다시 만든다. **틱의 마지막 단계다.**
@@ -994,6 +1083,11 @@ namespace NV.Realtime.Simulation
 
                 foreach (var player in _players.Values)
                 {
+                    if (player.IsBot)
+                    {
+                        continue;
+                    }
+
                     transport.TrySend(
                         player.SessionId,
                         new ReadOnlySpan<byte>(_fireEventBuffer, 0, length),
@@ -1405,6 +1499,10 @@ namespace NV.Realtime.Simulation
                     case RoomCommandKind.ReturnToLobby:
                         ReturnToLobby(command.SessionId);
                         break;
+
+                    case RoomCommandKind.AddBot:
+                        JoinBot();
+                        break;
                 }
             }
         }
@@ -1436,6 +1534,141 @@ namespace NV.Realtime.Simulation
             _stateDirty = true;
         }
 
+        /// 사람인 참가자 수. 틱 루프에서만 부른다.
+        ///
+        /// 봇을 빼고 세는 자리가 셋이다 — 채우기 조건, 마지막 사람이 나갔는지, 방장 승계.
+        /// 셋 다 "사람이 있는가" 를 묻고 있고, `_players.Count` 로는 답이 되지 않는다.
+        private int HumanCount
+        {
+            get
+            {
+                var count = 0;
+                foreach (var player in _players.Values)
+                {
+                    if (!player.IsBot)
+                    {
+                        count++;
+                    }
+                }
+
+                return count;
+            }
+        }
+
+        /// 참가자를 몇 명까지 채우는가.
+        ///
+        /// 설정의 0 은 "매치 시작 최소 인원까지" 로 읽는다. 상한을 여기서 자르는 이유는
+        /// 정원 상수가 `internal` 이라는 것이다 — 설정 타입이 정원을 알면 용량 상수가
+        /// 공개 표면으로 새어 나간다.
+        private int BotFillTarget => _bots.FillTo <= 0
+            ? RealtimeConstants.Rooms.MinPlayersToStart
+            : Math.Min(_bots.FillTo, RealtimeConstants.Rooms.MaxPlayers);
+
+        /// 부족한 만큼 봇을 넣도록 커맨드를 붙인다. 대기 단계에서만 호출된다.
+        ///
+        /// **사람이 하나도 없으면 채우지 않는다.** 그러지 않으면 서버가 기동하자마자 빈
+        /// 방에서 봇끼리 매치가 돌고, 로그가 그것으로 덮인다. 이 조건은 마지막 사람이
+        /// 나갈 때 봇을 지우는 것(`Leave`)과 짝이다 — 지우지 않으면 조건이 계속 참이다.
+        ///
+        /// 커맨드는 다음 틱에 적용되므로 이 함수가 같은 부족분을 두 번 붙이지 않는다.
+        /// `DrainCommands` 가 `Advance` 의 첫 단계이고 이 함수는 마지막 단계다.
+        private void TopUpBots()
+        {
+            if (!_bots.Enabled || !_isStatic || HumanCount == 0)
+            {
+                return;
+            }
+
+            var deficit = BotFillTarget - _players.Count;
+
+            for (var index = 0; index < deficit; index++)
+            {
+                PostCommand(RoomCommand.AddBot());
+            }
+        }
+
+        /// 봇 하나를 명단에 넣는다.
+        ///
+        /// **자격을 여기서 다시 본다.** 커맨드를 붙인 틱과 적용되는 틱이 다르므로 그 사이에
+        /// 매치가 시작되었을 수 있고, 그러면 봇이 진행 중인 매치에 합류한다.
+        private void JoinBot()
+        {
+            if (!_bots.Enabled || !_isStatic || Phase != RoomPhase.Waiting)
+            {
+                return;
+            }
+
+            if (!TryReserveSlot(out var playerId))
+            {
+                // 붙인 뒤에 사람이 들어와 정원이 찼다. 다음 틱의 채우기가 다시 판단한다.
+                _logger.LogDebug("룸 {RoomId}: 정원이 차 봇 추가를 건너뛴다.", RoomId);
+                return;
+            }
+
+            var sessionId = _nextBotSessionId--;
+
+            // 이름을 슬롯에서 만든다. 슬롯은 어느 순간에도 룸 안에서 유일하므로 이름이
+            // 겹치지 않고, 스냅샷의 엔티티 id 와 같은 수라 화면의 몸과 명단의 줄을
+            // 눈으로 맞출 수 있다. 1 을 더하는 것은 표시용이다 — 0번 봇이라고 부르지 않는다.
+            var name = RealtimeConstants.Bots.NamePrefix + (playerId + 1);
+
+            _players[sessionId] = new PlayerEntity(
+                sessionId,
+                playerId,
+                _map.SpawnPosition(playerId),
+                _map.SpawnYaw(playerId),
+                name);
+
+            _stateDirty = true;
+
+            _logger.LogInformation(
+                "룸 {RoomId}: 봇 {Name} 추가. 세션 {SessionId}, 플레이어 {PlayerId}, 인원 {Count}/{Target}",
+                RoomId,
+                name,
+                sessionId,
+                playerId,
+                _players.Count,
+                BotFillTarget);
+        }
+
+        /// 봇을 전부 지운다. 사람이 다 나갔을 때만 부른다.
+        ///
+        /// 남겨 두면 `Leave` 의 빈 룸 판정(`_players.Count == 0`)이 성립하지 않아 단계가
+        /// 되돌아가지 않고, 정적이 아닌 룸이라면 `RoomRegistry.Sweep` 이 참가자가 있다고
+        /// 보아 그 룸을 **영구히 회수하지 못한다.**
+        private void RemoveAllBots()
+        {
+            _removalBuffer.Clear();
+
+            foreach (var pair in _players)
+            {
+                if (pair.Value.IsBot)
+                {
+                    _removalBuffer.Add(pair.Key);
+                }
+            }
+
+            if (_removalBuffer.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var sessionId in _removalBuffer)
+            {
+                if (_players.Remove(sessionId, out var bot))
+                {
+                    ReleaseSlot(bot.PlayerId);
+                }
+            }
+
+            _stateDirty = true;
+
+            _logger.LogInformation(
+                "룸 {RoomId}: 사람이 모두 나가 봇 {Count} 명을 지웠다.",
+                RoomId,
+                _removalBuffer.Count);
+        }
+
         private void Leave(int sessionId, byte playerId)
         {
             _players.Remove(sessionId);
@@ -1447,6 +1680,13 @@ namespace NV.Realtime.Simulation
                 {
                     _heldInputs.RemoveAt(index);
                 }
+            }
+
+            // 사람이 다 나갔으면 봇도 지운다. **아래의 빈 룸 판정보다 앞이어야 한다** —
+            // 봇이 남아 있으면 그 판정이 성립하지 않아 단계가 되돌아가지 않는다.
+            if (HumanCount == 0)
+            {
+                RemoveAllBots();
             }
 
             // 방장 승계는 여기서 한다. 접속 스레드에서 하면 퇴장 커맨드가 적용되기 전이라
@@ -1671,6 +1911,11 @@ namespace NV.Realtime.Simulation
         ///
         /// 접속 순서가 아니라 PlayerId 순으로 고른다. 슬롯 번호는 룸 안에서 유일하고
         /// 모든 클라이언트가 같은 값을 보므로, 누가 승계했는지 화면에서 확인할 수 있다.
+        ///
+        /// **봇은 후보가 아니다.** 봇의 슬롯 번호가 남은 사람보다 작을 수 있고(사람이 나간
+        /// 자리를 봇이 채운 경우), 그러면 방장 자리가 아무 요청도 보내지 않는 참가자에게
+        /// 간다. 정적 룸은 전원에게 시작 권한이 있어 증상이 보이지 않지만, 그 룸이 유일하게
+        /// 봇이 있는 룸이라서 증상이 없을 뿐이다 — 승계 규칙 자체는 옳아야 한다.
         private int LowestRemainingSessionId()
         {
             var bestPlayerId = int.MaxValue;
@@ -1678,6 +1923,11 @@ namespace NV.Realtime.Simulation
 
             foreach (var player in _players.Values)
             {
+                if (player.IsBot)
+                {
+                    continue;
+                }
+
                 if (player.PlayerId < bestPlayerId)
                 {
                     bestPlayerId = player.PlayerId;
@@ -1690,6 +1940,14 @@ namespace NV.Realtime.Simulation
 
         private byte PickSeeker()
         {
+            // 봇 역할 희망은 **정적 룸에서만** 지킨다. 초대 코드 룸의 역할 배정은 이 갈래를
+            // 지나지 않으므로 지금까지와 완전히 같다 — 개발용 훅이 실제 매치에 닿지 않는
+            // 경계가 이 한 줄이다.
+            if (_isStatic && _bots.Enabled && TryPickPreferredSeeker(out var preferred))
+            {
+                return preferred;
+            }
+
             Span<byte> ids = stackalloc byte[RealtimeConstants.Rooms.MaxPlayers];
             var count = 0;
 
@@ -1700,6 +1958,51 @@ namespace NV.Realtime.Simulation
             }
 
             return ids[Random.Shared.Next(count)];
+        }
+
+        /// 봇 역할 희망이 요구하는 쪽에서 술래를 고른다. 고를 수 없으면 false.
+        ///
+        /// `BotOptions.Role` 은 **봇이** 맡을 역할이다. 봇이 Runner 이길 바라면 술래는
+        /// 사람이어야 하므로 후보가 사람 쪽이 된다.
+        ///
+        /// 지킬 수 없으면 경고를 남긴다. 조용히 무작위로 떨어지면 "역할 강제가 동작하지
+        /// 않는다" 를 찾는 데 시간이 걸리고, 그 원인이 "그 역할을 맡을 참가자가 없었다" 라는
+        /// 것은 코드를 읽어야만 알 수 있다.
+        private bool TryPickPreferredSeeker(out byte playerId)
+        {
+            playerId = 0;
+
+            if (_bots.Role == BotRolePreference.Any)
+            {
+                return false;
+            }
+
+            var seekerIsBot = _bots.Role == BotRolePreference.Seeker;
+
+            Span<byte> ids = stackalloc byte[RealtimeConstants.Rooms.MaxPlayers];
+            var count = 0;
+
+            foreach (var player in _players.Values)
+            {
+                if (player.IsBot == seekerIsBot)
+                {
+                    ids[count] = player.PlayerId;
+                    count++;
+                }
+            }
+
+            if (count == 0)
+            {
+                _logger.LogWarning(
+                    "룸 {RoomId}: 봇 역할 희망 {Role} 을 지킬 참가자가 없어 술래를 무작위로 고른다.",
+                    RoomId,
+                    _bots.Role);
+
+                return false;
+            }
+
+            playerId = ids[Random.Shared.Next(count)];
+            return true;
         }
 
         /// 0 이 아닌 씨드를 만든다.

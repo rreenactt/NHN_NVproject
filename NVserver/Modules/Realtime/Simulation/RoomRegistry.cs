@@ -68,6 +68,7 @@ namespace NV.Realtime.Simulation
         private readonly RoomMaps _maps;
         private readonly StaticRooms _staticRooms;
         private readonly NetworkConditionSimulator _network;
+        private readonly RealtimeOptions _options;
         private readonly ILogger<RoomRegistry> _logger;
 
         /// 틱 루프가 갱신하고 HTTP 스레드가 읽는다. 생성 시점을 찍는 데만 쓴다.
@@ -77,11 +78,13 @@ namespace NV.Realtime.Simulation
             RoomMaps maps,
             StaticRooms staticRooms,
             NetworkConditionSimulator network,
+            RealtimeOptions options,
             ILogger<RoomRegistry> logger)
         {
             _maps = maps;
             _staticRooms = staticRooms;
             _network = network;
+            _options = options;
             _logger = logger;
 
             CreateStaticRooms();
@@ -137,6 +140,9 @@ namespace NV.Realtime.Simulation
                 {
                     var candidate = InviteCode.NewCode(length);
                     var token = InviteCode.NewHostToken();
+                    // 봇 설정을 넘기지 않는다. 초대 코드 룸에는 봇이 생기지 않으며,
+                    // 그 이유는 `BotOptions` 에 적혀 있다 — 참가자가 있는 룸은 회수되지
+                    // 않으므로 봇이 남은 초대 코드 룸은 영구히 살아남는다.
                     var entry = new Entry(
                         new Room(candidate, map, _network, _logger, isPublic: isPublic),
                         token,
@@ -358,8 +364,9 @@ namespace NV.Realtime.Simulation
                 // 정적 룸은 공개다. 개발용으로 미리 열어 둔 방이고, 목록에 뜨지 않으면
                 // 로비에서 여기에 닿을 길이 없다 — id 가 초대 코드 형식(6자 이상)을
                 // 만족하지 않아 코드 입력 칸으로도 들어갈 수 없다.
+                // 봇 설정은 정적 룸에만 넘어간다. 그 제한이 이 한 줄이다.
                 var entry = new Entry(
-                    new Room(pair.Key, map, _network, _logger, isStatic: true, isPublic: true),
+                    new Room(pair.Key, map, _network, _logger, isStatic: true, isPublic: true, bots: _options.Bots),
                     string.Empty,
                     0u);
 
@@ -371,6 +378,18 @@ namespace NV.Realtime.Simulation
                     pair.Value,
                     map.Name,
                     map.Hash);
+
+                if (_options.Bots.Enabled)
+                {
+                    // 개발 전용 기능이 켜져 있다는 것을 기동 로그에 남긴다. 네트워크 조건
+                    // 주입기와 같은 취급이다 — 켜진 것을 모르고 관찰하면 봇의 존재가
+                    // 서버 버그로 보인다.
+                    _logger.LogWarning(
+                        "정적 룸 {RoomId} 의 봇 채우기가 켜져 있다. 인원 {FillTo} 까지 채우고 봇 역할은 {Role} 다. 개발 전용 설정이다.",
+                        pair.Key,
+                        _options.Bots.FillTo <= 0 ? RealtimeConstants.Rooms.MinPlayersToStart : _options.Bots.FillTo,
+                        _options.Bots.Role);
+                }
             }
         }
     }

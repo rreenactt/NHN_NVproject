@@ -28,6 +28,16 @@ namespace NV.Realtime.Simulation
 
         public byte PlayerId { get; }
 
+        /// 소켓 없는 참가자인가. **세션 id 의 부호에서 유도한다.**
+        ///
+        /// 별도 필드를 두지 않는 이유는 `Bleeding` 과 같다 — "세션이 있는데 봇" 이
+        /// 표현 가능한 상태가 되면 그 상태에 빠지는 경로를 찾는 일이 남는다.
+        ///
+        /// 부호로 가를 수 있는 근거는 `SessionRegistry.AllocateSessionId` 가
+        /// `Interlocked.Increment` 로 1 이상만 낸다는 것이다. 룸이 봇에게 -1 부터
+        /// 내려가며 발급하므로 두 공간이 겹치지 않는다.
+        public bool IsBot => SessionId < 0;
+
         /// 표시 이름. 명단에만 쓰이며 판정에 관여하지 않는다.
         public string Name { get; }
 

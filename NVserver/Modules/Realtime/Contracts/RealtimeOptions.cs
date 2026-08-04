@@ -23,6 +23,12 @@ namespace NV.Realtime.Contracts
         /// 재현 가능한 조건을 위한 시드. 시뮬레이션 난수와 무관하다.
         public uint RandomSeed { get; set; } = 0x5EED1234u;
 
+        /// 봇 참가자. 네트워크 조건 주입과 같은 개발용 설정이며 기본값이 꺼짐이다.
+        ///
+        /// 절을 나누어 둔다. 봇 설정은 서로 맞물려 조정하는 값들이고(채울 인원과 역할),
+        /// 최상위에 늘어놓으면 `Realtime` 절에서 어느 값이 어느 기능의 것인지 보이지 않는다.
+        public BotOptions Bots { get; set; } = new();
+
         // `AllowRoomListing` 이 있었다. 목록이 **모든** 방을 내주던 시절, 통째로 막는 것
         // 말고 할 수 있는 일이 없어 둔 플래그다.
         //

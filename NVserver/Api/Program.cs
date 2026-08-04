@@ -12,7 +12,7 @@ using NV.Infrastructure.Logging;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.AddNvLogging();
-builder.Services.AddModules(builder.Configuration);
+builder.Services.AddModules(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 

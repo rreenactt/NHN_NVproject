@@ -348,7 +348,12 @@ namespace NV.Modules.Tests.Realtime
                 ["test-room"] = Map("test-room", 8f),
             });
 
-            return new RoomRegistry(maps, staticRooms, RoomFixture.NoConditions(), NullLogger<RoomRegistry>.Instance);
+            return new RoomRegistry(
+                maps,
+                staticRooms,
+                RoomFixture.NoConditions(),
+                new RealtimeOptions(),
+                NullLogger<RoomRegistry>.Instance);
         }
 
         private static WorldMap Map(string name, float half)

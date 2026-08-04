@@ -10,6 +10,7 @@ using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
 using NV.Shared.Transport;
+using Xunit;
 
 namespace NV.Modules.Tests.Realtime
 {
@@ -96,9 +97,62 @@ namespace NV.Modules.Tests.Realtime
             NetworkConditionSimulator? network = null,
             bool isStatic = false,
             string roomId = "test",
-            bool withGrid = true)
+            bool withGrid = true,
+            BotOptions? bots = null)
         {
-            return new Room(roomId, Map(withGrid), network ?? NoConditions(), NullLogger.Instance, isStatic);
+            return new Room(
+                roomId,
+                Map(withGrid),
+                network ?? NoConditions(),
+                NullLogger.Instance,
+                isStatic,
+                bots: bots);
+        }
+
+        /// 봇을 쓰는 룸. **정적이 아닌 룸도 만들 수 있어야 한다** — "초대 코드 룸에는
+        /// 봇이 생기지 않는다" 를 검사하려면 설정이 켜진 비정적 룸이 필요하다.
+        public static Room WithBots(
+            int fillTo = 0,
+            BotRolePreference role = BotRolePreference.Runner,
+            bool isStatic = true,
+            bool enabled = true)
+        {
+            return Create(
+                isStatic: isStatic,
+                bots: new BotOptions
+                {
+                    Enabled = enabled,
+                    FillTo = fillTo,
+                    Role = role,
+                });
+        }
+
+        /// 사람 하나를 **슬롯을 예약하고** 넣는다. 받은 `PlayerId` 를 돌려준다.
+        ///
+        /// `FillAndStart` 는 슬롯 예약 없이 `PlayerId` 를 손으로 정한다. 사람만 있는 룸에서는
+        /// 그래도 되지만 **봇이 있으면 안 된다** — 봇은 `TryReserveSlot` 으로 자리를 받으므로,
+        /// 예약되지 않은 슬롯 배열을 보고 사람이 이미 쓰는 번호를 집는다. 증상은 한 룸에
+        /// 같은 `PlayerId` 가 둘이 되는 것이고, 실제 경로(`/ws`)는 예약하므로 나타나지 않는다.
+        public static byte JoinHuman(Room room, int sessionId, bool isHost = false)
+        {
+            Assert.True(room.TryReserveSlot(out var playerId), "슬롯이 없다.");
+
+            room.PostCommand(RoomCommand.Join(sessionId, playerId, "human", isHost));
+
+            return playerId;
+        }
+
+        /// 봇 커맨드가 적용될 때까지 틱을 돌린다.
+        ///
+        /// **두 틱이 필요하다.** 채우기는 `Advance` 의 마지막 단계에서 커맨드를 붙이고,
+        /// 그 커맨드는 다음 `Advance` 의 첫 단계에서 적용된다. 한 틱만 돌리고 인원을
+        /// 확인하면 아직 붙어 있는 커맨드를 보게 된다.
+        public static void SettleBots(Room room, int ticks = 2)
+        {
+            for (var index = 0; index < ticks; index++)
+            {
+                room.Advance();
+            }
         }
 
         /// 세션 1..count 를 playerId 0..count-1 로 넣고 방장(세션 1)이 매치를 시작한다.

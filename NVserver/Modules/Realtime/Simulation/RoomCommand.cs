@@ -13,6 +13,15 @@ namespace NV.Realtime.Simulation
 
         /// 결과 화면에서 대기 단계로 되돌린다.
         ReturnToLobby = 4,
+
+        /// 소켓 없는 봇 참가자를 하나 넣는다. 정적 룸에서만 받아들인다.
+        ///
+        /// 지금 이것을 붙이는 것은 틱 루프 자신(`Room.TopUpBots`)뿐이라 커맨드를 거치지
+        /// 않아도 동작한다. 그래도 거치는 이유는 명단이 늘어나는 자리를 한 곳으로
+        /// 유지하는 것이다 — `DrainCommands` 를 읽으면 참가자가 늘어나는 모든 경로가
+        /// 보여야 하고, 나중에 다른 스레드에서 봇을 넣는 경로가 붙을 때 `_players` 를
+        /// 직접 만지는 코드가 생기지 않는다.
+        AddBot = 5,
     }
 
     /// HTTP·WebSocket 스레드가 룸 상태를 직접 바꾸지 않고 큐에 넣는 단위.
@@ -77,6 +86,13 @@ namespace NV.Realtime.Simulation
         public static RoomCommand ReturnToLobby(int sessionId)
         {
             return new RoomCommand(RoomCommandKind.ReturnToLobby, sessionId, 0, 0, string.Empty, false);
+        }
+
+        /// 봇 하나를 넣는다. 세션 id 와 슬롯은 룸이 적용 시점에 발급한다 —
+        /// 붙일 때 정하면 그 사이에 사람이 들어와 슬롯이 겹친다.
+        public static RoomCommand AddBot()
+        {
+            return new RoomCommand(RoomCommandKind.AddBot, 0, 0, 0, string.Empty, false);
         }
     }
 }

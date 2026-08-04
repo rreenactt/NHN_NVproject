@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using NV.Infrastructure.FileSystem;
 using NV.Realtime;
 using NV.Realtime.Contracts;
@@ -61,16 +62,22 @@ namespace NV.Api.Composition
         /// 상한이므로 30 이면 정상 사용에는 걸리지 않고, 스크립트로 긁는 것은 막힌다.
         private const int DefaultListPerMinute = 30;
 
-        public static IServiceCollection AddModules(this IServiceCollection services, IConfiguration configuration)
+        public static IServiceCollection AddModules(
+            this IServiceCollection services,
+            IConfiguration configuration,
+            IHostEnvironment environment)
         {
             // 맵 로드는 파일 IO 다. 컴포지션 루트가 하고 결과만 넘긴다.
             // 실패하면 기동을 멈춘다. 빈 콜리전으로 올라가면 지형을 통과한다.
             services.AddSingleton(LoadMaps(configuration));
             services.AddSingleton(LoadStaticRooms(configuration));
 
-            services.AddRealtime(options => configuration
-                .GetSection(RealtimeOptions.SectionName)
-                .Bind(options));
+            services.AddRealtime(options =>
+            {
+                configuration.GetSection(RealtimeOptions.SectionName).Bind(options);
+
+                GuardDevelopmentOnlyOptions(options, environment);
+            });
 
             services.AddNvRateLimiter(configuration);
 
@@ -91,6 +98,38 @@ namespace NV.Api.Composition
             }));
 
             return services;
+        }
+
+        /// 개발 전용 설정이 개발 환경 밖에서 켜져 있으면 **기동을 멈춘다.**
+        ///
+        /// 봇 참가자가 그것이다. 소켓 없는 참가자를 명단에 넣고 술래 선정에 개입하는
+        /// 기능이며, 실제 서비스에서는 존재할 이유가 없다.
+        ///
+        /// 조용히 꺼 주지 않는 이유는 설정이 거짓말을 하게 되기 때문이다. 켜라고 적혀
+        /// 있는데 꺼져 있으면 "봇이 왜 안 나오는지" 를 찾게 되고, 그 답이 코드 안에
+        /// 숨어 있다. 반대로 조용히 켜 두는 것은 더 나쁘다 — 실제 사용자가 `BOT 2` 와
+        /// 같은 방에 들어간다.
+        ///
+        /// `CreateStaticRooms` 가 잘못된 맵 id 에 예외를 던지는 것과 같은 규칙이고,
+        /// 클라이언트가 원격 호스트 + `secure` 꺼짐 빌드를 거부하는 것과 같은 판단이다 —
+        /// 배포 시점에 시끄럽게 실패하는 편이 운영 중에 조용히 이상해지는 것보다 낫다.
+        ///
+        /// 방어선은 이것 하나가 아니다. `appsettings.json` 의 기본값이 꺼짐이고, 봇은
+        /// 정적 룸에서만 생기므로 `Game:StaticRooms` 가 비어 있는 배포에서는 켜져 있어도
+        /// 생길 룸이 없다. 이 검사는 그 둘을 동시에 어긴 설정을 잡는다.
+        ///
+        /// 환경 변수로도 끌 수 있다 — `Realtime__Bots__Enabled=false` 다(`__` 가 절
+        /// 구분자다). 컨테이너 배포에서는 파일을 고치지 않고 이쪽을 쓴다.
+        private static void GuardDevelopmentOnlyOptions(RealtimeOptions options, IHostEnvironment environment)
+        {
+            if (environment.IsDevelopment() || !options.Bots.Enabled)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(
+                $"Realtime:Bots:Enabled 는 개발 환경에서만 켤 수 있다. 지금 환경은 '{environment.EnvironmentName}' 다. " +
+                "환경 변수 Realtime__Bots__Enabled=false 로 끄거나 설정에서 제거한다.");
         }
 
         /// 룸 엔드포인트의 요청 제한.

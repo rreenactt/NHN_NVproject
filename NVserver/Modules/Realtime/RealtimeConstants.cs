@@ -106,6 +106,15 @@ namespace NV.Realtime
 
         }
 
+        /// 소켓 없는 봇 참가자. 판정 파라미터가 아니라 표시와 식별에 관한 것뿐이다 —
+        /// 봇의 이동과 전투는 사람과 같은 상수를 쓴다. 그것이 봇을 두는 목적이다.
+        internal static class Bots
+        {
+            /// 봇 이름의 앞자리. `DisplayName.Sanitize` 규칙(출력 가능 ASCII) 안에 있으므로
+            /// 코덱이 그대로 싣고 클라이언트가 명단에 그린다.
+            public const string NamePrefix = "BOT ";
+        }
+
         /// 플레이어 하나의 상태와 입력 버퍼.
         internal static class Players
         {
