@@ -24,7 +24,7 @@ namespace NV.Client.EditorTools.Generators
     /// fixing connectivity afterwards leaves orphaned tiles behind and produces maps the player
     /// cannot finish.
     /// </summary>
-    public sealed class BackroomsGenerator : IMapGenerator
+    public sealed class BackroomsGenerator : IMapGenerator, IMapSceneDecorator
     {
         public string DisplayName => "Backrooms";
 
@@ -47,6 +47,30 @@ namespace NV.Client.EditorTools.Generators
             // instance forever, and a second Generate that saw the first one's grid would produce a
             // level nobody can reproduce.
             return new Solver(backrooms).Run();
+        }
+
+        /// <inheritdoc />
+        ///
+        /// <remarks>
+        /// Fog, the hum and the lamps, all on one component whose own defaults are the mood values.
+        ///
+        /// **Nothing is pointed at the settings asset.** The window works on a loose settings
+        /// instance until somebody chooses to save one, and a prefab holding a reference to an
+        /// object that only existed while that window was open comes back with a missing reference.
+        ///
+        /// The one value worth carrying across is the lamp colour, because the emissive panels are
+        /// baked from the same palette entry and a lamp that does not match the panel it hangs under
+        /// reads as a bug.
+        /// </remarks>
+        public void Decorate(GameObject root, MapBlueprint blueprint)
+        {
+            var ambience = root.GetComponent<BackroomsAmbience>();
+            if (ambience == null) ambience = root.AddComponent<BackroomsAmbience>();
+
+            if (blueprint.Palette.TryGetValue(MapSurface.LightPanel, out var lamp))
+            {
+                ambience.lightColor = lamp;
+            }
         }
 
         /// <summary>One run. Holds the grid while it is being solved and then emits the blueprint.</summary>
@@ -591,6 +615,10 @@ namespace NV.Client.EditorTools.Generators
                     _blueprint.Add("Panel", new Vector3(centre.x, y - 0.07f, centre.z),
                         new Vector3(_s.cellSize * 0.42f, 0.06f, _s.cellSize * 0.42f),
                         MapSurface.LightPanel, false);
+
+                    // The lamp hangs a little below its panel, so the panel is lit rather than
+                    // being the only bright thing in the room.
+                    _blueprint.Lights.Add(new Vector3(centre.x, y - 0.3f, centre.z));
                 }
             }
 

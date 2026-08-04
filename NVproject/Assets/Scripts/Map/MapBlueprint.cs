@@ -52,6 +52,16 @@ namespace NV.Client.Map
         public Vector3 SpawnCentre;
 
         /// <summary>
+        /// Where lamps go. Positions only — a <see cref="Light"/> is not geometry.
+        ///
+        /// The emissive *panels* are pieces, because they are boxes you can see. The lamps are
+        /// runtime objects: they cost draw work rather than triangles, some of them flicker, and
+        /// which ones flicker is drawn from a separate random that has no business anywhere near
+        /// the level seed. So the generator says where, and the ambience component says what.
+        /// </summary>
+        public readonly List<Vector3> Lights = new List<Vector3>();
+
+        /// <summary>
         /// The walkability grid, or <c>null</c> for a level that does not offer one.
         ///
         /// <c>null</c> is a normal answer, not a gap: a level that never runs the match rules has

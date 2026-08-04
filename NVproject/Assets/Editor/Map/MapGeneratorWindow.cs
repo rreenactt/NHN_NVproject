@@ -255,7 +255,7 @@ namespace NV.Client.EditorTools
         private void Bake()
         {
             var generator = MapGeneratorRegistry.ForSettings(_settings);
-            var result = MapBakePipeline.Bake(_preview, generator?.DisplayName ?? "unknown", _writePrefab);
+            var result = MapBakePipeline.Bake(_preview, generator, _writePrefab);
 
             _statusIsError = !result.Ok;
 

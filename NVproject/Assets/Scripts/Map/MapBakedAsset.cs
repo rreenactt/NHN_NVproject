@@ -30,6 +30,9 @@ namespace NV.Client.Map
         [Tooltip("Where the match puts the Seeker at the start of a round.")]
         [SerializeField] private Vector3 spawnCentre;
 
+        [Tooltip("Where the ambience component hangs lamps. Positions only — a Light is not geometry.")]
+        [SerializeField] private Vector3[] lights = new Vector3[0];
+
         [Header("Walkability grid — absent is a normal answer")]
         [SerializeField] private bool hasGrid;
         [SerializeField] private int gridFloors;
@@ -53,6 +56,8 @@ namespace NV.Client.Map
         public int SpawnCount => spawnPositions == null ? 0 : spawnPositions.Length;
 
         public Vector3 SpawnCentre => spawnCentre;
+
+        public IReadOnlyList<Vector3> Lights => lights;
 
         public string Generator => generator;
 
@@ -116,6 +121,7 @@ namespace NV.Client.Map
             boxes = collected.ToArray();
 
             spawnCentre = blueprint.SpawnCentre;
+            lights = blueprint.Lights.ToArray();
             spawnPositions = new Vector3[blueprint.Spawns.Count];
             spawnYaws = new float[blueprint.Spawns.Count];
 

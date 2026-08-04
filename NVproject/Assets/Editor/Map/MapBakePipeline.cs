@@ -40,7 +40,8 @@ namespace NV.Client.EditorTools
         ///
         /// **재현되지 않는 레벨은 굽지 않는다.** 구운 에셋은 그때부터 서버 판정의 출처가 되므로,
         /// 다음에 같은 설정으로 다시 만들 수 없는 지형을 굳히면 에셋과 생성기가 영구히 갈린다.
-        public static BakeResult Bake(MapBlueprint blueprint, string generatorName, bool writePrefab)
+        public static BakeResult Bake(
+            MapBlueprint blueprint, Generators.IMapGenerator generator, bool writePrefab)
         {
             var result = new BakeResult();
 
@@ -75,7 +76,7 @@ namespace NV.Client.EditorTools
                 asset = ScriptableObject.CreateInstance<MapBakedAsset>();
             }
 
-            asset.Fill(blueprint, generatorName, DateTime.UtcNow.ToString(
+            asset.Fill(blueprint, generator?.DisplayName ?? "unknown", DateTime.UtcNow.ToString(
                 "yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
 
             if (created)
@@ -90,7 +91,7 @@ namespace NV.Client.EditorTools
             AssetDatabase.SaveAssets();
 
             result.Asset = asset;
-            result.SceneRoot = MapSceneBuilder.Build(blueprint, asset);
+            result.SceneRoot = MapSceneBuilder.Build(blueprint, asset, generator);
 
             if (writePrefab)
             {
