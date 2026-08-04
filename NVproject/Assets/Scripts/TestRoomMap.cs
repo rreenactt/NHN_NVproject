@@ -107,6 +107,14 @@ public class TestRoomMap : MonoBehaviour, INetworkMapSource
     public MapGridData BuildGrid() => null;
 
     /// <inheritdoc />
+    ///
+    /// <remarks>
+    /// Always reproducible. Every box and spawn here is derived from serialized fields with no
+    /// random draw anywhere, so two exports of the same scene produce the same bytes.
+    /// </remarks>
+    public string DescribeExportBlocker() => null;
+
+    /// <inheritdoc />
     public void GetSpawns(List<(Vector3 position, float yaw)> into)
     {
         for (var index = 0; index < SpawnCount; index++)

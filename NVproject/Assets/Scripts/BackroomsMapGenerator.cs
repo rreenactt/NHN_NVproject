@@ -7,7 +7,10 @@ using UnityEngine;
 /// <summary>
 /// A two-floor Backrooms level, generated from a seed and built entirely in code.
 ///
-/// This replaces the single-floor <see cref="BackroomsMap"/>. The shape of the level comes
+/// This replaced a single-floor <c>BackroomsMap</c>, since deleted — it implemented
+/// <see cref="INetworkMapSource"/> with the same <c>MapName</c> as this one while returning no
+/// grid, so a scene holding both could export a gridless <c>backrooms.json</c> depending on
+/// which one the scene scan happened to reach first. The shape of the level comes
 /// from the backrooms-map-generator skill's contract: a square grid of rooms and corridors on
 /// two stacked floors, joined by a stairwell that occupies the *same cells* on both floors so
 /// the stairs line up vertically. Spawn, exit and stairwell are hand-authored rectangles that
@@ -345,6 +348,28 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource
         }
 
         return grid;
+    }
+
+    /// <inheritdoc />
+    ///
+    /// <remarks>
+    /// <see cref="randomizeSeed"/> is the one thing here that can make an export not reproduce.
+    /// <see cref="ComputeCollision"/> reads that flag itself and draws a fresh seed when it is on
+    /// (it has to — it replays <see cref="Generate"/>'s draw order), so an export taken with it on
+    /// describes a level that will never be built again. The default is off, but a scene
+    /// serialises its own copy of every field and that copy wins, which is exactly the case a
+    /// code default cannot cover.
+    /// </remarks>
+    public string DescribeExportBlocker()
+    {
+        if (randomizeSeed)
+        {
+            return "randomizeSeed 가 켜져 있다. 씨드를 매번 새로 뽑으므로 export 한 지형이 "
+                 + "다음 실행에서 다시 만들어지지 않는다. 이 컴포넌트에서 끄고, 고정할 씨드를 "
+                 + "seed 필드에 적는다.";
+        }
+
+        return null;
     }
 
     /// <summary>Every standable cell centre in the level, as (x, z, floor).</summary>
