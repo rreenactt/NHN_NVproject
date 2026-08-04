@@ -457,8 +457,11 @@ namespace NV.Realtime.Simulation
 
         /// 상태가 바뀌었거나 간격이 지났을 때 명단 전문을 보낸다.
         ///
-        /// 본문이 수신자와 무관하므로 한 번 인코딩해 전원에게 보낸다.
+        /// 초대 코드 룸에서는 본문이 수신자와 무관하므로 한 번 인코딩해 전원에게 보낸다.
         /// 스냅샷과 다른 점이며, 그 차이는 `AckedInputTick` 하나에서 온다.
+        ///
+        /// **정적 룸에서만 세션별로 인코딩한다.** 방장 한 바이트가 수신자에 따라 달라진다 —
+        /// 그 룸에서는 전원이 방장이고, 그 이유는 아래 갈래에 적어 두었다.
         private void BroadcastRoomState(IServerTransport transport)
         {
             var due = _stateDirty
@@ -479,22 +482,42 @@ namespace NV.Realtime.Simulation
                 count++;
             }
 
-            // 배치 씨드는 싣지 않는다. 서버는 그것을 계속 갖고 있지만(`_placementSeed`,
-            // 배치를 재현하는 데 쓴다) 클라이언트에 보내면 Seeker 가 문의 좌표를 계산할 수
-            // 있다 — 그것이 이 이관 작업이 닫으려던 구멍이다.
-            var header = new RoomStateHeader(
-                Phase,
-                (byte)Volatile.Read(ref _hostPlayerId),
-                _seekerPlayerId,
-                _outcome,
-                _startTick,
-                (byte)count);
+            var roster = new ReadOnlySpan<RoomPlayerEntry>(_rosterBuffer, 0, count);
+            var hostPlayerId = (byte)Volatile.Read(ref _hostPlayerId);
 
-            var length = MessageCodec.WriteRoomState(
-                _stateBuffer,
-                header,
-                new ReadOnlySpan<RoomPlayerEntry>(_rosterBuffer, 0, count));
+            // 정적 룸이 아니면 본문이 수신자와 무관하므로 한 번만 인코딩한다.
+            if (!_isStatic)
+            {
+                var shared = WriteRoomState(hostPlayerId, roster, count);
 
+                foreach (var player in _players.Values)
+                {
+                    if (player.IsBot)
+                    {
+                        continue;
+                    }
+
+                    transport.TrySend(
+                        player.SessionId,
+                        new ReadOnlySpan<byte>(_stateBuffer, 0, shared),
+                        Reliability.Reliable);
+                }
+
+                return;
+            }
+
+            // 정적 룸에서는 **받는 사람이 자기를 방장으로 본다.**
+            //
+            // 권한을 새로 주는 것이 아니다. `IsAuthorized` 는 정적 룸에서 이미 전원의 요청을
+            // 받아들이고 있었고, 전문만 "방장 없음"(`NoPlayer`)을 말하고 있었다. 클라이언트는
+            // `RoomState.HostPlayerId == LocalPlayerId` 로 방장을 판단하므로(`NetworkClient.
+            // IsLocalHost`) 그 어긋남의 증상은 **아무도 시작 버튼을 누를 수 없는 개발용 룸**이다.
+            // 여기서 고치는 것은 권위가 아니라 권위에 대한 진술이다.
+            //
+            // 방장 토큰을 발급하는 쪽으로 고칠 수도 있었다. 그러지 않은 이유는 정적 룸에
+            // 그 토큰을 받을 사람이 없다는 것이다 — `POST /rooms` 를 지나지 않으므로 코드도
+            // 토큰도 없고, 먼저 붙은 세션에게 주면 그 사람이 나갈 때마다 승계가 필요해진다.
+            // "전원이 방장" 이 정적 룸의 실제 규칙이고, 전문이 그것을 말해야 한다.
             foreach (var player in _players.Values)
             {
                 if (player.IsBot)
@@ -502,11 +525,31 @@ namespace NV.Realtime.Simulation
                     continue;
                 }
 
+                var length = WriteRoomState(player.PlayerId, roster, count);
+
                 transport.TrySend(
                     player.SessionId,
                     new ReadOnlySpan<byte>(_stateBuffer, 0, length),
                     Reliability.Reliable);
             }
+        }
+
+        /// 명단 전문 하나를 버퍼에 쓴다. 방장만 호출자가 정한다.
+        ///
+        /// 배치 씨드는 싣지 않는다. 서버는 그것을 계속 갖고 있지만(`_placementSeed`,
+        /// 배치를 재현하는 데 쓴다) 클라이언트에 보내면 Seeker 가 문의 좌표를 계산할 수
+        /// 있다 — 그것이 이 이관 작업이 닫으려던 구멍이다.
+        private int WriteRoomState(byte hostPlayerId, ReadOnlySpan<RoomPlayerEntry> roster, int count)
+        {
+            var header = new RoomStateHeader(
+                Phase,
+                hostPlayerId,
+                _seekerPlayerId,
+                _outcome,
+                _startTick,
+                (byte)count);
+
+            return MessageCodec.WriteRoomState(_stateBuffer, header, roster);
         }
 
         /// 매치 상태 전문을 보낸다. **세션별로 인코딩한다.**
