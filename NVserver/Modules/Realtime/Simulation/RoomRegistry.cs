@@ -367,6 +367,85 @@ namespace NV.Realtime.Simulation
                 // 프로필을 겹치므로, 룸마다 다른 행동·역할·채움 인원을 가질 수 있다.
                 OpenStaticRoom(pair.Key, profile.MapId, map, profile.ResolveBots(_options.Bots));
             }
+
+            if (_staticRooms.PerMap)
+            {
+                CreatePerMapRooms();
+            }
+        }
+
+        /// 등록된 맵마다 `test-{맵 id}` 룸을 연다. 맵 등록이 "파일을 쓰면 끝" 이므로
+        /// 테스트 룸도 그래야 한다 — export 한 맵을 확인하는 데 설정 한 줄을 더 요구하면,
+        /// 그 줄을 잊은 맵만 두 클라이언트를 붙이는 로비 경로로 돌아가야 한다.
+        private void CreatePerMapRooms()
+        {
+            // 명시 룸이 이미 여는 맵은 건너뛴다. `test` 가 `test-room` 을 가리키므로
+            // `test-test-room` 은 생기지 않는다. 별칭으로 적었어도 풀어서 비교한다.
+            var covered = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var profile in _staticRooms.Rooms.Values)
+            {
+                var resolved = _maps.ResolveId(profile.MapId);
+
+                if (resolved != null)
+                {
+                    covered.Add(resolved);
+                }
+            }
+
+            foreach (var pair in _maps.ByMap)
+            {
+                if (covered.Contains(pair.Key))
+                {
+                    continue;
+                }
+
+                var roomId = RealtimeConstants.Rooms.PerMapRoomPrefix + pair.Key;
+
+                if (!IsValidRoomId(roomId))
+                {
+                    // 조용히 건너뛰면 그 맵만 테스트 룸이 없고, 증상은 접속이 "없는 방"
+                    // 으로 거부되는 것뿐이다 — 명시 정적 룸과 같은 규칙으로 기동을 멈춘다.
+                    throw new InvalidOperationException(
+                        $"자동 테스트 룸 id '{roomId}' 가 룸 id 규칙을 벗어난다. 맵 id 를 줄이거나 그 맵의 정적 룸을 직접 적는다.");
+                }
+
+                if (_rooms.ContainsKey(roomId))
+                {
+                    // 같은 id 의 명시 룸이 이긴다. 자동 생성이 명시 설정을 덮으면
+                    // 설정에 적은 것이 조용히 무시된다.
+                    _logger.LogInformation(
+                        "자동 테스트 룸 {RoomId} 건너뜀. 같은 id 의 정적 룸이 이미 있다.",
+                        roomId);
+                    continue;
+                }
+
+                OpenStaticRoom(roomId, pair.Key, pair.Value, PerMapBots(pair.Value));
+            }
+        }
+
+        /// 자동 룸의 봇 구성. 전역 설정 그대로이되, 격자 없는 맵에서는 `Idle` 로 내린다.
+        ///
+        /// 동작은 어차피 같다 — `BotBrain` 이 격자 없는 맵에서 서 있는다. 내리는 것은
+        /// 기동 로그를 정직하게 만드는 일이다. "Wander 로 열었는데 서 있다" 를 없앤다.
+        /// 새 인스턴스를 만든다 — 전역 객체를 고치면 다른 룸의 기본값이 함께 바뀐다.
+        private BotOptions PerMapBots(WorldMap map)
+        {
+            var global = _options.Bots;
+
+            if (map.HasGrid || global.Behavior == BotBehavior.Idle)
+            {
+                return global;
+            }
+
+            return new BotOptions
+            {
+                Enabled = global.Enabled,
+                FillTo = global.FillTo,
+                Behavior = BotBehavior.Idle,
+                Role = global.Role,
+                Seed = global.Seed,
+            };
         }
 
         /// 정적 룸 하나를 연다. 명시 설정과 맵당 자동 생성이 같은 규칙을 지나야 하므로

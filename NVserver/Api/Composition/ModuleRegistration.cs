@@ -32,8 +32,13 @@ namespace NV.Api.Composition
         /// 등록하는 경로이고, 옛 설정 파일이 그 형태다.
         private const string MapsKey = "Game:Maps";
 
-        /// 미리 열어 두는 룸. `Game:StaticRooms:{룸 id}` 가 그 룸의 맵 id 다.
+        /// 미리 열어 두는 룸. `Game:StaticRooms:{룸 id}` 가 그 룸의 맵 id(문자열)거나
+        /// 프로필(절 — `Map` + `Bots` 오버라이드)이다.
         private const string StaticRoomsKey = "Game:StaticRooms";
+
+        /// 등록된 모든 맵에 `test-{맵 id}` 룸을 자동으로 열 것인가. 기본은 끔이고
+        /// 개발 설정(`appsettings.Development.json`)이 켠다.
+        private const string TestRoomsPerMapKey = "Game:TestRoomsPerMap";
 
         /// 단일 맵으로 쓸 때의 하위 호환 키. `default` 별칭의 대상으로 읽는다.
         private const string LegacyMapPathKey = "Game:MapPath";
@@ -380,7 +385,7 @@ namespace NV.Api.Composition
                 profiles[child.Key] = ReadRoomProfile(child);
             }
 
-            return new StaticRooms(profiles);
+            return new StaticRooms(profiles, configuration.GetValue(TestRoomsPerMapKey, false));
         }
 
         private static TestRoomProfile ReadRoomProfile(IConfigurationSection room)

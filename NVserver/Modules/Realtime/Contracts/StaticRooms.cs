@@ -19,9 +19,10 @@ namespace NV.Realtime.Contracts
 
         private readonly Dictionary<string, TestRoomProfile> _profileByRoom;
 
-        public StaticRooms(IReadOnlyDictionary<string, TestRoomProfile>? profileByRoom)
+        public StaticRooms(IReadOnlyDictionary<string, TestRoomProfile>? profileByRoom, bool perMap = false)
         {
             _profileByRoom = new Dictionary<string, TestRoomProfile>(StringComparer.Ordinal);
+            PerMap = perMap;
 
             if (profileByRoom == null)
             {
@@ -36,12 +37,20 @@ namespace NV.Realtime.Contracts
 
         /// 맵 id 만 적는 옛 형태. 설정의 문자열 값이 이 모양이고, 봇 오버라이드가
         /// 필요 없는 룸도 이것으로 충분하다 — 생략한 필드는 전역 설정을 따른다.
-        public StaticRooms(IReadOnlyDictionary<string, string>? mapByRoom)
-            : this(ToProfiles(mapByRoom))
+        public StaticRooms(IReadOnlyDictionary<string, string>? mapByRoom, bool perMap = false)
+            : this(ToProfiles(mapByRoom), perMap)
         {
         }
 
         public IReadOnlyDictionary<string, TestRoomProfile> Rooms => _profileByRoom;
+
+        /// 등록된 모든 맵에 `test-{맵 id}` 룸을 자동으로 열 것인가.
+        ///
+        /// 맵 등록이 "파일을 쓰면 끝"(디렉터리 스캔)이므로 테스트 룸도 그래야 한다 —
+        /// export 한 맵을 확인하는 데 설정 한 줄을 더 요구하면, 그 줄을 잊은 맵만
+        /// 두 클라이언트를 붙이는 로비 경로로 돌아가야 한다. 위 목록에 이미 그 맵을
+        /// 여는 룸이 있으면 그 맵은 건너뛴다.
+        public bool PerMap { get; }
 
         public bool Contains(string roomId)
         {
