@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/MainLobby.unity
+    guid: f91a9fd82737b644a87f99de4b87488d
+  - enabled: 1
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
   - enabled: 1
@@ -14,6 +17,12 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Lobby.unity
     guid: 294dd19a03df78a47bcf050d76e07e73
+  - enabled: 1
+    path: Assets/Scenes/GameLobby.unity
+    guid: 26d09828198dab04aa0be4b711b2bbdc
+  - enabled: 1
+    path: Assets/Scenes/MapRuntime.unity
+    guid: cc1b0f3b3672cfb4e951bcf104edec05
   m_configObjects:
     com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

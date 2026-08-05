@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 32d372cfbdc8c144db17b4e460cd61a8, type: 3}
+  m_Name: MapCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::NV.Client.Map.MapCatalog
+  entries:
+  - mapId: test-room
+    asset: {fileID: 11400000, guid: 4ee55f98c3d3bb64f991368d48c5d424, type: 2}
+    prefab: {fileID: 5767314739795884803, guid: b7c613f90a1902d498e9513a8c6d0633, type: 3}
+    displayName: test-room
+    description: 
+    bakedHash: 665403693
+    sceneOverride: MultiplayerTest
