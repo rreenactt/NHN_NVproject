@@ -366,22 +366,128 @@ namespace NV.Api.Composition
                 $"등록된 맵: {string.Join(", ", ids)}");
         }
 
+        /// 정적 룸 설정을 읽는다. 값이 문자열이면 맵 id 하나(옛 형태), 절이면 프로필이다.
+        ///
+        /// **모르는 키는 기동 거부다.** 구성 바인딩은 오타를 조용히 무시하고, 그 증상은
+        /// "프로필이 안 먹는다" 로만 나타난다 — 그것을 대조할 자리가 여기뿐이다.
         private static StaticRooms LoadStaticRooms(IConfiguration configuration)
         {
             var section = configuration.GetSection(StaticRoomsKey);
-            var mapByRoom = new Dictionary<string, string>(StringComparer.Ordinal);
+            var profiles = new Dictionary<string, TestRoomProfile>(StringComparer.Ordinal);
 
             foreach (var child in section.GetChildren())
             {
-                if (string.IsNullOrWhiteSpace(child.Value))
-                {
-                    throw new InvalidOperationException($"{StaticRoomsKey}:{child.Key} 에 맵 id 가 없다.");
-                }
-
-                mapByRoom[child.Key] = child.Value;
+                profiles[child.Key] = ReadRoomProfile(child);
             }
 
-            return new StaticRooms(mapByRoom);
+            return new StaticRooms(profiles);
+        }
+
+        private static TestRoomProfile ReadRoomProfile(IConfigurationSection room)
+        {
+            if (room.Value != null)
+            {
+                if (string.IsNullOrWhiteSpace(room.Value))
+                {
+                    throw new InvalidOperationException($"{room.Path} 에 맵 id 가 없다.");
+                }
+
+                return new TestRoomProfile(room.Value);
+            }
+
+            string? mapId = null;
+            int? fillTo = null;
+            BotBehavior? behavior = null;
+            BotRolePreference? role = null;
+            uint? seed = null;
+
+            foreach (var child in room.GetChildren())
+            {
+                if (KeyIs(child, "Map"))
+                {
+                    mapId = child.Value;
+                }
+                else if (KeyIs(child, "Bots"))
+                {
+                    foreach (var bot in child.GetChildren())
+                    {
+                        if (KeyIs(bot, "FillTo"))
+                        {
+                            fillTo = ParseInt(bot);
+                        }
+                        else if (KeyIs(bot, "Behavior"))
+                        {
+                            behavior = ParseEnum<BotBehavior>(bot);
+                        }
+                        else if (KeyIs(bot, "Role"))
+                        {
+                            role = ParseEnum<BotRolePreference>(bot);
+                        }
+                        else if (KeyIs(bot, "Enabled"))
+                        {
+                            // 봇 스위치는 전역 하나여야 `GuardDevelopmentOnlyOptions` 가
+                            // 방어선으로 성립한다. 프로필은 오버라이드만 갖는다.
+                            throw new InvalidOperationException(
+                                $"{bot.Path} — 봇 스위치는 {RealtimeOptions.SectionName}:Bots:Enabled 만이 정한다. " +
+                                "프로필에는 FillTo·Behavior·Role·Seed 만 쓸 수 있다.");
+                        }
+                        else if (KeyIs(bot, "Seed"))
+                        {
+                            seed = ParseUInt(bot);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException(
+                                $"{bot.Path} 는 모르는 키다. FillTo·Behavior·Role·Seed 만 쓸 수 있다.");
+                        }
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException($"{child.Path} 는 모르는 키다. Map·Bots 만 쓸 수 있다.");
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(mapId))
+            {
+                throw new InvalidOperationException($"{room.Path}:Map 에 맵 id 가 없다.");
+            }
+
+            return new TestRoomProfile(mapId!, fillTo, behavior, role, seed);
+        }
+
+        /// 설정 키는 대소문자를 가리지 않는다 — 구성 시스템의 규칙과 같게 둔다.
+        private static bool KeyIs(IConfigurationSection section, string key)
+        {
+            return string.Equals(section.Key, key, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static int ParseInt(IConfigurationSection section)
+        {
+            return int.TryParse(section.Value, out var value)
+                ? value
+                : throw new InvalidOperationException($"{section.Path} 의 값 '{section.Value}' 를 정수로 읽을 수 없다.");
+        }
+
+        private static uint ParseUInt(IConfigurationSection section)
+        {
+            return uint.TryParse(section.Value, out var value)
+                ? value
+                : throw new InvalidOperationException($"{section.Path} 의 값 '{section.Value}' 를 부호 없는 정수로 읽을 수 없다.");
+        }
+
+        private static TEnum ParseEnum<TEnum>(IConfigurationSection section)
+            where TEnum : struct, Enum
+        {
+            if (Enum.TryParse<TEnum>(section.Value, ignoreCase: true, out var value)
+                && Enum.IsDefined(typeof(TEnum), value))
+            {
+                return value;
+            }
+
+            throw new InvalidOperationException(
+                $"{section.Path} 의 값 '{section.Value}' 를 읽을 수 없다. " +
+                $"가능한 값: {string.Join(", ", Enum.GetNames(typeof(TEnum)))}");
         }
     }
 }

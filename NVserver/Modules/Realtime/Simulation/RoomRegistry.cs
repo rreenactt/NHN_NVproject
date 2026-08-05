@@ -5,6 +5,7 @@ using System.Threading;
 using Microsoft.Extensions.Logging;
 using NV.Realtime.Contracts;
 using NV.Realtime.Transport;
+using NV.Shared.Collision;
 using NV.Shared.Contracts;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Simulation;
@@ -348,48 +349,58 @@ namespace NV.Realtime.Simulation
         /// "없는 방" 으로 거부되는 것뿐이라 설정 오타를 찾는 데 시간이 걸린다.
         private void CreateStaticRooms()
         {
-            foreach (var pair in _staticRooms.MapByRoom)
+            foreach (var pair in _staticRooms.Rooms)
             {
                 if (!IsValidRoomId(pair.Key))
                 {
                     throw new InvalidOperationException($"정적 룸 id '{pair.Key}' 의 형식이 어긋난다.");
                 }
 
-                var map = _maps.ByMapId(pair.Value);
+                var profile = pair.Value;
+                var map = _maps.ByMapId(profile.MapId);
                 if (map is null)
                 {
-                    throw new InvalidOperationException($"정적 룸 '{pair.Key}' 가 등록되지 않은 맵 '{pair.Value}' 를 가리킨다.");
+                    throw new InvalidOperationException($"정적 룸 '{pair.Key}' 가 등록되지 않은 맵 '{profile.MapId}' 를 가리킨다.");
                 }
 
-                // 정적 룸은 공개다. 개발용으로 미리 열어 둔 방이고, 목록에 뜨지 않으면
-                // 로비에서 여기에 닿을 길이 없다 — id 가 초대 코드 형식(6자 이상)을
-                // 만족하지 않아 코드 입력 칸으로도 들어갈 수 없다.
-                // 봇 설정은 정적 룸에만 넘어간다. 그 제한이 이 한 줄이다.
-                var entry = new Entry(
-                    new Room(pair.Key, map, _network, _logger, isStatic: true, isPublic: true, bots: _options.Bots),
-                    string.Empty,
-                    0u);
+                // 봇 설정은 정적 룸에만 넘어간다. 그 제한이 이 호출이다. 전역 설정 위에
+                // 프로필을 겹치므로, 룸마다 다른 행동·역할·채움 인원을 가질 수 있다.
+                OpenStaticRoom(pair.Key, profile.MapId, map, profile.ResolveBots(_options.Bots));
+            }
+        }
 
-                _rooms[pair.Key] = entry;
+        /// 정적 룸 하나를 연다. 명시 설정과 맵당 자동 생성이 같은 규칙을 지나야 하므로
+        /// 이 자리가 하나여야 한다.
+        private void OpenStaticRoom(string roomId, string mapId, WorldMap map, BotOptions bots)
+        {
+            // 정적 룸은 공개다. 개발용으로 미리 열어 둔 방이고, 목록에 뜨지 않으면
+            // 로비에서 여기에 닿을 길이 없다 — id 가 초대 코드 형식(6자 이상)을
+            // 만족하지 않아 코드 입력 칸으로도 들어갈 수 없다.
+            var entry = new Entry(
+                new Room(roomId, map, _network, _logger, isStatic: true, isPublic: true, bots: bots),
+                string.Empty,
+                0u);
 
-                _logger.LogInformation(
-                    "정적 룸 {RoomId} 열림. 맵 {MapId}({MapName}) 해시 {MapHash:X8}. 방장 없이 시작할 수 있다.",
-                    pair.Key,
-                    pair.Value,
-                    map.Name,
-                    map.Hash);
+            _rooms[roomId] = entry;
 
-                if (_options.Bots.Enabled)
-                {
-                    // 개발 전용 기능이 켜져 있다는 것을 기동 로그에 남긴다. 네트워크 조건
-                    // 주입기와 같은 취급이다 — 켜진 것을 모르고 관찰하면 봇의 존재가
-                    // 서버 버그로 보인다.
-                    _logger.LogWarning(
-                        "정적 룸 {RoomId} 의 봇 채우기가 켜져 있다. 인원 {FillTo} 까지 채우고 봇 역할은 {Role} 다. 개발 전용 설정이다.",
-                        pair.Key,
-                        _options.Bots.FillTo <= 0 ? RealtimeConstants.Rooms.MinPlayersToStart : _options.Bots.FillTo,
-                        _options.Bots.Role);
-                }
+            _logger.LogInformation(
+                "정적 룸 {RoomId} 열림. 맵 {MapId}({MapName}) 해시 {MapHash:X8}. 방장 없이 시작할 수 있다.",
+                roomId,
+                mapId,
+                map.Name,
+                map.Hash);
+
+            if (bots.Enabled)
+            {
+                // 개발 전용 기능이 켜져 있다는 것을 기동 로그에 남긴다. 네트워크 조건
+                // 주입기와 같은 취급이다 — 켜진 것을 모르고 관찰하면 봇의 존재가
+                // 서버 버그로 보인다.
+                _logger.LogWarning(
+                    "정적 룸 {RoomId} 의 봇 채우기가 켜져 있다. 인원 {FillTo} 까지 채우고 봇 행동은 {Behavior}, 역할은 {Role} 다. 개발 전용 설정이다.",
+                    roomId,
+                    bots.FillTo <= 0 ? RealtimeConstants.Rooms.MinPlayersToStart : bots.FillTo,
+                    bots.Behavior,
+                    bots.Role);
             }
         }
     }

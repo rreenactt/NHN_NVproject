@@ -210,6 +210,10 @@ namespace NV.Realtime.Simulation
         /// 참가자 중 봇의 수. 개발 설정이 꺼져 있으면 항상 0 이다.
         public int BotCount => Volatile.Read(ref _botCount);
 
+        /// 이 룸의 실효 봇 설정. 레지스트리가 전역 위에 프로필을 겹쳐 넘긴 결과이며,
+        /// 그 합성이 룸까지 닿았는지를 테스트가 여기서 확인한다.
+        internal BotOptions Bots => _bots;
+
         /// 설정으로 미리 열어 둔 룸. 방장이 없고 비어도 회수되지 않는다.
         public bool IsStatic => _isStatic;
 
