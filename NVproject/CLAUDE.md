@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Unity **6000.3.20f1** (Unity 6.3), **URP 17.3**, **new Input System** (`activeInputHandler: 1` — legacy `Input.GetAxis`/`Input.GetKey` will throw). A single-scene 3D first-person shooter prototype. Main scene: `Assets/Scenes/SampleScene.unity`.
+Unity **6000.3.20f1** (Unity 6.3), **URP 17.3**, **new Input System** (`activeInputHandler: 1` — legacy `Input.GetAxis`/`Input.GetKey` will throw).
+
+The game is an **asymmetric hide-and-seek escape FPS in a two-floor Backrooms maze**: one armed Seeker hunts several unarmed Runners, who collect 10 keys and insert them into a door only they can see. Two Runners out = Runner win; the clock running out = Seeker win. The authoritative ruleset is `.claude/skills/game-rules/references/ruleset.md` — **change it before changing any number in the code.**
+
+Two scenes: `Assets/Scenes/SampleScene.unity` is the game (offline, everything built at runtime), and `MultiplayerTest.unity` is the networking harness.
 
 The player is a **Minecraft-style figure built from white cubes in code, animated entirely procedurally**. There is no character model, no skinned mesh, no Animator, no AnimationClip and no blend tree anywhere in the project — all of that was removed. `Assets/Shady_3d` and `Assets/Animations` are leftover assets that nothing references; the humanoid scripts that drove them (`AimPitch`, `RootMotionRelay`, `ViewmodelRig`, `FirstPersonSetup`) are deleted. **Do not reintroduce Mecanim to solve an animation problem here** — pose the joints in code instead.
 
@@ -18,6 +22,7 @@ Everything else happens through the **Unity Editor via MCP** (`mcp__unity-mcp__*
 - **Read the `unity-mcp-ops` skill before any Unity MCP task** — the `fps-*` skills say what to build, `unity-mcp-ops` says how to drive the server.
 - Keep `com.unity.ai.assistant` pinned at **2.6.0-pre.1**. 2.7.x requires a paid Unity AI seat and every MCP call fails with "Connection revoked" / "Capacity Limit". Enable via Project Settings ▸ AI ▸ Assistant MCP Extensions ▸ "Enable MCP Tools".
 - Editing any `Assets/**/*.cs` triggers a domain reload that briefly drops the bridge ("Unity not detected") — retry the next call. **Always re-enter play mode after a script edit before trusting runtime reads**; a stale play session silently runs the old code. A domain reload does *not* reliably exit play mode, so guard any edit-mode-only command with `if (Application.isPlaying) return;` — writes made in play mode are silently discarded.
+- **After editing a script from outside Unity, the *first* Play still runs the old assembly.** The editor only notices the file when it regains focus, so entering play mode is what kicks off the import; the recompile and domain reload then land *after* `Awake` has already run, and nothing re-runs it. A brand new component simply is not there, and a fixed one is still broken. Stop, Play again, and only then measure — this costs a cycle every single time and is the single most common way to "verify" a fix that never ran.
 - **`Undo.AddComponent` / `Undo.RegisterCreatedObjectUndo` inside a command get rolled back if that command later errors**, even after an `ExecuteMenuItem` has already succeeded — you get a half-applied scene (objects deleted, components missing) with nothing in the console. Use plain `AddComponent` from commands and keep `Undo.*` for genuine editor menu items.
 - Newly added components serialize the field defaults **as of that moment**. Changing a default in the `.cs` afterwards does not update the scene — set both, or the scene silently keeps the old value.
 - **`Unity_RunCommand` reports `UNEXPECTED_ERROR` if the command logs a single warning**, even when it did exactly what you asked. A player build emits hundreds of shader warnings from the `com.unity.ai.inference` (Sentis) package, so **building through MCP always looks like it failed**. A deliberate `LogError` on a valid path (a build the tool means to refuse) reads the same way. Judge by the `[Log]` line at the very end of the response — print your conclusion once with `result.Log` and treat that as the only trustworthy signal, then confirm side effects from the filesystem.
@@ -33,7 +38,10 @@ Everything else happens through the **Unity Editor via MCP** (`mcp__unity-mcp__*
 - **A newly written `.cs` has no `.meta` until the editor imports it**, and if the bridge is stuck you cannot force it. Writing the `.meta` by hand is safe — two lines, `fileFormatVersion: 2` and a fresh `guid` (`[guid]::NewGuid().ToString('N')`).
 - `System.Reflection` inside `Unity_RunCommand` fails with a bare `UNEXPECTED_ERROR: Object reference not set…` (even just `GetField`). Add a public API to the script instead — `FirstPersonController.SetPitch` exists partly for this. Injected input (`InputSystem.QueueDeltaStateEvent`) also does not reach the player loop from a command, and `Time.deltaTime` does not advance within one command, so **per-frame motion cannot be stepped from a command at all**. Verify the *formula* against the live serialized parameters instead, then ask the user to play it.
 - `Unity_Camera_Capture` with a specific camera fails under URP; only the no-arg scene-view capture works. **Animation smoothness cannot be self-verified visually** — verify numerically and ask the user for visual judgement. For "where is it on screen" questions, rasterize: project every triangle of the baked/mesh geometry to viewport space onto a coarse occupancy grid and print an ASCII map. Bounding boxes are useless here — geometry that straddles the near plane produces garbage extents, so skip triangles with any vertex at `z <= nearClipPlane`.
-- Editor entry point: menu **Tools ▸ Block Player ▸ Build Block Player** (`Assets/Editor/BlockPlayerSetup.cs`) strips whatever character is under `Player` and rewires the block player from scratch.
+- Editor entry points, all under **Tools** (`Assets/Editor/`):
+  - **Block Player ▸ Build Block Player** — strips whatever character is under `Player` and rewires the block player from scratch.
+  - **Backrooms ▸ Set Up Match / Create Game Config Asset** — puts the `Match` object in the scene and creates `Assets/Settings/GameConfig.asset`.
+  - **NV Network ▸ Setup Networking / Export Map Collision / Create Multiplayer Test Scene / Build and Launch 2 Clients**.
 
 ## Architecture
 
@@ -44,20 +52,24 @@ Player          CharacterController + FirstPersonController + BlockRig
                 + BlockCharacterAnimator + ProceduralReload + WeaponController + WeaponSwitcher
  └─ FP Camera   local (0, 1.62, 0); nearClip 0.02; cullingMask excludes PlayerBody
      └─ Viewmodel Arms   ← built at runtime, framing = BlockRig.viewmodelOffset
-Backrooms       BackroomsMap — the whole level, built at runtime from a seed
+Backrooms       BackroomsMapGenerator — the whole two-floor level, built at runtime from a seed
 Match           MatchBootstrap — the rules layer; builds everything below at runtime
  ├─ Match Manager / Device System / Match HUD
- ├─ __Objectives   Escape Door, Key ×10, Device ×9
- └─ __PracticeRunners  wandering Runner dummies (offline testing only)
-Mirror / Mirror Frame        repositioned into the spawn room by BackroomsMap
+ ├─ __Objectives   Chain Altar, Escape Door, Key ×10, Device ×9
+ └─ __PracticeRunners  wandering Runner dummies (only when practiceRunners > 0)
+Mirror / Mirror Frame        repositioned into the spawn room by the generator
 Global Volume, Directional Light (disabled)
+
+added to Player at runtime by MatchBootstrap:
+ PlayerAgent + PlayerInteractor + ChainDrag + PlayerRoleLoadout + FootstepAudio + WeaponAudio
 
 built at runtime under Player:
  Hips ─ Torso ─┬─ Neck ─ Head        Arm R ─ Hand R ─ Pistol ─ Muzzle
                ├─ Arm R / Arm L      Leg R / Leg L (children of Hips)
 
-built at runtime under Backrooms:
- Floor, Ceiling (one slab each) ─ Walls/* (merged runs) ─ Ceiling Lights/*
+built at runtime under Backrooms/__BackroomsMap:
+ Carpet ×583, Ceiling Tile ×583 (one per standable cell) ─ Wall X|Z ×136 (merged runs)
+ ─ Step ×16 (the stairwell flight) ─ light panels + point lights ─ Ceiling Lid ─ Ambient Hum
 ```
 
 **Proportions are Minecraft's, on a 16-per-block pixel grid** (`head 8³`, `torso 8×12×4`, `limbs 4×12×4`; legs 12 + torso 12 + head 8 = 32 px). At `totalHeight` 1.8 m the eyes land at 1.62 m, which is where the camera already sat. Every limb's pivot is at its **joint**, with the cube offset half its length below it — get that wrong and limbs orbit their own centre, which is the usual reason a blocky walk looks broken.
@@ -101,16 +113,21 @@ so the stride is *derived from measured speed* and the planted foot tracks the g
 
 **Feet-on-floor shim.** A `CharacterController` rests its own `skinWidth` (0.08 by default) above the ground, so a body hung straight off the transform floats by exactly that much — plainly visible. `BlockRig.GroundOffset` reads `skinWidth` and the animator subtracts it from the hip height. Residual gap is 0.0067 m, which is just the `seam` shrink.
 
-**The level is a Backrooms maze, also generated in code.** `BackroomsMap` (on the `Backrooms` root) builds it in `Awake` from a seed — 56×56 cells at 3.2 m, ~179 m square, 3 m ceiling. The scene itself holds no level geometry. `Ground`, `Plane` and the test `Cube` are gone; the `Directional Light` is **disabled, not deleted** (there is no sun indoors, but it is easy to put back). Note `GameObject.Find` will not return it while it is inactive.
+**The level is a two-floor Backrooms maze, generated in code.** `BackroomsMapGenerator` (on the `Backrooms` root) builds it in `Awake` from a seed: **35×35 cells at 3 m across two storeys** 3.2 m apart, so 105 m square with a 3 m ceiling. It replaced the single-floor `BackroomsMap`, which is still in the folder and referenced by nothing — do not follow it by mistake. The scene holds no level geometry; the `Directional Light` is **disabled, not deleted** (no sun indoors, but easy to put back), and `GameObject.Find` will not return it while it is inactive.
 
-Layout is three passes and all three earn their place:
-- **Recursive backtracker maze** over the cells. This is what guarantees connectivity — verified by flood-filling the *actual colliders*, not the grid: 3136/3136 cells reachable from spawn. Later passes only ever *remove* walls, so connectivity cannot regress.
-- **Rectangular rooms** for contrast; a uniform maze reads as corridor soup.
-- **Random extra doorways** (`loopChance`). A perfect maze has exactly one path between any two points, which reads as a puzzle to solve rather than as being lost.
+**Determinism is load-bearing, not tidiness.** The collision boxes are hashed and compared against the game server's copy of the map (`INetworkMapSource`), so one stray `UnityEngine.Random` would make client and server disagree about where the walls are. Every procedural choice draws from one seeded `System.Random`, `randomizeSeed` is **off** by default, and `ComputeCollision()` replays the draws in exactly the order `Generate()` does so the editor exporter gets the same level without building it.
 
-**Watch the openness metric, not the wall count.** A spanning-tree maze is already **~51% open** by neighbour-link count, so that is the floor, not zero. The first attempt (34 rooms, `loopChance` 0.16, 4 m cells) measured **70.7% open** and felt like a warehouse. Now 18 rooms / 0.08 / 3.2 m cells gives **60.2%**, and the metric that actually predicts claustrophobia is the **mean straight sightline: 6.3 m** (longest hallway 52.7 m — those long runs are worth keeping).
+Layout is solved entirely in memory before a single GameObject exists, in four passes:
+- **Anchors first.** Spawn (ground floor), exit (top floor) and the stairwell are hand-authored `RectInt`s, stamped and marked protected so no procedural pass can eat them. The stairwell occupies the *same cells on both floors* — that is what makes the flights line up.
+- **Rectangular rooms**, random per floor, rejected if they overlap another with a cell of padding.
+- **Corridors** joining consecutive rooms, plus extra links at `loopChance`. A perfect maze has exactly one path between any two points, which reads as a puzzle rather than as being lost.
+- **`EnforceConnectivity`** flood-fills and carves any stranded cell to the nearest reachable one on its own floor. The stairwell is the only vertical edge, so it is the only thing joining the storeys.
 
-**Cost control.** Each straight run of wall is merged into **one box with one collider**, which is why 56×56 costs 1365 wall pieces rather than ~3000. All walls share the built-in cube mesh and one instanced material. Ceiling light panels are emissive boxes with **no collider** (they must not block shots); real point lights are far sparser (`lightSpacing` 5 → 121 lights) and have **shadows off** — a hundred shadow-casting lights would be ruinous and flat diffuse light is what the reference looks like anyway. Levers if it runs badly: `lightSpacing`, `panelSpacing`, then `gridWidth`/`gridHeight`.
+Current shape, measured: **583 standable cells of 2450 (24%)**, 136 wall pieces, 52 lights, 736 collision boxes, `MapName` `backrooms2f`.
+
+**Cost control.** Each straight run of wall is merged into **one box with one collider** — 136 pieces instead of one per cell boundary. All walls share the built-in cube mesh and one instanced material. Floor and ceiling are one box per standable cell (583 each). Ceiling light panels are emissive boxes with **no collider** (they must not block shots); real point lights are sparser and have **shadows off** — flat diffuse light is what the reference looks like anyway. Levers if it runs badly: `lightSpacing`, then `gridSize`.
+
+A NavMesh is baked over both floors and the stairs at the end of `Generate()` (`bakeNavMesh`), and the match layer leans on it — see the chain-drag.
 
 **Ceiling tiles carry no collider — except on the top floor, which gets a `Ceiling Lid`.** Every other storey is sealed from below by the carpet slab of the storey above, which *is* solid. The top floor has nothing above it, so a player who climbed onto a 1 m device console and jumped 1.2 m put their eyes at 7.0 m against a 6.2 m ceiling and saw straight out of the level. One invisible 105×105 box at the ceiling plane fixes it for one collider instead of ~600 tile colliders; the highest reachable feet are now 4.40 m, eyes 6.02 m, under the ceiling by 0.18 m. It is in `CollisionBoxes`, so **the exported map hash changes and the server's copy needs re-exporting**. Unrelated but worth knowing: the navmesh has ~333 vertices at 6.30 on the *tops of the top-floor walls*, and has since long before the lid.
 
@@ -126,7 +143,7 @@ The gap is **dynamic**: `restGap` + `moveSpread` × (speed / sprintSpeed) + `sho
 
 **Weapon switching:** `WeaponSwitcher` (keys 1 = empty hands, 2 = pistol) reuses `ProceduralReload` as the swap animation and does the show/hide via its `onBottom` callback — at the bottom of the motion, where the hands are out of frame. Armed state drives three things together: both pistol copies' active state, `BlockCharacterAnimator.Armed` (the held-weapon arm pose), and `WeaponController.Armed`.
 
-**Weapon:** 8-round mag, R or empty-click reloads, damage via `SendMessageUpwards("OnHit", damage)`. The pistol is built from blocks too. **No block on the character carries a collider** — the `CharacterController` handles collision, and `hitMask` also excludes layers 8/9, so a shot can never hit the shooter (verified). `muzzle` is re-pointed in `Start` to the **viewmodel** pistol's muzzle, so rounds leave the barrel the player can actually see — it must be `Start`, since the rig builds during `Awake`.
+**Weapon:** the component defaults to an 8-round mag reloaded with R or an empty click, but **in a match the loadout resizes it to `GameConfig.seekerMagazine` (3) and hooks `onMagazineEmpty`, which disables both** — the chain owns the empty magazine. Damage goes out via `SendMessageUpwards("OnHit", damage)`. The pistol is built from blocks too. **No block on the character carries a collider** — the `CharacterController` handles collision, and `hitMask` also excludes layers 8/9, so a shot can never hit the shooter (verified). `muzzle` is re-pointed in `Start` to the **viewmodel** pistol's muzzle, so rounds leave the barrel the player can actually see — it must be `Start`, since the rig builds during `Awake`.
 
 **Shots are real projectiles, not hitscan.** `WeaponController.Fire` launches a `Bullet` and resolves nothing itself; the round works out its own impact as it flies (120 m/s default, ~40 ms over 5 m). Trajectory is integrated by hand, not by a Rigidbody — the same rule this project applies to thrown objects.
 
@@ -147,6 +164,29 @@ The gap is **dynamic**: `restGap` + `moveSpread` × (speed / sprintSpeed) + `sho
 - Remote networked players will need this component too — nothing adds it to `RemotePlayerPuppet` yet.
 
 **The gunshot is heard three times as far as a footstep, and that is the design.** `WeaponAudio` synthesises the bang the same way — a *crack* (differentiated noise, gone in 3 ms), a *blast* (broadband, ~40 ms), a low *body*, and a heavily low-passed *tail* over half a second, because without the room answering back a shot indoors sounds like it was fired in a field. Three clips, normalised to 0.95. `WeaponController.Fire` plays it **before** resolving the round: the bang is the event, not feedback about a hit. Falloff is deliberately shallower than the footsteps' — still 36% at 20 m and 20% at 30 m, zero at 60 — so a shot tells every Runner in the building roughly where the Seeker is and that they have one round fewer. Firing already costs the chain; this is what it costs in *information*. `WeaponController` adds the component itself if it is missing, so any scene with a weapon makes a noise.
+
+## The lobby (`Assets/Scripts/Lobby/`, scene `Assets/Scenes/Lobby.unity`)
+
+A PUBG-style staging room: six numbered stands in a row against the back wall, figures standing on them facing a single low camera, ready-up, countdown, appearance, and swapping places. Built at runtime like everything else; the scene holds one `Lobby` object with `LobbyBootstrap`. Menu: **Tools ▸ Backrooms ▸ Create Lobby Scene**.
+
+- **Networking is deliberately absent, and the shape of the code is the point.** `LobbyManager` holds every rule and calls no network API; it talks through `ILobbyTransport`, which has exactly two channels — requests travel client→authority, events travel authority→clients. `OfflineLobbyTransport` loops both back on one machine. Method names carry the authority model: `Request*` is a client asking, `Handle*` is the authority deciding, `Apply*` is a client writing down what it was told.
+- **17 `// NETCODE:` markers** across the folder are the server-pass checklist; the handoff doc is `.claude/skills/lobby-builder/references/netcode-integration.md`. **Never delete a marker — move it with the code**, and any new lobby state gets a row in that doc's replication table in the same edit.
+- The countdown is authority-owned on purpose. A client-run countdown is the classic way a match starts at different times for different players; the doc says to replicate `startTime + duration` rather than a per-frame float.
+- **The lock is the one rule everything hangs off.** Past `lockAtSeconds` the lobby refuses un-readying, slot moves, swaps and customisation — verified by trying all three and watching nothing change.
+- The offline transport invents the other players: they walk in one at a time, ready up on their own clock, and answer swap requests about 70% of the time. Without that, the accept path and the countdown cannot be exercised without a second machine.
+- The room reuses the level's palette and the HUD's stylesheet (`game-hud.uss`), because the lobby is a room in the same building — not a menu. Framing is a 38° lens at 1.35 m, offset and toed in 5.5°: square-on at a wide angle reads as a police lineup.
+- Figures are `LobbyMannequin`, blocks in the same proportions as the player, with a procedural idle. Only the **slot** carries a collider (a tall box on the floor plate), so clicking a person and clicking the empty space they stand in are the same gesture.
+- On countdown zero the lobby fires `MatchStarting` and loads `matchScene` — role assignment and every other rule belong to `MatchManager`, and the lobby stops there.
+
+## The network layer (`Assets/Scripts/Net/`) — present, and deliberately optional
+
+There is a real authoritative server in the sibling repo (`../NVserver`, .NET), and its `Shared` project is wired in as the local package `com.nv.shared`. Only **movement** is server-authoritative so far; the match rules are not on it at all.
+
+- **`NetworkBootstrap` is the single seam.** If it is not in the scene the project runs exactly as it does offline — the networking is purely additive, and `SampleScene` does not have it. `MultiplayerTest.unity` does. Editor entry points live under **Tools ▸ NV Network** (setup, export map collision, build/launch two test clients).
+- `FirstPersonController.ControlMode` decides who owns a body: `Local` (offline, this script moves it), `NetworkAuthority` (own character on a server — input is sampled and sent, position comes back), `Remote` (everything off the wire, and `MeasureSpeed` recovers the move direction from displacement so the animator still works without putting it on the wire).
+- Remote players interpolate on a 100 ms buffer; the local player only smooths briefly toward the server position, because adding an interpolation delay to your own character stacks 100 ms on top of the round trip.
+- **`MapExport` is why the map generator is deterministic.** The editor exports the collision boxes to JSON for the server, and the runtime hashes the same boxes through the same function to compare against what the server loaded. Both paths must go through one function or the check verifies nothing. **Changing the level's collision — the ceiling lid did — changes the hash and requires re-exporting.**
+- Neither `RemotePlayerPuppet` nor anything else adds `FootstepAudio`/`WeaponAudio` to a remote player yet, so networked opponents are currently silent.
 
 ## The match layer (`Assets/Scripts/Game/`)
 
@@ -195,7 +235,7 @@ Networked, all of that happens on the server instead (`Room.ApplyHit`) and this 
 
 **Bleeding is enforced by the trail, not by a timer.** Running lays a thin dotted line; standing still past `bleedStillGrace` pools blood on the spot, bigger and lasting `bleedPoolLifetimeScale`× longer. Hiding while wounded paints a sign over the hiding place, which is what "must keep moving" means here.
 
-**The chain-drag is the Seeker's whole cost, and it is anchored to one place.** Emptying the 3-round magazine hands the empty to `ChainDrag` via `WeaponController.onMagazineEmpty`, which *replaces* the reload: a chain comes out of the ring on the `ChainAltar` in the middle of the ground floor, hauls the Seeker back to it at `chainDragSpeed` 26 m/s (2.4 s cap — 55 m is a real journey), holds them `chainWait` 3 s, and only then reloads. Anchoring to a fixed altar rather than the nearest wall is what gives the penalty teeth: it costs three seconds *and everything you walked to reach*, and the Seeker always knows where the third shot sends them. `MovementLocked` blocks movement while leaving the look free — `InputEnabled` would release the cursor, which mid-match reads as the game losing focus.
+**The chain-drag is the Seeker's whole cost, and it is anchored to one place.** Emptying the 3-round magazine hands the empty to `ChainDrag` via `WeaponController.onMagazineEmpty`, which *replaces* the reload: a chain comes out of the ring on the `ChainAltar` in the middle of the ground floor, hauls the Seeker back to it along the shortest walkable route, holds them `chainWait` 3 s, and only then reloads. Anchoring to a fixed altar rather than the nearest wall is what gives the penalty teeth: it costs three seconds *and everything you walked to reach*, and the Seeker always knows where the third shot sends them. `MovementLocked` blocks movement while leaving the look free — `InputEnabled` would release the cursor, which mid-match reads as the game losing focus.
 
 - **The chain takes the shortest walkable route, not a straight line.** `NavMesh.CalculatePath` gives the corners; the chain is drawn as one stretched link per remaining segment and loses a bend each time the Seeker is pulled round one, and the haul is paced by *route* length (`chainDragSpeed` 45 m/s, `chainDragMaxTime` 3.5 s). Measured from the far corner upstairs: 31 corners, 399 m of route against 55 m of straight line, down the stairwell, and mid-haul the chain was 305 m of snaking metal against a 33 m straight line. Unity's path solve *is* A\* over the navmesh polygons, and it already knows the floors are joined by a staircase and not by a hole in the ceiling — a hand-rolled grid A\* would have to be taught that.
 - **Sample the navmesh at 1.5 m, never 4.** The bake leaves a walkable strip along the tops of the top-floor walls, 3.1 m above the upper floor; a 4 m sample radius snapped a Seeker standing upstairs onto that roof and every route came back `PathPartial` and wandered around up there.
