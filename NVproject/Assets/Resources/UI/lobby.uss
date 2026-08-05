@@ -1,0 +1,251 @@
+/*
+    Lobby-only styling. Everything shared — panels, chips, the notice line, scanlines, the type
+    treatment — comes from game-hud.uss, which this sits on top of. The lobby has to look like the
+    same interface as the HUD, because it is: the player never leaves the building.
+
+    What is different here is that the lobby has *buttons*. The HUD is read-only, so it never needed
+    a pressed state or a disabled state; both matter the moment the countdown locks and half the
+    interface has to visibly stop accepting input.
+*/
+
+.lobby-header {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 26px;
+    align-items: center;
+}
+
+.lobby-title {
+    font-size: 26px;
+    letter-spacing: 10px;
+    color: rgb(242, 231, 194);
+    -unity-font-style: bold;
+    text-shadow: 0 2px 6px rgba(14, 12, 8, 0.9);
+}
+
+/* ============================================================ roster */
+
+.lobby-roster {
+    left: 40px;
+    top: 120px;
+    min-width: 250px;
+}
+
+.lobby-roster__list {
+    margin-top: 2px;
+}
+
+.roster-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    min-width: 220px;
+}
+
+.roster-row__name {
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: rgb(226, 218, 182);
+}
+
+.roster-row__name--local {
+    color: rgb(255, 217, 138);
+    -unity-font-style: bold;
+}
+
+.roster-row__state {
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: rgba(215, 200, 152, 0.55);
+}
+
+.roster-row__state--ready {
+    color: rgb(150, 226, 160);
+}
+
+/* ============================================================ characters */
+
+.lobby-customization {
+    right: 40px;
+    top: 120px;
+    max-width: 300px;
+    align-items: flex-start;
+}
+
+.lobby-customization__list {
+    align-items: flex-start;
+}
+
+/* Two columns of four. Eight in a single row would be a strip of confetti; eight in a
+   column would run off the screen. */
+.character-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-width: 272px;
+}
+
+.character {
+    width: 128px;
+    height: 46px;
+    margin-right: 8px;
+    margin-top: 8px;
+    border-width: 1px;
+    border-color: rgba(201, 179, 107, 0.5);
+    justify-content: center;
+    align-items: flex-start;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.character:hover {
+    border-color: rgb(255, 246, 214);
+}
+
+/* Yours. The one tile with a bright edge. */
+.character--mine {
+    border-width: 2px;
+    border-color: rgb(255, 217, 138);
+}
+
+/* Somebody else's. One skin each is a rule, so this must look unavailable rather than
+   merely unselected. */
+.character--taken {
+    opacity: 0.30;
+    border-color: rgba(168, 146, 78, 0.35);
+}
+
+.character__label {
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: rgba(16, 14, 10, 0.9);
+    -unity-font-style: bold;
+}
+
+.character__owner {
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: rgba(16, 14, 10, 0.65);
+}
+
+/* ============================================================ countdown */
+
+.lobby-countdown {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 30%;
+    align-items: center;
+}
+
+.lobby-countdown__value {
+    font-size: 92px;
+    letter-spacing: 10px;
+    color: rgb(242, 231, 194);
+    -unity-font-style: bold;
+    text-shadow: 0 0 28px rgba(255, 246, 214, 0.35);
+}
+
+.lobby-countdown__value--locked {
+    color: rgb(226, 106, 92);
+}
+
+.lobby-countdown__caption {
+    font-size: 13px;
+    letter-spacing: 7px;
+    color: rgba(215, 200, 152, 0.7);
+}
+
+/* ============================================================ buttons */
+
+.lobby-actions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 46px;
+    align-items: center;
+}
+
+.lobby-button {
+    font-size: 20px;
+    letter-spacing: 6px;
+    color: rgb(242, 231, 194);
+    background-color: rgba(14, 12, 8, 0.72);
+    border-width: 1px;
+    border-color: rgb(168, 146, 78);
+    padding-left: 34px;
+    padding-right: 34px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    -unity-font-style: bold;
+}
+
+.lobby-button:hover {
+    background-color: rgba(40, 34, 20, 0.85);
+    border-color: rgb(255, 217, 138);
+}
+
+.lobby-button:active {
+    background-color: rgb(255, 217, 138);
+    color: rgb(20, 18, 12);
+}
+
+/* Readied up: the button is now the thing you press to change your mind. */
+.lobby-button--on {
+    background-color: rgba(60, 120, 70, 0.55);
+    border-color: rgb(150, 226, 160);
+    color: rgb(214, 245, 218);
+}
+
+/* Past the lock. Deliberately obvious that the interface has stopped listening. */
+.lobby-button--disabled {
+    opacity: 0.35;
+    border-color: rgba(168, 146, 78, 0.4);
+}
+
+.lobby-button--small {
+    font-size: 14px;
+    letter-spacing: 3px;
+    padding-left: 18px;
+    padding-right: 18px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+    margin-left: 6px;
+}
+
+.lobby-button--quiet {
+    border-color: rgba(168, 146, 78, 0.45);
+    color: rgba(226, 218, 182, 0.8);
+}
+
+.lobby-hint {
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: rgba(215, 200, 152, 0.45);
+    margin-top: 12px;
+}
+
+/* ============================================================ swap request */
+
+.lobby-swap {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 190px;
+    align-items: center;
+    display: none;
+}
+
+.lobby-swap__text {
+    font-size: 16px;
+    letter-spacing: 3px;
+    color: rgb(255, 217, 138);
+    margin-bottom: 8px;
+    text-shadow: 0 1px 4px rgba(14, 12, 8, 0.95);
+}
+
+.lobby-swap__buttons {
+    flex-direction: row;
+}
