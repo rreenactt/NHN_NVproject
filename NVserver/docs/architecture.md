@@ -273,7 +273,7 @@ Kestrel 스레드풀                          GameLoopService
 | opcode | 방향 | 메시지 |
 |---|---|---|
 | `0x01` | C → S | `Input` — 최근 3틱치 중복 전송 |
-| `0x02` | C → S | `Control` — 룸에 대한 요청. 종류는 `ControlKind`(시작, 매치 종료 보고, 로비 복귀) |
+| `0x02` | C → S | `Control` — 룸에 대한 요청. 종류는 `ControlKind`(시작, 매치 종료 보고, 로비 복귀, 준비, 캐릭터, 강제 퇴장, 방장 위임) |
 | `0x81` | S → C | `Snapshot` — 풀 스냅샷, 매 틱. `Playing` 단계에서만 |
 | `0x82` | S → C | `Event` — 종류는 `EventKind`: `RoomState`, `MatchState`, `ObjectiveState`, `FireEvent` |
 | `0x83` | S → C | `Welcome` — 자기 ID, 서버 틱, 맵 해시 |
@@ -284,13 +284,15 @@ Kestrel 스레드풀                          GameLoopService
 | `EntityState` | 13B | id(u8), x/y/z(i16), yaw(u16), flags(u8), hp(u8) |
 | `ControlMessage` | 3B | opcode(u8), kind(u8), value(u8) |
 | `RoomStateHeader` | 11B | opcode·kind·phase·host·seeker·outcome(u8×6), startTick(u32), playerCount(u8) |
-| `RoomPlayerEntry` | 2B + 이름 | playerId(u8), nameLength(u8), ASCII 이름(≤12B) |
+| `RoomPlayerEntry` | 4B + 이름 | playerId(u8), flags(u8), characterId(u8), nameLength(u8), ASCII 이름(≤12B) |
 | `MatchStateHeader` | 9B | opcode·kind·phase(u8×3), timeRemainingTenths(u16), keysInserted·escapes·outcome·count(u8×4) |
 | `MatchParticipant` | 5B | playerId·role·**ammo**·hits·carriedKeys(u8×5) |
 | `ObjectiveStateHeader` | 5B | opcode·kind·flags·keyCount·deviceCount(u8×5) |
 | `ObjectivePoint` / `ObjectiveDevice` | 6B / 10B | 양자화 좌표 (+yaw·type·state) |
 
-8명 기준 스냅샷 114B(30Hz, 3.6KB/s), 룸 상태 전문 최대 123B(2Hz), 매치 상태 전문 최대 49B(2Hz), 목표물 전문 최대 176B(변경 시 + 5초).
+8명 기준 스냅샷 114B(30Hz, 3.6KB/s), 룸 상태 전문 최대 139B(2Hz), 매치 상태 전문 최대 49B(2Hz), 목표물 전문 최대 176B(변경 시 + 5초).
+
+**`RoomPlayerEntry` 가 2B 에서 4B 가 됐다** — 대기방을 서버 권위로 만든 자리다. `flags` 는 준비 여부와 봇 여부이며 **비트 2~7 이 비어 있다**(팀·관전자가 그 자리로 간다), `characterId` 는 클라이언트 카탈로그의 인덱스다. 서버는 캐릭터의 **개수**(`ProtocolInfo.LobbyCharacterCount`)만 알고 이름·색은 모른다 — 아는 순간 그 표가 두 곳에 생긴다. 준비 인원 같은 **유도 가능한 값은 헤더에 넣지 않는다**: 명단에서 세면 되고, 두 값이 어긋날 수 있는 상태를 만들지 않는다.
 
 **`RoomState` 는 정적 룸에서만 세션별로 인코딩된다.** 그 룸은 방장 토큰을 발급하는 경로가 없어 전원이 시작 권한을 갖고(`Room.IsAuthorized`), 그래서 `host` 한 바이트에 **받는 사람 자신의 id** 가 실린다. 다른 필드와 명단은 그대로 전원의 것이다. 초대 코드 룸에서는 본문이 수신자와 무관하므로 한 번만 인코딩한다.
 
@@ -308,7 +310,7 @@ Kestrel 스레드풀                          GameLoopService
 
 `Control` 은 요청이지 명령이 아니다. 방장인지, 지금 단계에서 가능한 전이인지는 룸이 틱 경계에서 다시 판단한다. 자발적 퇴장은 여기 없다 — WebSocket 정상 종료 프레임으로 이미 구분되고, 제어 메시지로도 보내면 같은 소켓에 두 송신이 겹친다.
 
-프로토콜 버전이 다르면 접속 시 즉시 끊는다. 클라이언트와 서버가 다른 시점에 빌드되므로 이 핸드셰이크가 유일한 방어선이다. 현재 버전은 **3** 이며, 올릴 때는 서버와 클라이언트를 같은 커밋에 배포한다. **버튼 비트를 추가하는 것은 버전을 올리지 않는다** — 크기와 배치가 그대로이고, 구버전 클라이언트는 비트를 세우지 않으며 구버전 서버는 `ButtonFlags.All` 마스크로 지운다.
+프로토콜 버전이 다르면 접속 시 즉시 끊는다. 클라이언트와 서버가 다른 시점에 빌드되므로 이 핸드셰이크가 유일한 방어선이다. 현재 버전은 **4** 이며(4부터 대기방이 서버 권위다 — 명단 항목이 넓어지고 `ControlKind` 에 준비·캐릭터·강제 퇴장·방장 위임이 붙었다), 올릴 때는 서버와 클라이언트를 같은 커밋에 배포한다. **버튼 비트를 추가하는 것은 버전을 올리지 않는다** — 크기와 배치가 그대로이고, 구버전 클라이언트는 비트를 세우지 않으며 구버전 서버는 `ButtonFlags.All` 마스크로 지운다.
 
 ### HTTP
 

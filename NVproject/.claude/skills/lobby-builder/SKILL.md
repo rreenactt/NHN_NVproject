@@ -1,129 +1,139 @@
 ---
 name: lobby-builder
 description: >
-  Build the pre-match lobby for the Backrooms escape FPS in Unity 6 — a PUBG-style
-  staging room where 5-6 players' 3D character models stand lined up in a row
-  waiting for the match to start. Covers the lobby space (backrooms-toned waiting
-  room), numbered stand slots, ready-up + countdown, character/skin customization
-  with live preview, and slot swapping between players. Networking is deliberately
-  deferred: all logic runs behind a transport interface with an offline
-  implementation, so the lobby is playable solo today and gets wired to real
-  netcode later. Use this whenever the user wants to create, change, or extend the
-  lobby / waiting room / staging area / player lineup / ready screen / character
-  select — or mentions "lobby", "로비", "waiting room", "ready up", "countdown",
-  "slot", "자리바꾸기", "character select", even without naming the game.
+  Work on the two lobby screens of the Backrooms escape FPS in Unity 6 — the main
+  lobby (server browser: room list, create room, join by code, quick join) and the
+  game lobby / waiting room (roster, ready-up, character select, host powers, start).
+  Both live in the MainLobby scene as two pages of one UI Toolkit tree, and both are
+  driven by the authoritative .NET server: the client sends Control requests and
+  draws the RoomState bulletin. Use this whenever the user wants to create, change,
+  or extend either lobby screen — or mentions "lobby", "로비", "대기방", "waiting
+  room", "ready up", "준비", "roster", "명단", "character select", "캐릭터 선택",
+  "kick", "강제 퇴장", "방장", "host", "room list", "방 목록", even without naming
+  the game.
 ---
 
 # Lobby Builder (Backrooms Escape FPS)
 
-A PUBG-style lobby: players enter, their 3D models stand in a numbered row facing
-the camera, they customize their character, mark themselves ready, and a countdown
-starts the match. Styled as a backrooms waiting room — the lobby is part of the
-game world, not a menu floating in the void.
+Two screens, one scene, one authority.
 
-## Networking status — READ FIRST
+| Screen | Element | Owns |
+|---|---|---|
+| **Main lobby** | `#page-browser` | Everything *outside* a room — profile, connection state, room list (`GET /rooms`), create room, join by code, quick join, quit |
+| **Game lobby** | `#page-room` | Everything *inside* a room — invite code, map, roster, ready, character select, kick / host transfer, start, leave, match result |
 
-**Netcode stack is undecided.** Everything here is built so the server work can be
-added later without rewriting the lobby:
+They never both show. `LobbyUIController.ShowRoomPage` is the only thing that
+switches, and it switches on `NetSession.State` — not on a button click, because
+there are four ways into a room (create, code, list, quick join) and a screen that
+each of them has to remember to open is a screen one of them forgets.
 
-- All lobby state lives in `LobbyManager`, which never calls a network API directly.
-- It talks to **`ILobbyTransport`** (`scripts/ILobbyTransport.cs`).
-- `OfflineLobbyTransport` implements it locally so the lobby runs solo today with
-  fake/bot players.
-- Every place that will need real networking is marked with a
-  **`// NETCODE:`** comment explaining exactly what must change.
-- `references/netcode-integration.md` is the full handoff doc: what's authoritative,
-  what must be replicated, what must be server-validated, and a per-stack
-  (Netcode for GameObjects / Photon Fusion / Mirror) mapping.
+## The authority — READ FIRST
 
-When the user is ready to add networking, read `references/netcode-integration.md`
-before touching any lobby code, and implement a new `ILobbyTransport` rather than
-editing `LobbyManager`'s logic.
+**There is no client-side lobby authority.** There used to be (`LobbyManager` +
+`ILobbyTransport` + `OfflineLobbyTransport`, with 17 `// NETCODE:` markers); the
+server pass replaced all of it and those files are gone. Do not reintroduce them:
+a second thing that decides who is ready is a second thing that can disagree with
+`Room.cs`.
 
-## What to build (the contract)
+The seam is the wire, and it is already there:
 
-### The space
-- A single enclosed **backrooms-toned waiting room**: mono-yellow damp walls, worn
-  carpet, dropped ceiling with buzzing fluorescents. Reuse the exact palette from
-  the `backrooms-map-generator` skill's `references/aesthetic-spec.md` so the lobby
-  and the map read as the same building.
-- It should feel like a room *adjacent* to the level — a holding area, slightly too
-  quiet. See `references/lobby-style.md` for camera, lighting, and mood specifics.
+```
+client                                     server (NVserver/Modules/Realtime)
+──────                                     ─────────────────────────────────
+NetSession.SetReady / SetCharacter    ──►  Control(0x02) ──► RoomCommand ──► Room.*
+NetSession.KickPlayer / TransferHost                        (tick boundary judges)
+NetSession.RequestStart / ReturnToLobby
+                                     ◄──  Event(0x82) RoomState, 2Hz, forever
+GameLobbyView draws RoomState                              (phase · host · seeker
+                                                            · roster with flags)
+```
 
-### The lineup
-- **`maxPlayers` stand slots** (default 6, supports 5) in a straight row, evenly
-  spaced, all facing the lobby camera. Empty slots show a faint floor decal /
-  number so the row reads as "waiting for more."
-- Each occupied slot displays the player's **3D character model**, an idle
-  animation, a nameplate, and a **READY** stamp when they've readied up.
-- Slot order is stable — a player keeps their slot until they leave or swap.
+- **Requests, not commands.** The server re-checks who is host, what phase the room
+  is in, and whether the transition is legal. A client cannot change room state.
+- **Bulletins, not notifications.** `RoomState` repeats in full at 2Hz and is
+  idempotent. Nothing in the lobby is a one-shot message — the session's outbound
+  channel is `Bounded(32, DropOldest)`, so a one-shot "you were rejected" is a frame
+  that can vanish. Read ADR 0003 before adding any notification.
+- **No local copies.** `IsLocalReady` reads the roster; the character picker reads
+  the roster. A local copy means a request the server refused stays true on screen,
+  and that difference is invisible.
 
-### Ready + countdown
-- Each player toggles **Ready**. When **all connected players are ready** (and the
-  minimum player count is met), a **countdown** starts.
-- Anyone un-readying **cancels** the countdown immediately.
-- At zero, fire `OnMatchStarting` — the match/role assignment is owned by the
-  `game-rules` skill's MatchManager, not by the lobby.
+The living contract — every `Control` kind, every roster field, what the server
+re-checks, and the checklist for widening the roster entry — is
+`references/server-contract.md`. Why it is shaped that way, and what was
+deliberately left out, is `NVserver/docs/game-lobby-plan.md`.
 
-### Character / skin customization
-- Live preview on the player's own model in their slot — changes are visible to
-  everyone in the row, not just locally.
-- Keep the options data-driven (`LobbyCustomizationCatalog`) so adding skins needs
-  no code change.
-- Customization is locked once the countdown reaches its lock threshold.
+## What the server decides
 
-### Slot swapping (자리바꾸기)
-Two supported modes, configurable:
-- **Free move** — a player clicks any empty slot and moves there.
-- **Swap request** — a player clicks an occupied slot to request a swap; the other
-  player accepts or declines, then the two models trade places.
+| Rule | Where | Note |
+|---|---|---|
+| Ready | `Room.SetReady` | Waiting phase only. Cleared for everyone by `ResetToWaiting` |
+| Start | `Room.Start` | Host + min players + **everyone else ready**. Host does not ready — pressing start is their ready. Bots are not counted. Static rooms skip the ready condition |
+| Character | `Room.SetCharacter` | Range (`ProtocolInfo.LobbyCharacterCount`) + **unique in the room**. First processed wins |
+| Kick | `Room.Kick` | Host session only — *not* `IsAuthorized`, which grants everyone in a static room. Removes from the roster **and** closes the socket with code 4003 |
+| Host transfer | `Room.TransferHost` | Host session only. Never to a bot |
+| Host succession | `Room.LowestRemainingSessionId` | When the host leaves. Server-chosen, humans only |
 
-Swaps and moves must be **rejected while the countdown is locked**, and later must
-be **server-validated** (see the `// NETCODE:` markers) so two players can't claim
-the same slot.
+**Kick has a limit and it is not a bug:** there are no accounts, so kicking ends a
+socket. Someone with the invite code can come back. The private-room code is the
+real gate.
 
-## Workflow
+## The wire (protocol 4)
 
-1. **Confirm the Unity MCP bridge is Running.** Confirm the character model /
-   prefab situation; if there are no character models yet, generate placeholder
-   capsule-with-head stand-ins so the lineup works end-to-end today.
-2. **Read `references/lobby-style.md`** before building the room or placing the
-   camera — the framing is what makes it read as PUBG-style rather than a menu.
-3. **Build the room**: enclosed backrooms space, one wall the camera looks toward,
-   the lineup along it, fluorescent lighting, ambient hum.
-4. **Place the slots**: instantiate `LobbySlot` markers in a row from
-   `LobbyConfig` (count, spacing, facing). Keep them as transforms so a designer
-   can nudge the row without touching code.
-5. **Wire `LobbyManager`** with `OfflineLobbyTransport` and spawn fake players so
-   the row can be seen filled immediately.
-6. **Wire the lobby UI** (ready button, countdown, player list, customization
-   panel). Reuse the `game-ui-generator` skill's USS so the lobby UI matches the
-   in-game HUD.
-7. **Test all four flows**: join/leave, ready/unready cancelling the countdown,
-   customization visible on the model, and both swap modes.
-8. **Report** what's built, and explicitly list every `// NETCODE:` marker left for
-   the server pass so the next session can pick it up cold.
+`RoomPlayerEntry` is 4 bytes + name: `playerId · flags · characterId · nameLength`.
 
-## Handoff discipline (the user asked for heavy notes)
+- `flags` — `Ready` (bit 0), `Bot` (bit 1). **Bits 2-7 are free; teams and
+  spectators go there.**
+- `characterId` — index into `LobbyCharacterCatalog`. `0xFF` = unassigned. The
+  server knows the *count* and nothing else; names, colours and headgear are the
+  client's table.
 
-This lobby will be revisited when the server work happens. So:
-- Never delete or "clean up" a `// NETCODE:` marker — update it if the code moves.
-- When adding new lobby state, add it to the replication table in
-  `references/netcode-integration.md` in the same edit. State that isn't in that
-  table will silently desync later.
-- Keep authority decisions written down as comments at the decision point, not just
-  in the doc — the person reading the code later may not open the doc first.
+Adding a field to that entry means adding it to `NetworkClient.Differs` in the same
+edit. That comparison is the only thing that produces a redraw signal, so a missing
+field is a value the server sends and the screen never shows.
 
 ## Files
-- `scripts/LobbyConfig.cs` — tunables: player count, slot spacing, countdown, lock.
-- `scripts/ILobbyTransport.cs` — transport seam + `OfflineLobbyTransport`.
-- `scripts/LobbyManager.cs` — lobby state machine, ready/countdown, slots, swaps.
-- `scripts/LobbySlot.cs` — one stand position: model, nameplate, ready stamp.
-- `references/lobby-style.md` — room, camera framing, lighting, mood.
-- `references/netcode-integration.md` — the server-work handoff doc.
+
+| File | Role |
+|---|---|
+| `Assets/Resources/UI/MainLobby/MainLobby.uxml` | The shell: header, two pages, status line, popup/toast roots |
+| `templates/GameLobbyPage.uxml` | The waiting room. Cloned into `#page-room` |
+| `templates/*.uxml` | Popups and repeating rows. **A `VisualTreeAsset` is this project's prefab** — there are no UI prefabs |
+| `Scripts/Lobby/UI/GameLobbyView.cs` | Draws the waiting room from `NetSession` + `NetworkClient`. Holds no state |
+| `Scripts/Lobby/UI/CharacterPickerView.cs` | The character column |
+| `Scripts/Lobby/CharacterPreview.cs` | One `LobbyMannequin` + camera → `RenderTexture` |
+| `Scripts/Lobby/Controllers/GameLobbyController.cs` | Which page is up; what the buttons do |
+| `Scripts/Lobby/Controllers/LobbyController.cs` | Main-lobby flow |
+| `Scripts/Lobby/LobbyCharacterCatalog.cs` | The eight characters. **List order is the wire value** |
+| `Scripts/Lobby/LobbyMannequin.cs` | The block figure, procedural idle |
+
+## Rules that cost something to learn
+
+- **Views hold no state.** Everything is read from `NetSession`/`NetworkClient` at
+  draw time. A view with its own roster copy disagrees with the server invisibly.
+- **Views do not call the session.** They expose `Action`s; the controller fills
+  them. Otherwise "what the start button does" ends up in four files.
+- **`display`, not `RemoveFromHierarchy`.** The game HUD tears role-exclusive panels
+  out of the tree because a hidden element there is one style rule away from leaking
+  the objective. There is nothing to hide in the lobby, and tearing out means
+  rebuilding on the way back.
+- **The tree does not survive a domain reload; components do.** `MainLobbyController`
+  therefore asks `TreeIsLive` instead of keeping a `built` flag, and rebuilds whole.
+  Anything holding a scene object (the character preview's camera and render
+  texture) must be disposed in that rebuild or it accumulates one per reload.
+- **Reasons, not just disabled buttons.** A start button that is off without a line
+  saying why reads as broken. `GameLobbyView.StartNote` is that line.
+- **Two-column reading order.** Ready state and full capacity are said by colour and
+  row count first, numbers second.
 
 ## Don't
-- Don't put match/role logic here — the lobby hands off to MatchManager and stops.
-- Don't call a networking API from `LobbyManager`; go through `ILobbyTransport`.
-- Don't let customization or swaps mutate state after the countdown lock.
-- Don't style the lobby as a clean menu — it's a room in the same building.
+
+- Don't reintroduce a client-side lobby authority or a transport interface.
+- Don't add a one-shot lobby message. Extend the bulletin. (ADR 0003: does missing
+  it leave a wrong state behind? Then it must be a bulletin.)
+- Don't put match or role logic here — the room hands off at `RoomPhase.Playing` and
+  `SessionSceneRouter` opens the scene for the room's map.
+- Don't copy a server value (capacity, min players) into a client constant. They
+  arrive from `GET /rooms/{code}`.
+- Don't reorder `LobbyCharacterCatalog` — the index is on the wire.
+- Don't style the lobby as a clean menu. It is a room in the same building.
