@@ -172,8 +172,6 @@ namespace NV.Realtime.Transport
                     statusCode: (int)HttpStatusCode.UpgradeRequired);
             }
 
-            var normalized = InviteCodeFormat.Normalize(code);
-
             // 룸 id 규칙으로 검사한다. 초대 코드 형식(`InviteCodeFormat`)이 아니다.
             // 정적 룸 id 는 코드 형식을 만족하지 않으므로(`test` 는 4자다) 여기서
             // 코드 형식을 요구하면 그 룸들을 조회할 수 없다.
@@ -181,7 +179,10 @@ namespace NV.Realtime.Transport
             // 그래서 코드 오타 중 일부 — 길이가 맞고 제외된 문자만 섞인 경우 —
             // 는 여기서 404 로 온다. 그 구분은 클라이언트가 입력 칸에서 하며,
             // 같은 판단을 서버에도 두면 정적 룸 id 에 쓸 수 있는 글자가 조용히 줄어든다.
-            if (!RoomRegistry.IsValidRoomId(normalized))
+            var raw = (code ?? string.Empty).Trim().ToLowerInvariant();
+            var normalized = InviteCodeFormat.Normalize(code);
+
+            if (!RoomRegistry.IsValidRoomId(raw) && !RoomRegistry.IsValidRoomId(normalized))
             {
                 return Results.Json(
                     new ErrorResponse("invalidCode"),
@@ -189,7 +190,7 @@ namespace NV.Realtime.Transport
                     statusCode: (int)HttpStatusCode.BadRequest);
             }
 
-            if (!rooms.TryGetRoom(normalized, out var summary))
+            if (!TryFindRoom(rooms, raw, normalized, out var summary))
             {
                 // 없는 코드와 만료된 코드를 구분하지 않는다. 서버는 만료된 룸의 흔적을
                 // 남기지 않으며, 남기면 어떤 코드가 존재했는지 알려 주는 창구가 된다.
@@ -224,6 +225,33 @@ namespace NV.Realtime.Transport
             }
 
             return Results.Json(body, JsonDefaults.Options);
+        }
+
+        /// 조회에 쓸 룸을 찾는다. **원문 id(소문자화)가 먼저, 코드 정돈본이 다음이다.**
+        ///
+        /// `InviteCodeFormat.Normalize` 는 하이픈을 버린다 — 사람이 붙여넣은 코드의
+        /// 구분선이기 때문이다. 그런데 룸 id 에는 하이픈이 정당하게 들어간다
+        /// (`test-backrooms`). 정돈본만으로 찾으면 그 룸들이 **목록에는 실리는데
+        /// 조회는 404** 가 되고, 프리플라이트가 조회이므로 참가가 전부 막힌다.
+        ///
+        /// 두 해석이 서로 다른 방을 가리킬 수는 없다. 초대 코드 알파벳에 하이픈이
+        /// 없으므로, 하이픈이 든 원문과 일치하는 방은 코드가 아니라 정적 룸뿐이다.
+        /// 테스트가 접근할 수 있도록 `internal` 이다.
+        internal static bool TryFindRoom(
+            RoomRegistry rooms,
+            string rawId,
+            string normalizedCode,
+            out RoomSummary summary)
+        {
+            if (RoomRegistry.IsValidRoomId(rawId) && rooms.TryGetRoom(rawId, out summary))
+            {
+                return true;
+            }
+
+            summary = default;
+
+            return RoomRegistry.IsValidRoomId(normalizedCode)
+                && rooms.TryGetRoom(normalizedCode, out summary);
         }
 
         /// 공개로 만들어진 룸의 목록.
