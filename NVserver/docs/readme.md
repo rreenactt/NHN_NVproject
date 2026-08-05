@@ -83,16 +83,18 @@ Unity 클라이언트는 형제 폴더 `../NVproject`다. 배치와 파일 위�
 
 | 맵 id | 파일 | 클라이언트 씬 | 용도 |
 |---|---|---|---|
-| `default` | `MapData/backrooms.json` | `SampleScene` | 게임. 56×56 셀, 약 180m 정사각, 박스 1367개 |
+| `backrooms` (= `default` 별칭) | `MapData/backrooms.json` | `SampleScene` | 게임. 35×35 셀 × 2층, 105m 정사각, 박스 736개 |
+| `backrooms-v2` | `MapData/backrooms-v2.json` | `MapRuntime` (카탈로그 프리팹) | 게임. 단층 44×44 셀, 110m 정사각, 박스 195개, BSP 개방 구조 |
 | `test-room` | `MapData/test-room.json` | `MultiplayerTest` | 멀티플레이 확인. 40m 정사각, 엄폐물 4개와 중앙 플랫폼, 스폰 8개가 링 위에서 중앙을 본다 |
 
 ```jsonc
-// appsettings.json
+// appsettings.json — 등록은 파일이 한다. MapDirectory 의 *.json 이 곧 맵 목록이고,
+// Maps 는 별칭 테이블일 뿐이다.
 "Game": {
-  // 키가 맵 id 다. default 는 반드시 있어야 한다.
+  "MapDirectory": "../MapData",
+  // 별칭 → 실제 맵 id. default 는 반드시 풀려야 한다.
   "Maps": {
-    "default": "../MapData/backrooms.json",
-    "test-room": "../MapData/test-room.json"
+    "default": "backrooms"
   },
   // 미리 열어 두는 룸. 룸 id → 맵 id. 방장이 없고 회수되지 않는다.
   "StaticRooms": {

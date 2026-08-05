@@ -1,6 +1,14 @@
 # Backrooms V2 맵 타입 추가 계획
 
-> **상태: 계획 (미착수).** 아래의 모든 현황 진단은 리포지터리의 코드와 실제 맵 파일을 읽어서
+> **상태: Phase 0~4 완료, Phase 5 부분 완료, Phase 6 진행.**
+> Phase 0~4 는 단계별 커밋으로 들어갔다: 선행 조건(MapRuntime 씬 + 카탈로그 베이크 경로),
+> 생성기 뼈대, BSP 솔버 + EditMode 테스트 6종, 앰비언스 + 첫 베이크, 서버 익스포트
+> (`backrooms-v2.json`, 해시 F63B342C 양측 일치, `dotnet test` 567개 통과, `GET /maps`
+> `supportsMatch=true`). Phase 5 는 에디터 검증(카탈로그 라우팅 → `MapRuntime` 플레이 모드
+> 로드, 콜라이더 195·램프 113·격자 44 확인)까지 마쳤고, **2클라이언트 실제 매치 1라운드만
+> 남아 있다** — Build and Launch 2 Clients 로 사람이 돌려야 한다.
+>
+> 아래의 모든 현황 진단은 리포지터리의 코드와 실제 맵 파일을 읽어서
 > 확인한 것이며, 근거를 `파일:줄` 또는 `파일 → 멤버` 로 적었다.
 
 대상은 Unity 에디터의 Map Generator (`Tools ▸ NV ▸ Map ▸ Map Generator`) 에 세 번째 맵 타입
