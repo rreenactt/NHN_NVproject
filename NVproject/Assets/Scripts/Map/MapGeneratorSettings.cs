@@ -39,7 +39,7 @@ namespace NV.Client.Map
         [Tooltip("One line under the name in the create-room list.")]
         public string description = string.Empty;
 
-        [Tooltip("Advice printed as \"2-8명\". 0 means the server's own min/capacity. A map does not " +
+        [Tooltip("Advice printed as \"2-5명\". 0 means the server's own min/capacity. A map does not " +
                  "get to set the room size — that is the server's judgement.")]
         public int recommendedPlayersMin;
 

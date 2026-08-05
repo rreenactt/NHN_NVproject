@@ -30,7 +30,7 @@ Unity WebGL 클라이언트가 WebSocket으로 접속하고, 서버가 30Hz로 �
 | 항목 | 값 | 출처 |
 |---|---|---|
 | 틱레이트 | 30Hz (33.3ms) | `Shared/Simulation` |
-| 룸당 인원 | 8명 | `Modules/Realtime/Simulation` |
+| 룸당 인원 | 5명 (최소 시작 2명) | `Modules/Realtime/Simulation` |
 | 위치 양자화 | `int16`, 1/64m | `Shared/Serialization` |
 | 보간 버퍼 | 100ms | 클라이언트 |
 | 랙 보상 상한 | 200ms (6틱) | `Modules/Realtime/Simulation` |

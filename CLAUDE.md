@@ -129,7 +129,7 @@ Constants have exactly two homes: `Shared/Simulation/SimConstants.cs` when the c
 
 `NVserver/docs/architecture.md` has a **기본값 대체표** (defaults-replacement table) listing the ordinary .NET/Unity choices that are wrong here — repository interfaces, layered folders, `EnsureCreated()`, delta compression, `await` inside the tick loop, cross-module JOINs, and a dozen more. Check it before reaching for a familiar pattern. `structure.md` has the 8-question table that decides where a new file goes; question 1 ("does the client run this same computation?") wins over everything else.
 
-**Ask instead of implementing** when you would need to break a documented prohibition, add a NuGet package, add a module, add an interface with only one implementation, add a synchronous call between modules, or change a fixed parameter (30Hz, 8 players, 1/64m quantization, 100ms interpolation, 200ms lag-compensation cap).
+**Ask instead of implementing** when you would need to break a documented prohibition, add a NuGet package, add a module, add an interface with only one implementation, add a synchronous call between modules, or change a fixed parameter (30Hz, **5 players per room** — it was 8 until the lobby work, and the capacity *is* the Runner count, so it is a balance number as much as a buffer size — 1/64m quantization, 100ms interpolation, 200ms lag-compensation cap).
 
 Record any rule you settle or problem that cost more than 30 minutes in `NVserver/docs/conventions.md`, symptom → cause → fix. That file is the accumulated trap list and is worth reading in full before non-trivial network or simulation work.
 

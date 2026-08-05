@@ -910,7 +910,7 @@ namespace NV.Modules.Tests.Realtime
             Assert.True(first.HasAltar && second.HasAltar);
         }
 
-        /// 5초 주기다. 2Hz 로 보내면 176B × 2 × 8명 = 2.8KB/s 가 더 붙고 그만큼의 정보가 없다.
+        /// 5초 주기다. 2Hz 로 보내면 176B × 2 × 정원(5명) = 1.8KB/s 가 더 붙고 그만큼의 정보가 없다.
         [Fact]
         public void 목표물_전문은_매_틱_나가지_않는다()
         {

@@ -1,7 +1,9 @@
 using System;
+using NV.Realtime;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
+using NV.Shared.Simulation;
 using Xunit;
 
 namespace NV.Modules.Tests.Serialization
@@ -315,8 +317,13 @@ namespace NV.Modules.Tests.Serialization
         [Fact]
         public void 최악의_경우가_수신_버퍼_안에_들어간다()
         {
-            // 배치 10개 + 8명이 각자 들고 죽어 흘린 열쇠, 장치 9개.
-            var worst = MessageCodec.ObjectiveStateMaxWireSize(18, 9);
+            // 배치 10개 + 정원 전원이 각자 들고 죽어 흘린 열쇠, 장치 9개.
+            //
+            // **정원에서 유도한다.** 숫자를 적어 두면 정원이 바뀐 뒤에도 통과하면서 버퍼가
+            // 충분한지에 대해 아무것도 말하지 않는다 — `Room` 의 버퍼도 같은 식으로 잡는다.
+            var worst = MessageCodec.ObjectiveStateMaxWireSize(
+                MatchConstants.KeysPlaced + RealtimeConstants.Rooms.MaxPlayers,
+                MatchConstants.DeviceMix.Length);
 
             Assert.True(worst < 512, $"최악의 경우 {worst}B 로 수신 버퍼 512B 를 넘는다.");
         }

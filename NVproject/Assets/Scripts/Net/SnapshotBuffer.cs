@@ -30,7 +30,15 @@ namespace NV.Client.Net
     /// 지터가 그대로 흡수되고, 스냅샷이 하나 빠지면 구간이 길어질 뿐 끊기지 않는다.
     public sealed class SnapshotBuffer
     {
-        /// 룸 정원. 서버 Room.MaxPlayers 와 같아야 한다.
+        /// 한 프레임에 담는 몸의 **상한**. 서버 정원(`RealtimeConstants.Rooms.MaxPlayers`, 지금 5)
+        /// 보다 **크거나 같아야** 한다.
+        ///
+        /// 같은 값으로 못 박지 않는다. 클라이언트는 그 상수를 볼 수 없고(서버 모듈의 `internal`
+        /// 이며 Unity 는 `Shared` 만 컴파일한다), **작을 때의 증상이 조용하다** — `Accept` 가
+        /// `count` 를 이 값으로 잘라 넣으므로 정원이 늘어난 서버에 붙으면 뒤쪽 플레이어가 화면에
+        /// 없는 상태가 되고, 로그는 남지 않는다. 그래서 여유를 두는 쪽으로 틀린다.
+        ///
+        /// 남는 칸의 비용은 배열 몇 개뿐이다(엔티티 13B + 명단 항목 하나).
         public const int MaxEntities = 8;
 
         /// 30Hz 기준 약 1초. 이보다 오래된 스냅샷은 쓸 일이 없다.

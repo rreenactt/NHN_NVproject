@@ -45,7 +45,7 @@
   넘어가야 하는 항목으로 못 박은 것이다. 실제 채널은 이미 있다: `ControlKind`(C→S)와
   `EventKind.RoomState`(S→C). 그 위에 두 번째 추상을 얹으면 요청이 두 층을 지난다.
 - `LobbyConfig.maxPlayers` / `minPlayers` 는 **서버가 아는 값의 사본**이다. 정원은
-  `RealtimeConstants.Rooms.MaxPlayers`(8), 최소 인원은 `MinPlayersToStart`(2)이고 클라이언트는
+  `RealtimeConstants.Rooms.MaxPlayers`(당시 8, 지금 5), 최소 인원은 `MinPlayersToStart`(2)이고 클라이언트는
   `GET /rooms/{code}` 로 이미 받는다(`RoomInfo.Capacity`, `MinPlayers`). 사본을 두면 6 대 8 로
   어긋난다 — 프로토타입은 실제로 6 이다.
 
@@ -361,7 +361,7 @@ GameLobby.unity
 ```
 
 **스탠드 수는 서버가 알려 준 정원이다.** 프로토타입은 `LobbyConfig.maxPlayers`(6)를 썼고
-그것은 서버 정원(8)의 어긋난 사본이었다. 정원이 바뀌면 줄을 통째로 다시 세운다 — 줄 폭이
+그것은 서버 정원(당시 8, 지금 5)의 어긋난 사본이었다. 정원이 바뀌면 줄을 통째로 다시 세운다 — 줄 폭이
 스탠드 수에서 나오고 방의 크기가 줄 폭에서 나오므로 스탠드만 더하면 방이 그것을 담지 못한다.
 
 **HUD 는 옛 스타일시트 위에 선다.** `game-hud.uss` + `lobby.uss` 는 그대로 쓰고 새로 필요한

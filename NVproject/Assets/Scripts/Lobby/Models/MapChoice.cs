@@ -69,7 +69,7 @@ namespace NV.Client.Lobby.Models
         /// "2층 35×35" 같은 문장. 서버가 크기를 모르면 빈 문자열.
         public string SizeText { get; }
 
-        /// "2–8명".
+        /// "2–5명". 숫자는 서버가 답한다 — 최소 시작 인원과 정원이다.
         public string PlayersText { get; }
 
         public bool CanCreate => Status == MapChoiceStatus.Ready;

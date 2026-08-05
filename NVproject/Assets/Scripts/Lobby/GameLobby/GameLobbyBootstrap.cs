@@ -30,8 +30,8 @@ namespace NV.Client.Lobby.GameLobby
         [Tooltip("스탠드 사이 거리(m). 옛 로비와 같은 값이다.")]
         public float slotSpacing = 1.35f;
 
-        [Tooltip("서버가 정원을 알려 주기 전에 세울 스탠드 수.")]
-        [Range(2, 16)] public int fallbackCapacity = 8;
+        [Tooltip("서버가 정원을 알려 주기 전에 세울 스탠드 수. 서버 값이 오면 그것으로 다시 세운다.")]
+        [Range(2, 16)] public int fallbackCapacity = 5;
 
         private readonly List<LobbySlot> _slots = new List<LobbySlot>();
         private readonly RoomMember[] _members = new RoomMember[16];
