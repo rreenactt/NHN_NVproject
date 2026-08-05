@@ -15,25 +15,40 @@ description: >
 
 # Lobby Builder (Backrooms Escape FPS)
 
-Two screens, one scene, one authority.
+Two screens, and they are different *kinds* of thing — which is why they are
+different scenes.
 
-| Screen | Element | Owns |
+| Screen | Scene | Owns |
 |---|---|---|
-| **Main lobby** | `#page-browser` | Everything *outside* a room — profile, connection state, room list (`GET /rooms`), create room, join by code, quick join, quit |
-| **Game lobby** | `#page-room` | Everything *inside* a room — invite code, map, roster, ready, character select, kick / host transfer, start, leave, match result |
+| **Main lobby** | `MainLobby.unity` | Everything *outside* a room — profile, connection state, room list (`GET /rooms`), create room, join by code, quick join, quit. Pure UI Toolkit |
+| **Game lobby** | `GameLobby.unity` | Everything *inside* a room — the 3D staging space with a figure standing on each stand, plus invite code, roster, ready, character select, kick / host transfer, start, leave, result |
+| *(prototype)* | `Lobby.unity` | The **offline** lobby it was built from — `LobbyManager`, fake players, countdown, slot swapping. Still present on purpose; delete it once the wired room is confirmed end to end |
 
-They never both show. `LobbyUIController.ShowRoomPage` is the only thing that
-switches, and it switches on `NetSession.State` — not on a button click, because
-there are four ways into a room (create, code, list, quick join) and a screen that
-each of them has to remember to open is a screen one of them forgets.
+**The waiting room is a room, not a page.** An earlier pass rebuilt it as a
+full-screen UI page inside `MainLobby` and that was wrong: the 3D lineup *is* the
+screen, and the job was to keep that composition and improve the UI on top of it.
+
+`SessionSceneRouter` owns every transition — `InLobby`/`Ended` → `GameLobby`,
+`Playing` → the room's map scene, `Idle`/`Failed` → `MainLobby`. **No button loads a
+scene**, because there are four ways into a room and a transition each of them has to
+remember is one that one of them forgets.
+
+Both product scenes are **generated** (**Tools ▸ NV ▸ Scene ▸ Create Main Lobby
+Scene** / **Create Game Lobby Scene**) and register themselves in Build Settings. The
+router finds scenes by name, and an unregistered scene fails to load with no log line.
 
 ## The authority — READ FIRST
 
-**There is no client-side lobby authority.** There used to be (`LobbyManager` +
-`ILobbyTransport` + `OfflineLobbyTransport`, with 17 `// NETCODE:` markers); the
-server pass replaced all of it and those files are gone. Do not reintroduce them:
-a second thing that decides who is ready is a second thing that can disagree with
-`Room.cs`.
+**The wired room has no client-side authority.** `LobbyManager` +
+`ILobbyTransport` + `OfflineLobbyTransport` still exist, but only inside the offline
+prototype scene — the server-driven room does not touch them and must not: a second
+thing that decides who is ready is a second thing that can disagree with `Room.cs`.
+When the prototype is deleted, those three go with it.
+
+**What the two share is the view, and only the view.** `LobbyRoom`, `LobbySlot` and
+`LobbyMannequin` build the space, the stands and the figures for both scenes. They are
+presentation, so the server changed nothing about them — what changed is who decides
+who stands where.
 
 The seam is the wire, and it is already there:
 
@@ -44,8 +59,8 @@ NetSession.SetReady / SetCharacter    ──►  Control(0x02) ──► RoomCom
 NetSession.KickPlayer / TransferHost                        (tick boundary judges)
 NetSession.RequestStart / ReturnToLobby
                                      ◄──  Event(0x82) RoomState, 2Hz, forever
-GameLobbyView draws RoomState                              (phase · host · seeker
-                                                            · roster with flags)
+GameLobbyHud + the row of stands                           (phase · host · seeker
+  both draw the same RoomState                              · roster with flags)
 ```
 
 - **Requests, not commands.** The server re-checks who is host, what phase the room
@@ -96,16 +111,16 @@ field is a value the server sends and the screen never shows.
 
 | File | Role |
 |---|---|
-| `Assets/Resources/UI/MainLobby/MainLobby.uxml` | The shell: header, two pages, status line, popup/toast roots |
-| `templates/GameLobbyPage.uxml` | The waiting room. Cloned into `#page-room` |
-| `templates/*.uxml` | Popups and repeating rows. **A `VisualTreeAsset` is this project's prefab** — there are no UI prefabs |
-| `Scripts/Lobby/UI/GameLobbyView.cs` | Draws the waiting room from `NetSession` + `NetworkClient`. Holds no state |
-| `Scripts/Lobby/UI/CharacterPickerView.cs` | The character column |
-| `Scripts/Lobby/CharacterPreview.cs` | One `LobbyMannequin` + camera → `RenderTexture` |
-| `Scripts/Lobby/Controllers/GameLobbyController.cs` | Which page is up; what the buttons do |
-| `Scripts/Lobby/Controllers/LobbyController.cs` | Main-lobby flow |
+| `Scripts/Lobby/GameLobby/GameLobbyBootstrap.cs` | The waiting-room scene's only object. Builds the room and the row from the server's **capacity**, binds stands to the roster |
+| `Scripts/Lobby/GameLobby/GameLobbyHud.cs` | Draws the HUD from `NetSession` + `NetworkClient`. Holds no state |
+| `Scripts/Lobby/GameLobby/GameLobbyPicker.cs` | Clicking a stand — a host gesture, not a slot move |
+| `Scripts/Lobby/Models/RoomMember.cs` | One roster line projected (entry + host byte + own id). Built fresh, never stored |
+| `Resources/UI/GameLobbyHUD.uxml` + `game-lobby.uss` | The HUD, on top of the prototype's `lobby.uss` |
+| `Scripts/Lobby/LobbyRoom.cs` · `LobbySlot.cs` · `LobbyMannequin.cs` | **Shared with the prototype.** Space, stands, figures |
 | `Scripts/Lobby/LobbyCharacterCatalog.cs` | The eight characters. **List order is the wire value** |
-| `Scripts/Lobby/LobbyMannequin.cs` | The block figure, procedural idle |
+| `Resources/UI/MainLobby/MainLobby.uxml` + `templates/*.uxml` | The menu. **A `VisualTreeAsset` is this project's prefab** — there are no UI prefabs |
+| `Scripts/Lobby/Controllers/LobbyController.cs` | Main-lobby flow |
+| `Assets/Editor/Scene/GameLobbySetup.cs` | Generates the waiting-room scene and registers it |
 
 ## Rules that cost something to learn
 
@@ -113,16 +128,18 @@ field is a value the server sends and the screen never shows.
   draw time. A view with its own roster copy disagrees with the server invisibly.
 - **Views do not call the session.** They expose `Action`s; the controller fills
   them. Otherwise "what the start button does" ends up in four files.
-- **`display`, not `RemoveFromHierarchy`.** The game HUD tears role-exclusive panels
-  out of the tree because a hidden element there is one style rule away from leaking
-  the objective. There is nothing to hide in the lobby, and tearing out means
-  rebuilding on the way back.
 - **The tree does not survive a domain reload; components do.** `MainLobbyController`
-  therefore asks `TreeIsLive` instead of keeping a `built` flag, and rebuilds whole.
-  Anything holding a scene object (the character preview's camera and render
-  texture) must be disposed in that rebuild or it accumulates one per reload.
+  and `GameLobbyBootstrap` therefore ask whether the tree is *live* instead of keeping
+  a `built` flag — a bool survives the reload and describes elements that are all null,
+  so the screen stays blank and throws once a frame. Rebuild whole.
+- **The stand number is the `PlayerId`.** The server reserves slots by it and picks the
+  spawn from it. That is what makes the row and the match agree on who is who, and it
+  is why there is no slot swapping — moving a figure would move a spawn.
 - **Reasons, not just disabled buttons.** A start button that is off without a line
-  saying why reads as broken. `GameLobbyView.StartNote` is that line.
+  saying why reads as broken. `GameLobbyHud.Hint` is that line.
+- **Buttons eat their own clicks.** In a screen where clicking the 3D room is a
+  gesture, a click that landed on a button must not also hit the figure behind it —
+  `GameLobbyHud.PointerOverUi` is that guard, carried over from the prototype.
 - **Two-column reading order.** Ready state and full capacity are said by colour and
   row count first, numbers second.
 

@@ -19,7 +19,6 @@ namespace NV.Client.Lobby.Controllers
         private readonly RoomService _rooms;
         private readonly MapChoiceService _maps;
         private readonly LobbyUIController _ui;
-        private readonly GameLobbyController _room;
 
         public LobbyController(
             NetSession session,
@@ -36,8 +35,6 @@ namespace NV.Client.Lobby.Controllers
             _maps = maps;
             _ui = ui;
 
-            _room = new GameLobbyController(session, ui);
-
             ui.OnCreateRoom = OpenCreateRoom;
             ui.OnJoinByCode = OpenJoinByCode;
             ui.OnQuickJoin = QuickJoin;
@@ -48,10 +45,14 @@ namespace NV.Client.Lobby.Controllers
             ui.OnJoinRoom = JoinRoom;
         }
 
-        /// 세션 상태가 바뀌었다. 방 화면과 상태 줄을 맞춘다.
+        /// 세션 상태가 바뀌었다. 상태 줄과 목록을 맞춘다.
+        ///
+        /// **방 안의 화면을 여기서 열지 않는다.** 대기방은 별개의 씬이고 그 전환은
+        /// `SessionSceneRouter` 가 세션 단계를 보고 한다 — 방에 들어가는 길이 넷이므로
+        /// (만들기·코드·목록·빠른 참가) 각자 화면을 바꾸게 하면 하나를 빠뜨렸을 때 방에는
+        /// 들어갔는데 화면은 로비인 상태가 된다.
         public void OnSessionChanged()
         {
-            _room.Sync();
             _ui.RefreshStatus();
             _ui.RefreshRooms();
         }

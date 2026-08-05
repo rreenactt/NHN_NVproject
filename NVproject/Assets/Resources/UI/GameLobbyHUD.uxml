@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
+    <!--
+        서버 연동 대기방의 HUD. 옛 `LobbyHUD.uxml` 과 같은 방, 같은 스타일시트다 — 이것은
+        메뉴가 아니라 서 있는 방이고, 그 사실이 스타일에서 먼저 읽혀야 한다.
+
+        옛 것과 다른 곳이 셋이다.
+
+        - **카운트다운이 없다.** 준비가 조건이고 시작은 방장이 누른다. 카운트다운은 시작 틱을
+          복제해야 하는 값이고 그것 없이도 대기방은 성립한다.
+        - **자리 교환 프롬프트가 없다.** 스탠드 번호가 곧 서버의 `PlayerId` 이고 그것이 스폰을
+          고르므로, 자리를 옮기는 것은 스폰을 옮기는 것과 같은 말이 된다.
+        - **방 정보와 방장 조작이 생겼다.** 초대 코드는 남에게 읽어 주는 값이라 크게 두고,
+          강제 퇴장·방장 위임은 방장에게만 명단 줄에 붙는다.
+
+        명단은 정원 전체를 그린다. 채워진 수만 보이면 8칸 중 2칸인 방과 정원이 2인 방이 화면에서
+        같은 모습이 된다.
+    -->
+    <Style src="project://database/Assets/Resources/UI/game-hud.uss" />
+    <Style src="project://database/Assets/Resources/UI/lobby.uss" />
+    <Style src="project://database/Assets/Resources/UI/game-lobby.uss" />
+
+    <ui:VisualElement name="lobby-root" class="hud-root">
+        <ui:VisualElement name="scanlines" class="scanlines" picking-mode="Ignore" />
+
+        <!-- ============================================================ 머리 — 방 -->
+        <ui:VisualElement name="header" class="lobby-header" picking-mode="Ignore">
+            <ui:Label name="room-title" text="STAGING ROOM — SUBLEVEL 0" class="lobby-title" />
+            <ui:Label name="room-subtitle" text="WAIT HERE" class="clock__caption" />
+        </ui:VisualElement>
+
+        <!-- 초대 코드는 남이 받아 적는 값이다. 크게, 자간을 넓게. -->
+        <ui:VisualElement name="invite-panel" class="panel lobby-invite">
+            <ui:Label name="invite-caption" text="INVITE CODE" class="panel__caption" />
+            <ui:Label name="invite-code" text="------" class="lobby-invite__code" />
+            <ui:VisualElement name="invite-buttons" class="lobby-invite__buttons">
+                <ui:Button name="copy-code" text="코드 복사" class="lobby-button lobby-button--small" />
+                <ui:Button name="copy-link" text="링크 복사" class="lobby-button lobby-button--small" />
+            </ui:VisualElement>
+            <ui:Label name="invite-result" class="panel__line" />
+            <ui:Label name="room-map" class="panel__line" />
+            <ui:Label name="room-visibility" class="panel__line" />
+        </ui:VisualElement>
+
+        <ui:Label name="notice" text="" class="notice" picking-mode="Ignore" />
+
+        <!-- ============================================================ 명단 -->
+        <ui:VisualElement name="roster-panel" class="panel lobby-roster">
+            <ui:Label name="roster-caption" text="IN THE ROOM" class="panel__caption" />
+            <ui:VisualElement name="roster" class="lobby-roster__list" />
+            <ui:Label name="roster-count" text="0 / 8" class="panel__line" />
+            <ui:Label name="ready-count" class="panel__line" />
+        </ui:VisualElement>
+
+        <!-- ============================================================ 캐릭터 -->
+        <ui:VisualElement name="customization-panel" class="panel lobby-customization">
+            <ui:Label name="customization-caption" text="PICK A CHARACTER  ·  ONE EACH" class="panel__caption" />
+            <ui:VisualElement name="character-list" class="lobby-customization__list" />
+            <ui:Label name="character-note" class="panel__line" />
+        </ui:VisualElement>
+
+        <!-- ============================================================ 조작 -->
+        <ui:VisualElement name="action-bar" class="lobby-actions">
+            <!--
+                준비와 시작은 한 사람에게 동시에 필요하지 않다. 방장에게는 시작 버튼이 준비이므로
+                준비 토글을 보이지 않고, 나머지에게는 시작 버튼이 없다.
+            -->
+            <ui:Button name="ready-button" text="READY" class="lobby-button" />
+            <ui:Button name="start-button" text="START" class="lobby-button" />
+            <ui:Button name="leave-button" text="LEAVE" class="lobby-button lobby-button--quiet" />
+            <ui:Label name="hint" text="" class="lobby-hint" picking-mode="Ignore" />
+        </ui:VisualElement>
+
+        <!-- 되돌릴 수 없는 것만 여기로 온다 — 강제 퇴장과 방장 위임. -->
+        <ui:VisualElement name="confirm-prompt" class="lobby-swap">
+            <ui:Label name="confirm-text" text="" class="lobby-swap__text" picking-mode="Ignore" />
+            <ui:VisualElement name="confirm-buttons" class="lobby-swap__buttons">
+                <ui:Button name="confirm-ok" text="OK" class="lobby-button lobby-button--small" />
+                <ui:Button name="confirm-cancel" text="NO" class="lobby-button lobby-button--small lobby-button--quiet" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

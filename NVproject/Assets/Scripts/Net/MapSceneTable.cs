@@ -32,6 +32,16 @@ namespace NV.Client.Net
         /// `Tools ▸ NV ▸ Scene ▸ Create Main Lobby Scene` 이 등록까지 한다.
         public const string LobbyScene = "MainLobby";
 
+        /// 대기방 씬. 방에 들어가 있고 매치가 아직 시작되지 않았을 때 여기 서 있는다.
+        ///
+        /// 로비 씬과 갈라 두는 이유는 **화면이 아니라 방**이라는 것이다. 메인 로비는 방 목록과
+        /// 메뉴이고, 대기방은 줄에 서 있는 사람들이 보이는 3D 공간이다. 그래서 씬이 둘이다.
+        ///
+        /// `SceneManager.LoadScene` 이 이름으로 찾으므로 **Build Settings 에 등록되어 있어야
+        /// 한다.** 등록을 빠뜨리면 방을 만든 뒤 아무 일도 일어나지 않는다.
+        /// `Tools ▸ NV ▸ Scene ▸ Create Game Lobby Scene` 이 등록까지 한다.
+        public const string GameLobbyScene = "GameLobby";
+
         /// 굽힌 맵을 어떤 씬이든 담을 수 있는 공용 씬.
         ///
         /// 전용 씬이 없는 맵이 이것으로 열린다. **Build Settings 에 한 번만** 등록되며,

@@ -94,23 +94,47 @@ namespace NV.Lobby
 
             if (player == null)
             {
-                if (_mannequin != null) Destroy(_mannequin.gameObject);
-                _mannequin = null;
-                _plateRenderer.sharedMaterial = _emptyMaterial;
-                _mine.gameObject.SetActive(false);
+                Clear();
                 return;
             }
 
+            Bind(LobbyCharacterCatalog.IndexOf(player.characterId), player.isReady, player.isLocal);
+        }
+
+        /// <summary>
+        /// 같은 일을 원시 값으로 한다. **서버 연동 대기방이 쓰는 문이다.**
+        ///
+        /// `LobbyPlayer` 는 오프라인 프로토타입의 타입이고 그것과 함께 사라진다. 스탠드의
+        /// 겉모습은 사라질 이유가 없으므로 — 판정이 아니라 표현이다 — 판정 타입에 묶여
+        /// 있던 것을 풀어 둔다. 위의 오버로드는 프로토타입이 살아 있는 동안의 껍데기다.
+        /// </summary>
+        /// <param name="characterId">카탈로그 인덱스. 범위를 벗어나면 옷을 갈아입히지 않는다.</param>
+        public void Bind(int characterId, bool isReady, bool isLocal)
+        {
             if (_mannequin == null) _mannequin = LobbyMannequin.Spawn(transform, Index);
 
-            LobbyCharacterCatalog.Character character = LobbyCharacterCatalog.Find(player.characterId);
-            _mannequin.ApplyCharacter(character);
-            _mannequin.SetReady(player.isReady);
+            if (characterId >= 0 && characterId < LobbyCharacterCatalog.Count)
+            {
+                _mannequin.ApplyCharacter(LobbyCharacterCatalog.All[characterId]);
+            }
+
+            _mannequin.SetReady(isReady);
 
             // The plate carries the ready state, and nothing else has to.
-            _plateRenderer.sharedMaterial = player.isReady ? _readyMaterial : _filledMaterial;
+            _plateRenderer.sharedMaterial = isReady ? _readyMaterial : _filledMaterial;
 
-            _mine.gameObject.SetActive(player.isLocal);
+            _mine.gameObject.SetActive(isLocal);
+        }
+
+        /// <summary>이 스탠드를 비운다.</summary>
+        public void Clear()
+        {
+            Player = null;
+
+            if (_mannequin != null) Destroy(_mannequin.gameObject);
+            _mannequin = null;
+            _plateRenderer.sharedMaterial = _emptyMaterial;
+            _mine.gameObject.SetActive(false);
         }
 
         private void Update()

@@ -51,7 +51,13 @@
 
 그래서 **B 의 판정은 서버로 이관하고 B 의 코드는 대부분 지운다.** 살리는 것은 §7 의 표에 있다.
 
-### 1.2 `OfflineLobbyTransport` 를 지우는 근거
+### 1.2 `OfflineLobbyTransport` 를 결국 남긴 이유
+
+> **아래 논증은 그대로 유효하지만 결론은 바뀌었다.** 프로토타입 씬 전체가 **연동 확인이 끝날
+> 때까지** 남기로 정해졌고(§2.1), 그 씬은 이 전송 없이 돌지 않는다. 서버 연동 대기방은 이것을
+> 참조하지 않으므로 두 권위가 공존하는 상태는 만들어지지 않는다 — 프로토타입을 지울 때 함께
+> 사라진다.
+
 
 `lobby-builder` 스킬의 인계 문서(`references/netcode-integration.md`)는 "네트워킹이 들어온
 뒤에도 오프라인 전송을 살려 둘 것 — 혼자 확인하는 유일한 길이다"라고 적어 두었다. 그 전제가
@@ -72,9 +78,32 @@
 
 | 질문 | 결정 | 근거 |
 |---|---|---|
-| 대기방을 어떤 형태로 만드는가 | **`MainLobby` 씬 안의 전체화면 UI 페이지** | 씬 전환이 없어 `NetSession`·재시도·실패 표시가 그대로 살아 있다. 3D 스탠드 대기실은 지금 얻는 것보다 유지 비용이 크다 |
+| 대기방을 어떤 형태로 만드는가 | **별도 씬 `GameLobby.unity`** — 프로토타입의 3D 구성을 유지한다 | §2.1 |
 | 매치 시작 규칙 | **준비는 조건, 시작은 방장이 누른다.** 서버 카운트다운 없음 | 서버 변경이 `Ready` 필드와 `Control` 한 종류로 끝난다. 카운트다운은 lock 상태·취소 경로·시작 틱 복제를 함께 들고 오는데, 그것 없이도 대기방은 성립한다 |
 | 1차 범위 | **준비 · 캐릭터 선택 · 강제 퇴장 · 방장 위임** | 넷 다 와이어에 자리가 필요하다. 프로토콜 버전 인상은 서버·클라이언트 동시 배포를 강제하므로(§4.1) 한 번에 끝낸다 |
+
+### 2.1 대기방의 형태 — 한 번 틀렸다
+
+처음에는 **`MainLobby` 안의 전체화면 UI 페이지**로 정하고 그렇게 만들었다. 그것이 틀렸다.
+
+요구는 "프로토타입 `Lobby.scene` 의 **게임 오브젝트 배치를 유지하면서** UI/UX 를 개선하고
+서버에 붙인다" 였다. 페이지로 옮기면 개선이 아니라 **교체**다 — 줄에 서 있는 사람들이 이
+화면의 내용이고, 그것을 목록으로 바꾸면 남는 것은 같은 정보의 다른 표다.
+
+그래서 형태는 이렇게 정리된다.
+
+| 씬 | 무엇 |
+|---|---|
+| `MainLobby.unity` | 메뉴. 방 목록·만들기·코드 참가·빠른 참가. 3D 가 없다 |
+| `GameLobby.unity` | **방.** 프로토타입과 같은 공간·스탠드 줄·마네킹·정면 카메라 + 서버 연동 HUD |
+| `Lobby.unity` | 프로토타입. 오프라인·봇·카운트다운·자리 교환. **연동 확인이 끝날 때까지 남긴다** |
+
+`LobbyRoom`·`LobbySlot`·`LobbyMannequin` 을 두 씬이 **공유한다.** 그 셋은 판정이 아니라
+표현이므로 서버가 생겨도 바뀔 이유가 없다 — 바뀐 것은 줄에 누가 서는지를 누가 정하는가이고,
+그것이 이 작업의 전부다.
+
+**메인 로비에 대기방 화면을 남기지 않는다.** 같은 것을 그리는 화면이 둘이면 어느 경로로
+들어왔는지에 따라 다른 UI 가 뜨는 상태가 생긴다.
 
 **자리(슬롯) 이동·교환은 1차에서 뺀다.** 지금 스탠드 번호는 `PlayerId` 이고 그것이 서버의 스폰
 위치를 고르므로(`_map.SpawnPosition(playerId)`), 자리를 옮기는 것은 스폰을 옮기는 것과 같은
@@ -122,38 +151,39 @@
 ## 4. 흐름
 
 ```
-[메인 로비 #page-browser]
+[MainLobby.unity — 메뉴]
    방 만들기 ─ POST /rooms ─────┐
    코드로 참가 ─ GET /rooms/{code} ─┤
    목록에서 참가 ────────────────┤
    빠른 참가 ───────────────────┘
                               └─► /ws 접속 ─ Welcome ─► SessionState.InLobby
                                                               │
-[대기방 #page-room] ◄─────────────────────────────────────────┘
-   RoomState(2Hz) 로 명단·준비·캐릭터·방장을 그린다
+[GameLobby.unity — 방] ◄──── SessionSceneRouter ──────────────┘
+   RoomState(2Hz) 로 스탠드 줄과 HUD 를 함께 그린다
    Control(SetReady / SetCharacter / KickPlayer / TransferHost) 을 보낸다
-   방장이 시작 ─ Control(StartMatch) ─► 서버가 자격·인원·준비를 다시 본다
+   방장이 START ─ Control(StartMatch) ─► 서버가 자격·인원·준비를 다시 본다
                                           │ RoomPhase.Playing
                                           ▼
-                              SessionState.InGame ─ SessionSceneRouter ─►
+                              SessionState.InGame ─ 라우터 ─►
                                           [SampleScene / MapRuntime]
                                           │ RoomPhase.Ended
                                           ▼
-   대기방(결과 표시) ◄─ 라우터가 MainLobby 로 복귀
+   [GameLobby.unity — 결과] ◄─ 라우터가 되돌린다
    방장이 로비로 ─ Control(ReturnToLobby) ─► RoomPhase.Waiting (준비 전원 해제)
-   나가기 ─ 소켓 정상 종료 ─► SessionState.Idle ─► [메인 로비]
+   나가기 ─ 소켓 정상 종료 ─► SessionState.Idle ─► [MainLobby.unity]
 ```
 
-세션 상태 → 화면의 표는 이렇게 굳힌다. **`SessionSceneRouter` 는 손대지 않는다** — 대기방이
-같은 씬 안이므로 라우터가 아는 씬 목록이 늘어나지 않는다.
+세션 상태 → 씬의 표는 이렇게 굳힌다. 전환은 **전부 `SessionSceneRouter`** 가 한다 — 방에
+들어가는 길이 넷이므로(만들기·코드·목록·빠른 참가) 각자 씬을 열게 하면 하나를 빠뜨렸을 때
+방에는 들어갔는데 화면은 메뉴인 상태가 된다.
 
-| `SessionState` | 화면 |
+| `SessionState` | 씬 |
 |---|---|
 | `Idle`, `Creating`, `Resolving`, `Connecting`, `Handshaking`, `Leaving` | 메인 로비 (+ 로딩 오버레이) |
 | `Failed` | 메인 로비 + 실패 줄·다시 시도 |
 | `InLobby` | **대기방** |
-| `InGame` | 대기방 유지(씬이 바뀌는 몇 프레임 동안 비어 보이지 않게) → 게임 씬 |
-| `Ended` | **대기방 · 결과** |
+| `InGame` | 룸의 맵에 맞는 게임 씬 |
+| `Ended` | **대기방** (결과를 보고 방장이 로비로 되돌린다) |
 
 ### 4.1 프로토콜 버전을 올린다 — 3 → 4
 
@@ -301,64 +331,60 @@ Phase == Waiting  &&  IsAuthorized(sessionId)  &&  _players.Count >= MinPlayersT
 
 ### 7.1 프로토타입 코드의 처분
 
+**세 갈래다** — 공유, 프로토타입에만 남김, 승계 후 삭제. 프로토타입 씬은 연동 확인이 끝날 때까지
+살아 있어야 하므로(§2.1) "지금 지운다" 는 칸이 없다.
+
 | 파일 | 처분 | 이유 |
 |---|---|---|
-| `LobbyManager.cs` | **삭제** | 규칙이 `Room.cs` 로 간다. 남기면 두 번째 권위가 된다 |
-| `ILobbyTransport.cs`(+`OfflineLobbyTransport`) | **삭제** | 실제 채널은 `Control`/`RoomState`. 구현 하나인 인터페이스는 금지 항목 (§1.2) |
-| `LobbyTypes.cs` | **삭제** | `LobbyRequestKind`→`ControlKind`, `LobbyEventKind`→`RoomState` 전문, `LobbyPlayer`→`RoomPlayerEntry` |
-| `LobbyConfig.cs` | **삭제** | 정원·최소 인원은 서버 값의 사본이었다. 남는 표현 값은 없다 |
-| `LobbyBootstrap.cs` | **삭제** | 씬을 쓰지 않는다 |
-| `LobbyRoom.cs`, `LobbySlot.cs`, `LobbySlotPicker.cs`, `LobbyHud.cs` | **삭제** | 3D 스탠드 대기실. §2 의 결정으로 쓰지 않는다 |
-| `LobbyMannequin.cs` | **재사용** | 캐릭터 미리보기의 몸. 블록 비율과 절차적 idle 이 이미 들어 있다 |
-| `LobbyCharacterCatalog.cs` | **재사용(정리)** | 인덱스 = 와이어 값으로 맞추고 개수를 `ProtocolInfo` 와 맞춘다 |
-| `Lobby.unity`, `LobbyHUD.uxml`, `lobby.uss` | **삭제** | 스타일은 `main-lobby.uss` 로 통합. 씬은 Build Settings 에도 없다 |
-| 에디터 메뉴 `Create Lobby Scene` | **삭제** | 만들 씬이 없다 |
-| `UI/RoomView.cs`, `Controllers/RoomController.cs`, `templates/RoomPopup.uxml` | **승계 후 삭제** | 내용은 대기방 페이지로 옮긴다 (§7.2) |
-| `lobby-builder` 스킬 + `netcode-integration.md` | **다시 쓴다** | 없어진 전송과 17개 `// NETCODE:` 표식을 가리키는 문서를 남기지 않는다. 복제 표는 §5 로 대체된다 |
+| `LobbyRoom.cs`, `LobbySlot.cs`, `LobbyMannequin.cs` | **두 씬이 공유** | 공간·스탠드·인형은 판정이 아니라 표현이다. 서버가 생겨도 바뀔 이유가 없다 |
+| `LobbyCharacterCatalog.cs` | **공유(정리)** | 인덱스 = 와이어 값으로 맞추고 개수를 `ProtocolInfo` 와 맞춘다 |
+| `LobbyManager.cs`, `ILobbyTransport.cs`, `LobbyTypes.cs`, `LobbyConfig.cs`, `LobbyBootstrap.cs`, `LobbySlotPicker.cs`, `LobbyHud.cs` | **프로토타입에만 남긴다** | 클라이언트 권위·오프라인 전송·자리 교환. 서버 연동 대기방은 이 중 아무것도 참조하지 않으며, 프로토타입을 지울 때 함께 사라진다 |
+| `Lobby.unity`, `LobbyHUD.uxml`, `Create Lobby Scene` 메뉴 | **프로토타입에만 남긴다** | 나란히 놓고 비교할 수 있어야 한다 |
+| `lobby.uss` | **공유(고치지 않는다)** | 두 HUD 가 함께 쓴다. 새 규칙은 `game-lobby.uss` 로 더한다 — 이 파일을 고치면 프로토타입 화면에 닿는다 |
+| `LobbySlot.Bind` | **오버로드 추가** | 원시 값을 받는 문을 더한다. 겉모습이 오프라인 판정 타입(`LobbyPlayer`)에 묶여 있을 이유가 없다 |
+| `UI/RoomView.cs`, `Controllers/RoomController.cs`, `templates/RoomPopup.uxml` | **승계 후 삭제** | 내용은 대기방 씬의 HUD 로 옮긴다 (§7.2) |
+| `lobby-builder` 스킬 + `netcode-integration.md` | **다시 쓴다** | 네트워킹이 없다는 전제로 쓰인 인계 문서다. 복제 표는 §5 와 `server-contract.md` 로 대체된다 |
 
-### 7.2 모달 팝업에서 전체화면 페이지로
+### 7.2 대기방 씬을 세운다
 
-지금 대기방은 `PopupHost` 위의 모달이다. 두 가지가 걸린다.
-
-- 뒤에 방 목록이 살아 있다. 모달로 막고 있지만, 막아야 하는 화면이 그 자리에 있다는 것 자체가
-  구조의 문제다 — 방 안에서 다른 방을 누르는 것은 지금 방을 조용히 버리는 일이다.
-- `.popup-frame` 은 `max-height: 84%` 에 스크롤이 없다. `RoomView` 는 **그래서** 정원 8칸을
-  다 그리지 못하고 "몇 줄만" 그리는 규칙을 따로 만들어야 했다(그 주석이 파일에 있다). 준비 ·
-  캐릭터 · 킥 메뉴가 붙으면 같은 벽에 다시 부딪힌다.
-
-**`MainLobby.uxml` 을 두 페이지로 가른다.**
+방·스탠드 줄·마네킹·정면 카메라는 **프로토타입의 것을 그대로 쓴다.** 그 셋은 판정이 아니라
+표현이므로 서버가 생겨도 바뀔 이유가 없다.
 
 ```
-#lobby-root
- ├─ #header            (로고 · 프로필 · 접속 상태)   — 두 페이지 공용
- ├─ #page-browser      (#side-rail · #room-panel · #action-panel)   ← 지금의 #content
- ├─ #page-room         (신규 — 대기방)
- ├─ #status            (상태 줄 · 다시 시도)         — 두 페이지 공용
- ├─ #popup-root        (설정 · 확인 대화상자 · 킥 확인)
- ├─ #toast-root
- └─ #loading-overlay
+GameLobby.unity
+ └─ Game Lobby (GameLobbyBootstrap)
+      ├─ LobbyRoom.Build(...)     ← 방·조명·카메라 (프로토타입과 동일)
+      ├─ __Slots                  ← LobbySlot × 서버 정원
+      │    └─ LobbyMannequin      ← 스탠드마다 한 체
+      ├─ UIDocument               ← GameLobbyHUD.uxml
+      └─ GameLobbyPicker          ← 스탠드 클릭
 ```
 
-페이지 전환은 `display` 하나다. **`RemoveFromHierarchy` 를 쓰지 않는다** — 게임 HUD 의 역할
-분리는 정보 누출을 막기 위해 트리에서 뽑아내지만, 여기서 감출 정보는 없고 뽑아내면 돌아올 때
-다시 만들어야 한다.
+**스탠드 수는 서버가 알려 준 정원이다.** 프로토타입은 `LobbyConfig.maxPlayers`(6)를 썼고
+그것은 서버 정원(8)의 어긋난 사본이었다. 정원이 바뀌면 줄을 통째로 다시 세운다 — 줄 폭이
+스탠드 수에서 나오고 방의 크기가 줄 폭에서 나오므로 스탠드만 더하면 방이 그것을 담지 못한다.
 
-새 파일:
+**HUD 는 옛 스타일시트 위에 선다.** `game-hud.uss` + `lobby.uss` 는 그대로 쓰고 새로 필요한
+것만 `game-lobby.uss` 에 더한다 — `lobby.uss` 를 고치면 아직 살아 있는 프로토타입 씬에 닿는다.
+옛 HUD 와 다른 곳은 셋이다: 카운트다운이 없고(준비가 조건이다), 자리 교환 프롬프트가 없고
+(스탠드 번호가 스폰이다), 초대 코드 패널과 방장 조작이 생겼다.
 
 | 파일 | 역할 |
 |---|---|
-| `templates/GameLobbyPage.uxml` | 대기방 페이지 껍데기 |
-| `templates/RosterRow.uxml` | 명단 한 줄 (이름 · 캐릭터 · 준비 도장 · 방장 · 행 메뉴) |
-| `templates/CharacterPicker.uxml` | 캐릭터 목록 + 미리보기 자리 |
-| `UI/GameLobbyView.cs` | `RoomView` 승계. 상태를 들지 않고 `NetSession`·`NetworkClient` 에서 읽어 그린다 |
-| `UI/RosterRowView.cs` | 한 줄. 킥·위임 메뉴가 여기 붙는다 |
-| `UI/CharacterPickerView.cs` | 선택과 미리보기 |
-| `Controllers/GameLobbyController.cs` | `RoomController` 승계. 팝업 여닫기가 아니라 **페이지 전환**을 세션 상태에 맞춘다 |
-| `Models/RoomMember.cs` | 명단 한 줄의 클라이언트 투영 — id · 이름 · 준비 · 캐릭터 · 방장인가 · 자신인가 · 봇인가 |
+| `GameLobby/GameLobbyBootstrap.cs` | 씬의 유일한 오브젝트. 방·줄을 세우고 명단으로 스탠드를 묶는다 |
+| `GameLobby/GameLobbyHud.cs` | HUD. 상태를 들지 않고 `NetSession`·`NetworkClient` 에서 읽어 그린다 |
+| `GameLobby/GameLobbyPicker.cs` | 스탠드 클릭 — 자리 이동이 아니라 방장의 지목 |
+| `Models/RoomMember.cs` | 명단 한 줄의 투영 — id · 이름 · 준비 · 캐릭터 · 방장인가 · 자신인가 · 봇인가 |
+| `Resources/UI/GameLobbyHUD.uxml`, `game-lobby.uss` | HUD 의 트리와 더하는 스타일 |
+| `Editor/Scene/GameLobbySetup.cs` | 씬 생성 + 빌드 설정 등록 |
 
 `RoomMember` 를 두는 이유: `RosterEntry` + `RoomState.HostPlayerId` + `LocalPlayerId` 를
-조합하는 계산이 지금 `RoomView` 안에 세 군데 흩어져 있다(`Tag`, `RefreshRoster`, `StartNote`).
-한 줄이 무엇인지 한 곳에서 답하면 EditMode 테스트도 그 함수 하나에 붙는다.
+조합하는 계산을 **두 화면이 함께 쓴다** — 스탠드 줄과 HUD 명단이다. 각자 조합하면 "누가 나인가"
+를 서로 다르게 틀릴 수 있고, 그것이 화면마다 다르게 보이는 순간이 생긴다.
+
+**메인 로비에는 방 안의 화면이 남지 않는다.** 같은 것을 그리는 화면이 둘이면 어느 경로로
+들어왔는지에 따라 다른 UI 가 뜨는 상태가 표현 가능해진다. `RoomView`·`RoomController`·
+`RoomPopup.uxml` 은 대기방 씬으로 승계되고 사라진다.
 
 ### 7.3 `NetSession` 에 더하는 문
 
@@ -411,7 +437,7 @@ public bool IsLocalReady { get; }        // 명단에서 읽는다 — 사본을
 
 | Phase | 내용 | 확인 |
 |---|---|---|
-| **0** | 대기방 페이지 껍데기. `RoomView`/`RoomController` 의 내용을 `#page-room` 으로 옮기고 모달을 없앤다. **와이어 변경 없음** | 지금과 같은 기능이 페이지로 동작한다. 방 만들기 → 대기방 → 시작 → 게임 → 복귀 |
+| **0** | 대기방 씬 껍데기. `RoomView`/`RoomController` 의 내용을 씬의 HUD 로 옮기고 라우터가 그 씬을 열게 한다. **와이어 변경 없음** | 지금과 같은 기능이 씬으로 동작한다. 방 만들기 → 대기방 → 시작 → 게임 → 복귀 |
 | **1** | 와이어. `ProtocolInfo.Version` 4, 명단 항목 확장, `ControlKind` 넷, `ProtocolInfo.LobbyCharacterCount`. 서버는 값을 싣고 클라이언트는 읽기만 한다 | 코덱 왕복 테스트. `NetworkClient` 명단 비교에 새 필드가 들어갔는가(§5.1 의 함정) |
 | **2** | 준비. `PlayerEntity.Ready`, `SetReady` 커맨드, `Start` 조건, `ResetToWaiting` 해제, 페이지의 토글·도장·시작 문구 | 두 클라이언트로 실제 게이팅. 종료 후 로비 복귀에서 준비가 내려가는가 |
 | **3** | 캐릭터. 서버 중복 거부, 카탈로그 정리, 선택 UI, `LobbyMannequin` 미리보기 | 두 클라이언트에서 서로의 선택이 보인다. 같은 캐릭터 요청이 거부된다 |
@@ -464,23 +490,48 @@ public bool IsLocalReady { get; }        // 명단에서 읽는다 — 사본을
 계획을 고쳐 적지 않고 무엇이 왜 달라졌는지 남긴다. 계획서를 결과로 덮어쓰면 판단이 바뀐
 지점이 사라진다.
 
+### 11.1 한 번 잘못 만들고 되돌렸다
+
+**대기방을 `MainLobby` 안의 전체화면 UI 페이지로 만들었고, 그것이 틀렸다.** §2.1 에 이유를
+적었다 — 요구는 프로토타입의 3D 구성을 **유지하면서** UI/UX 를 개선하는 것이었고, 페이지로
+옮기는 것은 개선이 아니라 교체였다.
+
+되돌린 방식과 그 이유:
+
+| 되돌린 것 | 어떻게 |
+|---|---|
+| 프로토타입 씬과 그것을 세우는 파일 전부 | 삭제를 되돌렸다. **연동 확인이 끝날 때까지 남는다** — 나란히 놓고 비교할 수 있어야 한다 |
+| `#page-room` 과 그 뷰들 | 지웠다. 같은 것을 그리는 화면이 둘이면 경로에 따라 다른 UI 가 뜬다 |
+| `MainLobby.uxml`·`main-lobby.uss` | 페이지 분할 이전으로 되돌렸다. 죽은 규칙(`.roster-*`, `.room-code`)도 함께 걷었다 |
+| `CharacterPreview`(렌더 텍스처 초상) | 지웠다. **자기 스탠드의 인형이 미리보기다** — 줄에 서 있으므로 고른 옷을 남들도 보고 있다 |
+
+살아남은 것: 서버 쪽 전부(프로토콜 4, 준비·캐릭터·킥·위임 판정과 32개 테스트)와 클라이언트의
+세션 표면(`NetSession.SetReady`/`SetCharacter`/`KickPlayer`/`TransferHost`), 그리고 HUD 의
+그리는 논리. **와이어와 판정은 처음부터 형태와 무관했으므로 한 줄도 버리지 않았다** — 잘못된
+것은 그것을 어디에 그리는가였다.
+
+### 11.2 그 밖에 계획과 다른 곳
+
 | 계획 | 실제 | 왜 |
 |---|---|---|
-| `Models/RoomMember.cs` 를 만들어 명단 한 줄을 투영한다 | 만들지 않았다 | 한 줄이 무엇인지 답하는 계산이 `GameLobbyView` 안의 두 함수(`Tag`, `AddHostActions`)로 줄었다. 지금 투영 타입을 만들면 `RoomPlayerEntry` 를 한 번 더 감싸는 것뿐이다 — 팀·관전자가 붙어 한 줄의 뜻이 늘어날 때 만든다 |
-| `templates/RosterRow.uxml`·`CharacterPicker.uxml` 를 나눈다 | 나누지 않았다 | 명단 줄은 요소 넷이고 캐릭터 칸은 페이지 안에 있다. 템플릿으로 뽑으면 파일이 둘 늘고 얻는 것이 없다 — 반복 단위가 커지면 그때 뽑는다 |
-| 캐릭터 선택을 팝업으로 연다 | 페이지의 세 번째 칸 | 팝업은 열려 있는 동안 남이 캐릭터를 집어 가는 것을 반영해야 하고, 그러려면 갱신 신호를 팝업까지 끌어와야 한다. 페이지 안에 있으면 명단 전문 주기에 함께 다시 그려진다 |
+| `templates/RosterRow.uxml`·`CharacterPicker.uxml` 를 나눈다 | 나누지 않았다 | HUD 가 UXML 하나이고 줄은 코드로 만든다. 템플릿으로 뽑으면 파일이 둘 늘고 얻는 것이 없다 — 반복 단위가 커지면 그때 뽑는다 |
 | 킥의 자격은 `IsAuthorized` | 방장 세션인지 직접 본다 | `IsAuthorized` 는 정적 룸에서 전원에게 참을 돌려준다. 그것은 "시작을 누를 수 있다" 를 위한 예외이고, 남을 쫓아내는 권한은 다른 것이다 |
 | 명단 항목의 `flags` 에 `Ready` 만 | `Ready` + `Bot` | 봇 여부는 서버가 이미 알고 클라이언트는 알 방법이 없었다. 같은 바이트에 자리가 있고 프로토콜 인상을 한 번 더 하지 않으려면 지금 넣어야 했다 |
 | 준비 UI 는 토글 하나 | 방장에게는 준비를 보이지 않는다 | 시작 버튼이 방장의 준비다. 둘 다 보이면 같은 뜻의 조작이 두 개가 된다 |
+| 자리 클릭은 쓰지 않는다 | 방장의 지목으로 되살렸다 | 3D 화면에서 사람을 클릭하는 제스처가 이미 있었다(프로토타입의 자리 교환). 그 자리에 강제 퇴장 확인을 놓으면 방장이 명단을 뒤지지 않아도 된다 |
 
-### 확인하지 못한 것
+### 11.3 확인하지 못한 것
 
-**캐릭터 미리보기의 그림은 눈으로 확인하지 않았다.** `CharacterPreview` 는 카메라 하나를
-렌더 텍스처에 물려 UI 배경으로 넘기는데, 이 프로젝트에서 그림의 판정은 사람의 눈이다
-(`NVproject/CLAUDE.md` — URP 에서 특정 카메라 캡처가 실패하고, 애니메이션의 자연스러움은
-수치로 확인할 수 없다). 컴파일과 수명(도메인 리로드에서 무대가 늘어나지 않는지)은 코드로
-확인했고, **프레임에 인형이 제대로 들어오는지는 에디터에서 봐야 한다.** 어긋나면 손댈 곳은
-`CharacterPreview.Create` 의 카메라 위치·시야각 셋뿐이다.
+**대기방 씬은 아직 만들어지지 않았다.** 이 저장소의 씬은 생성기가 만드는 것이 전제이므로
+(`MainLobby`·`MapRuntime` 과 같다) **Tools ▸ NV ▸ Scene ▸ Create Game Lobby Scene** 을 한 번
+눌러야 한다. 누르지 않으면 방을 만든 뒤 아무 일도 일어나지 않고, 라우터가 그것을 오류 한 줄로
+말한다(`Application.CanStreamedLevelBeLoaded` 로 판정한다 — `LoadScene` 은 없는 씬에 대해
+조용히 실패한다).
+
+**화면의 그림은 눈으로 확인하지 않았다.** 방과 줄과 마네킹은 프로토타입에서 이미 돌던 것이지만,
+HUD 의 새 배치(초대 코드 패널이 왼쪽 위를 갖고 명단이 그 아래로 내려간 것, 조작 줄의 가로
+배치)는 이 프로젝트의 규칙대로 사람이 봐야 한다. 어긋나면 손댈 곳은 `game-lobby.uss` 의
+`.lobby-invite`·`.lobby-roster`·`.lobby-actions` 세 블록뿐이다.
 
 두 클라이언트로 실제 준비·캐릭터·킥·위임을 눌러 보는 것도 남아 있다. 서버 쪽 판정은
 `ReadyTests`·`CharacterTests`·`HostPowerTests` 로 못질했지만, 그것은 룸의 판정이고 화면과

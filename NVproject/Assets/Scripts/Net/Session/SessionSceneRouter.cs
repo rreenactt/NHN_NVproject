@@ -21,13 +21,19 @@ namespace NV.Client.Net.Session
         /// 보고 씬 B 를 열면 그 씬은 다른 지형을 만들고, 증상은 맵 해시 불일치 하나다.
         public const string LobbyScene = MapSceneTable.LobbyScene;
 
+        /// 대기방 씬. 방에 들어가 있고 매치가 시작되지 않았을 때 여기다.
+        public const string GameLobbyScene = MapSceneTable.GameLobbyScene;
+
         private NetSession _session;
 
         /// 이 라우터가 게임 씬을 한 번이라도 열었는가.
         ///
-        /// 열지 않았다면 로비로 되돌리지 않는다. 그러지 않으면 이 컴포넌트가 붙은 순간
-        /// (아직 아무것도 안 한 대기 상태)에 로비를 다시 로드한다.
+        /// 매치가 끝나 대기방으로 돌아올 때 내려간다 — 내리지 않으면 두 번째 매치에서 게임
+        /// 씬이 다시 열리지 않는다.
         private bool _enteredGame;
+
+        /// 대기방 씬을 열 수 없다고 이미 말했는가. 같은 오류를 프레임마다 쌓지 않기 위한 것이다.
+        private bool _gameLobbyMissing;
 
         private void Awake()
         {
@@ -43,6 +49,11 @@ namespace NV.Client.Net.Session
 
             switch (_session.State)
             {
+                case SessionState.InLobby:
+                case SessionState.Ended:
+                    EnterGameLobby();
+                    break;
+
                 case SessionState.InGame:
                     EnterGame();
                     break;
@@ -52,6 +63,48 @@ namespace NV.Client.Net.Session
                     ReturnToLobby();
                     break;
             }
+        }
+
+        /// 방에 들어갔다. 대기방 씬으로.
+        ///
+        /// **`Ended` 도 여기다.** 매치가 끝나면 결과를 보고 방장이 로비로 되돌릴 수 있어야
+        /// 하고, 그 화면은 대기방이 갖는다.
+        ///
+        /// 이미 그 씬이면 아무것도 하지 않는다. `Update` 가 방에 있는 동안 계속 이 함수를
+        /// 부르므로 판정을 앞에 두지 않으면 매 프레임 같은 씬을 다시 로드한다.
+        private void EnterGameLobby()
+        {
+            if (SceneManager.GetActiveScene().name == GameLobbyScene)
+            {
+                return;
+            }
+
+            // **없는 씬을 로드하면 조용히 실패한다.** 로그도 예외도 없고, 증상은 방을 만든 뒤
+            // 아무 일도 일어나지 않는 것뿐이다. 대기방 씬은 생성기가 만드는 씬이므로
+            // (`Tools ▸ NV ▸ Scene ▸ Create Game Lobby Scene`) 아직 만들지 않았거나 빌드
+            // 설정에서 빠진 상태가 실제로 있을 수 있다.
+            if (!Application.CanStreamedLevelBeLoaded(GameLobbyScene))
+            {
+                // 한 번만 남긴다. `Update` 가 방에 있는 동안 계속 이 함수를 부르므로,
+                // 표식이 없으면 프레임마다 같은 오류가 쌓여 콘솔이 그것으로 덮인다.
+                if (!_gameLobbyMissing)
+                {
+                    _gameLobbyMissing = true;
+
+                    Debug.LogError(
+                        $"[NV] 대기방 씬 '{GameLobbyScene}' 을 열 수 없다. "
+                        + "Tools ▸ NV ▸ Scene ▸ Create Game Lobby Scene 으로 만들고 "
+                        + "빌드 설정에 등록되었는지 확인한다.");
+                }
+
+                return;
+            }
+
+            // 게임 씬에서 방으로 돌아온 경우다. 다음 매치가 시작되면 다시 열어야 하므로
+            // 이 표식을 내린다 — 내리지 않으면 두 번째 매치에서 씬이 바뀌지 않는다.
+            _enteredGame = false;
+
+            SceneManager.LoadScene(GameLobbyScene);
         }
 
         private void EnterGame()
@@ -89,9 +142,18 @@ namespace NV.Client.Net.Session
             SceneManager.LoadScene(scene);
         }
 
+        /// 방을 벗어났다(스스로 나갔거나 실패했다). 메인 로비로.
+        ///
+        /// **`_enteredGame` 을 보지 않는다.** 예전에는 그것으로 걸렀는데, 그때는 방에 들어가
+        /// 있는 동안에도 씬이 메인 로비였기 때문이다. 지금은 대기방이 별개의 씬이라 매치를
+        /// 한 번도 시작하지 않고 나가는 길이 흔하고, 그 경우 이 표식은 거짓이다 — 그대로
+        /// 두면 대기방 씬에 갇힌다.
+        ///
+        /// 이 컴포넌트가 붙는 순간(메인 로비의 대기 상태)에 다시 로드하지 않는 것은 씬 이름
+        /// 판정이 이미 막는다.
         private void ReturnToLobby()
         {
-            if (!_enteredGame || SceneManager.GetActiveScene().name == LobbyScene)
+            if (SceneManager.GetActiveScene().name == LobbyScene)
             {
                 return;
             }

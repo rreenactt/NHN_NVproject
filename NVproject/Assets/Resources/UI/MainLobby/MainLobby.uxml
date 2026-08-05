@@ -11,15 +11,6 @@
         adding those later is a template drop, not a re-layout — a grid that has never had to
         hold a third column tends to be written in a way that cannot.
 
-        Two pages, and only one is displayed at a time: #page-browser is the lobby proper (rooms
-        you are not in), #page-room is the waiting room (the room you are in). The header and the
-        status line are shared and sit outside both, because connection state and failure text are
-        true on either page and duplicating them is how the two copies end up disagreeing.
-
-        The switch is `display`, not RemoveFromHierarchy. The game HUD tears role-exclusive panels
-        out of the tree because a hidden element is one style rule away from leaking the objective;
-        there is nothing to hide here, and tearing out means rebuilding on the way back.
-
         #popup-root and #toast-root are last so they draw over everything. Order in the tree is
         the only stacking control here; there is no z-index worth relying on.
     -->
@@ -40,8 +31,7 @@
             </ui:VisualElement>
         </ui:VisualElement>
 
-        <!-- ================================================ 로비 페이지 -->
-        <ui:VisualElement name="page-browser" class="page">
+        <!-- ================================================ content -->
         <ui:VisualElement name="content" class="content-grid">
 
             <!-- 친구 · 파티 확장 지점. 지금은 자리만 잡는다. -->
@@ -85,14 +75,6 @@
 
         <!-- 채팅 확장 지점. -->
         <ui:VisualElement name="dock" class="dock" />
-        </ui:VisualElement>
-
-        <!--
-            대기방 페이지. 본체는 templates/GameLobbyPage.uxml 이고 GameLobbyView 가 복제해
-            넣는다 — 이 프로젝트에서 재사용 단위는 VisualTreeAsset 이고 CloneTree() 가
-            Instantiate() 다.
-        -->
-        <ui:VisualElement name="page-room" class="page" />
 
         <!-- ================================================ 상태 줄 -->
         <ui:VisualElement name="status" class="status">

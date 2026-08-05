@@ -1,0 +1,121 @@
+/*
+    서버 연동 대기방이 옛 로비 스타일 위에 더하는 것만 담는다.
+
+    `lobby.uss` 를 고치지 않는다. 그 파일은 아직 살아 있는 오프라인 씬(`Lobby.unity`)이
+    쓰고 있고, 여기서 필요한 것은 **더하기와 이 씬에서만의 덮어쓰기**다. 이 파일은
+    `GameLobbyHUD.uxml` 만 참조하므로 덮어써도 옛 씬에 닿지 않는다.
+
+    더하는 것: 초대 코드 패널, 명단 줄의 꼬리표·캐릭터 이름·방장 버튼, 조작 줄의 가로 배치.
+*/
+
+/* ============================================================ 초대 코드
+
+   왼쪽 위를 초대 코드가 갖고 명단이 그 아래로 내려간다. 코드는 남이 받아 적는 값이라
+   화면에서 가장 먼저 눈에 들어와야 한다 — 방을 만든 사람이 다음에 할 일이 그것이다.
+*/
+
+.lobby-invite {
+    left: 40px;
+    top: 120px;
+    min-width: 250px;
+    align-items: flex-start;
+}
+
+/* 자간이 넓은 이유는 소리 내어 읽기 때문이다. 두 글자가 붙어 보이면 한 글자로 옮겨 적힌다. */
+.lobby-invite__code {
+    font-size: 34px;
+    letter-spacing: 10px;
+    color: rgb(255, 246, 214);
+    -unity-font-style: bold;
+    text-shadow: 0 2px 6px rgba(14, 12, 8, 0.9);
+    margin-top: 2px;
+    margin-bottom: 6px;
+}
+
+.lobby-invite__buttons {
+    flex-direction: row;
+    margin-bottom: 4px;
+}
+
+.lobby-invite__buttons .lobby-button {
+    margin-right: 6px;
+}
+
+/* 명단은 초대 코드 아래로. 이 씬에서만의 덮어쓰기다. */
+.lobby-roster {
+    top: 320px;
+    min-width: 300px;
+}
+
+/* ============================================================ 명단 줄
+
+   한 줄에 다섯 가지가 들어간다 — 이름, 캐릭터, 상태, 꼬리표, 방장 버튼. 이름이 남는 폭을
+   먹어 나머지가 오른쪽 끝에 모인다.
+*/
+
+.roster-row__name {
+    flex-grow: 1;
+}
+
+/* 캐릭터 이름은 조용하다. 무엇을 입었는지는 스탠드의 인형이 이미 말한다. */
+.roster-row__character {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: rgb(120, 104, 58);
+    margin-right: 8px;
+}
+
+/* 방장·나·봇. 이름 옆의 한 마디. */
+.roster-row__badge {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: rgb(201, 179, 107);
+    margin-right: 8px;
+}
+
+.roster-row__actions {
+    flex-direction: row;
+}
+
+.roster-row__actions .lobby-button {
+    font-size: 10px;
+    letter-spacing: 1px;
+    margin-left: 4px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+}
+
+/* 빈 자리는 사람 이름과 같은 무게로 읽히면 안 된다. 자리가 있다는 사실만 말한다. */
+.roster-row--empty .roster-row__name {
+    color: rgb(112, 100, 62);
+    font-size: 12px;
+    -unity-font-style: italic;
+}
+
+/* ============================================================ 조작 줄
+
+   준비·시작·나가기가 나란히 선다. 세로로 쌓으면 방을 가린다 — 이 화면의 주인공은 줄에
+   서 있는 사람들이다.
+*/
+
+.lobby-actions {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+}
+
+.lobby-actions .lobby-button {
+    margin-left: 8px;
+    margin-right: 8px;
+}
+
+/* 힌트는 버튼 아래 한 줄. 가로 배치가 되었으므로 자기 자리를 따로 잡아야 한다. */
+.lobby-hint {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -22px;
+    -unity-text-align: middle-center;
+}
