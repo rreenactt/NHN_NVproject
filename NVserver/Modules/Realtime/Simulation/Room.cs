@@ -87,6 +87,9 @@ namespace NV.Realtime.Simulation
         /// 내려보내는 것은 다음 태스크(IG-011b)이고, 여기서는 서버가 자기 배치를 갖는다.
         private readonly Objectives _objectives = new();
 
+        /// 체인이 쓰는 경로 탐색기. 격자가 없는 맵에서는 끝까지 null 이다.
+        private GridRoute? _route;
+
         /// 날아가는 총알. 슬롯을 재사용하므로 할당이 없다.
         ///
         /// 32 는 규칙이 아니라 상한이다. 탄창 3발에 재장전이 없으므로 지금 실제로 도달할 수 있는
@@ -830,6 +833,34 @@ namespace NV.Realtime.Simulation
                 return;
             }
 
+            // 체인에 걸려 있으면 위치는 체인이 정한다. 입력은 그래도 **소비한다** —
+            // 버리기만 하면 놓아주는 순간 쌓인 입력이 한꺼번에 적용되어 제단에서
+            // 순간이동한다(`ApplyFrame` 의 잠금이 같은 이유로 소비한다).
+            if (player.Chained)
+            {
+                var drained = 0;
+
+                while (drained < RealtimeConstants.Rooms.MaxInputsPerTick && player.TryTakeNext(out var chainedInput))
+                {
+                    ApplyFrame(player, chainedInput.Frame);
+                    player.LastInput = InputValidator.Neutral(InputValidator.Sanitize(chainedInput.Frame));
+                    player.RepeatCount = 0;
+                    drained++;
+                }
+
+                // **새 입력이 없어도 비운다.** 이 줄이 없으면 탄창을 비운 그 발의 `Fire` 비트가
+                // `LastInput` 에 남고, `FireWeapons` 는 그것을 읽는다 — 체인이 놓아주며 탄창을
+                // 채운 바로 그 틱에 한 발이 저절로 나가서, 3초를 기다린 대가가 2발이 된다.
+                // 위의 잠금 갈래가 같은 이유로 같은 일을 한다.
+                if (drained == 0)
+                {
+                    player.LastInput = InputValidator.Neutral(player.LastInput);
+                }
+
+                StepChain(player);
+                return;
+            }
+
             var applied = 0;
 
             while (applied < RealtimeConstants.Rooms.MaxInputsPerTick && player.TryTakeNext(out var input))
@@ -967,7 +998,11 @@ namespace NV.Realtime.Simulation
             // 역할 공개와 결과 화면에서는 이동을 비운다. 입력은 그래도 **소비한다** —
             // 버리기만 하면 잠금이 풀리는 순간 쌓인 입력이 한꺼번에 적용되어
             // 플레이어가 순간이동한다. 시선은 남기므로 리빌 중에도 둘러볼 수 있다.
-            if (_match.MovementLocked)
+            //
+            // 체인도 같은 잠금이다. 다른 점은 매치 전체가 아니라 **한 사람**이라는 것뿐이라
+            // 판정을 한 곳에 모아 둔다 — 갈라 두면 "리빌 중에는 멈추는데 체인 중에는 걸어
+            // 다닌다" 같은 반쪽 규칙이 생긴다.
+            if (_match.MovementLocked || player.Chained)
             {
                 frame = InputValidator.Neutral(frame);
             }
@@ -1011,7 +1046,10 @@ namespace NV.Realtime.Simulation
                 flags |= EntityFlags.Seeker;
             }
 
-            if (_match.MovementLocked)
+            // 역할 공개는 전원을, 체인은 그 한 사람만 얼린다. 클라이언트는 이 비트 하나로
+            // 조작을 막고 체인을 그리므로, 둘을 갈라 실을 이유가 없다 — 몸이 자기 뜻으로
+            // 움직이지 않는다는 사실이 같다.
+            if (_match.MovementLocked || player.Chained)
             {
                 flags |= EntityFlags.Frozen;
             }
@@ -1243,7 +1281,148 @@ namespace NV.Realtime.Simulation
                     player.PlayerId,
                     player.Ammo,
                     MatchConstants.SeekerMagazine);
+
+                // 마지막 탄이 나갔다. 기획서 §4.3 — 빈 탄창이 체인을 부른다.
+                if (player.Ammo <= 0)
+                {
+                    BeginChain(player);
+                }
             }
+        }
+
+        /// 이 룸의 경로 탐색기. 격자가 있어야 만들 수 있으므로 처음 쓸 때 만든다.
+        ///
+        /// 룸이 들고 있는 이유는 버퍼 때문이다 — 격자 크기의 배열 세 개를 재사용한다.
+        /// 호출은 탄창을 비울 때마다 한 번이라 드물지만, 틱 루프 안이므로 그때마다
+        /// 2450칸짜리 배열을 새로 잡을 이유가 없다.
+        private GridRoute Route()
+        {
+            return _route ??= new GridRoute(_map.Grid.Data);
+        }
+
+        /// 빈 탄창의 대가. 제단이 Seeker 를 끌고 간다(기획서 §4.3).
+        ///
+        /// **벌칙의 값어치는 시간이 아니라 위치다.** 3초를 세우는 것보다 걸어서 온 거리를
+        /// 통째로 되돌리는 것이 크고, 제단이 맵 한가운데 고정이라 Seeker 는 세 번째 탄을
+        /// 쏘기 전에 그 대가를 항상 알 수 있다.
+        private void BeginChain(PlayerEntity player)
+        {
+            // 배치가 없는 맵(격자 없는 맵)에서는 끌고 갈 곳이 없다. 그 경우 벌칙은 걸지
+            // 않는다 — 제자리에 3초 묶어 두는 것은 기획서가 정한 벌칙이 아니다.
+            if (player.Chained || !_objectives.Placed)
+            {
+                return;
+            }
+
+            var target = _objectives.AltarDragPoint;
+
+            // **걸어갈 수 있는 길을 찾는다.** 직선으로 끌면 벽을 뚫고 지나간다.
+            //
+            // 길이 없으면 벌칙을 걸지 않는다. 갇힌 자리에서 벽을 통과해 끌어내는 것보다
+            // 안 걸리는 편이 낫다 — 통과가 한 번 허용되면 그것이 규칙이 된다.
+            if (!Route().TryFind(player.State.Position, target, player.ChainRoute))
+            {
+                _logger.LogWarning(
+                    "룸 {RoomId} 플레이어 {PlayerId}: 제단까지 걸어갈 길이 없어 체인을 걸지 않았다.",
+                    RoomId,
+                    player.PlayerId);
+                return;
+            }
+
+            player.ChainRouteLength = GridRoute.Length(player.ChainRoute);
+
+            // 견인 시간은 **경로 길이**에서 나온다(`ChainDragSpeed` 의 주석이 그렇게 적고 있다).
+            // 직선거리로 재면 미로 반대편에서 걸린 Seeker 가 바로 옆에서 걸린 사람과 같은
+            // 시간에 도착한다 — 멀리 나갈수록 벌칙이 싸지는 셈이다.
+            var distance = player.ChainRouteLength;
+
+            var seconds = Math.Clamp(
+                distance / MatchConstants.ChainDragSpeed,
+                MatchConstants.ChainDragTime,
+                MatchConstants.ChainDragMaxTime);
+
+            var dragTicks = (uint)Math.Max(1, (int)MathF.Ceiling(seconds * SimConstants.TickRate));
+
+            // 대기는 올림한다. 내림하면 3초 벌칙이 2.97초가 된다 — 피격 무적이 23틱인 것과
+            // 같은 이유로, 틱으로 환산되는 값은 틱에서 결정한다.
+            var waitTicks = (uint)MathF.Ceiling(MatchConstants.ChainWait * SimConstants.TickRate);
+
+            player.ChainStartTick = _tick;
+            player.ChainDragUntilTick = _tick + dragTicks;
+            player.ChainReleaseTick = player.ChainDragUntilTick + waitTicks;
+
+            _logger.LogDebug(
+                "룸 {RoomId} 플레이어 {PlayerId}: 탄창이 비어 체인에 걸렸다. 경로 {Distance:F1}m, 꺾임 {Corners}개, 견인 {Drag}틱, 해제 틱 {Release}.",
+                RoomId,
+                player.PlayerId,
+                distance,
+                player.ChainRoute.Count,
+                dragTicks,
+                player.ChainReleaseTick);
+        }
+
+        /// 체인에 걸린 몸을 한 틱 옮긴다. **위치를 직접 쓴다.**
+        ///
+        /// `Simulate` 를 지나지 않는 이유는 견인이 이동이 아니기 때문이다. 중력과 충돌
+        /// 해소를 태우면 벽에 걸려 제단에 닿지 못하고, 클라이언트가 같은 이유로 견인 내내
+        /// `FirstPersonController.Phasing` 으로 충돌을 꺼 둔다.
+        ///
+        /// 시선은 건드리지 않는다 — 묶여 있어도 둘러볼 수는 있다. 그것이 `MovementLocked`
+        /// 가 조작만 막고 시야를 남기는 것과 같은 규칙이다.
+        private void StepChain(PlayerEntity player)
+        {
+            var target = player.ChainRoute.Count > 0
+                ? player.ChainRoute[player.ChainRoute.Count - 1]
+                : player.State.Position;
+
+            if (_tick < player.ChainDragUntilTick)
+            {
+                // 남은 비율이 아니라 **경과 비율**로 간다. 매 틱 남은 거리에 비례해 옮기면
+                // 지수 감쇠가 되어 정해진 시간에 도착하지 못한다.
+                var dragTicks = player.ChainDragUntilTick - player.ChainStartTick;
+                var elapsed = _tick - player.ChainStartTick;
+                var t = dragTicks == 0u ? 1f : (float)elapsed / dragTicks;
+
+                var state = player.State;
+                state.Position = GridRoute.PointAlong(player.ChainRoute, t * player.ChainRouteLength);
+                state.Velocity = Vector3.Zero;
+                player.State = state;
+                return;
+            }
+
+            // 도착했다. 마지막 틱까지 보간에 맡기면 항상 조금 못 미치므로 제단에 붙인다 —
+            // 클라이언트의 견인이 끝에서 명시적으로 스냅하는 것과 같은 이유다.
+            var held = player.State;
+            held.Position = target;
+            held.Velocity = Vector3.Zero;
+            player.State = held;
+
+            if (_tick < player.ChainReleaseTick)
+            {
+                return;
+            }
+
+            // 놓아준다. **여기가 서버에서 탄창이 차는 유일한 곳이다**(매치 시작 제외).
+            player.Ammo = MatchConstants.SeekerMagazine;
+            player.ChainStartTick = 0u;
+            player.ChainDragUntilTick = 0u;
+            player.ChainReleaseTick = 0u;
+
+            _logger.LogDebug(
+                "룸 {RoomId} 플레이어 {PlayerId}: 체인이 놓아주었다. 탄창 {Ammo} 발.",
+                RoomId,
+                player.PlayerId,
+                player.Ammo);
+        }
+
+        private static Vector3 Lerp(Vector3 from, Vector3 to, float t)
+        {
+            var clamped = Math.Clamp(t, 0f, 1f);
+
+            return new Vector3(
+                from.X + ((to.X - from.X) * clamped),
+                from.Y + ((to.Y - from.Y) * clamped),
+                from.Z + ((to.Z - from.Z) * clamped));
         }
 
         /// 이 틱에 나갈 발사 알림을 쌓는다.
@@ -2229,6 +2408,13 @@ namespace NV.Realtime.Simulation
                 // 탄창은 역할과 무관하게 채운다. 역할은 발사 판정에서 본다 — 여기서 Seeker 만
                 // 채우면 매치 중 역할이 바뀌는 경로가 생길 때 빈 탄창을 든 Seeker 가 나온다.
                 player.Ammo = MatchConstants.SeekerMagazine;
+
+                // 지난 매치의 체인을 끊는다. 남겨 두면 새 매치의 첫 틱에 걸린 채로 시작해
+                // 지난 매치의 제단 자리로 끌려간다 — 목표물은 매치마다 다시 놓이므로 그
+                // 좌표는 이제 아무 데도 아니다.
+                player.ChainStartTick = 0u;
+                player.ChainDragUntilTick = 0u;
+                player.ChainReleaseTick = 0u;
 
                 // 지난 매치의 피격을 지운다. `ImmuneUntilTick` 은 절대 틱이라 언제나 과거다.
                 player.Hits = 0;

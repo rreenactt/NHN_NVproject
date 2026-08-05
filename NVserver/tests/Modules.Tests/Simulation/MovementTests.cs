@@ -9,6 +9,15 @@ namespace NV.Modules.Tests.Simulation
 {
     public class MovementTests
     {
+        /// 이 틱 수 동안 "제대로 걸었다" 고 볼 최소 거리(m).
+        ///
+        /// **속도에서 유도한다.** 예전에는 `Z > 3f` 처럼 숫자를 박아 두었고, 그 숫자는 당시의
+        /// `MoveSpeed`(6.5) 로 1초에 갈 수 있는 거리였다 — 속도를 2.5 로 내리자 이동은 멀쩡한데
+        /// 테스트만 무너졌다. 검사하려는 것은 "정지해 있지 않고 그 방향으로 갔다" 이지 특정
+        /// 미터 수가 아니므로, 이상적인 거리의 80%로 잡는다. 나머지 20%는 가속 구간이다.
+        private static float TravelFloor(int ticks) =>
+            SimConstants.MoveSpeed * ticks * SimConstants.TickDelta * 0.8f;
+
         private static CollisionWorld Arena()
         {
             return new CollisionWorld(new[]
@@ -86,7 +95,7 @@ namespace NV.Modules.Tests.Simulation
             var horizontalSpeed = MathF.Sqrt((state.Velocity.X * state.Velocity.X) + (state.Velocity.Z * state.Velocity.Z));
 
             Assert.True(MathF.Abs(horizontalSpeed - SimConstants.MoveSpeed) < 0.01f, $"speed = {horizontalSpeed}");
-            Assert.True(state.Position.Z > 3f, $"Z = {state.Position.Z}");
+            Assert.True(state.Position.Z > TravelFloor(30), $"Z = {state.Position.Z}");
         }
 
         [Fact]
@@ -120,7 +129,7 @@ namespace NV.Modules.Tests.Simulation
             var intent = new MoveIntent(0f, 1f, DeterministicMath.HalfPi, 0f, ButtonFlags.None);
             state = Run(state, intent, world, 20);
 
-            Assert.True(state.Position.X > 2f, $"X = {state.Position.X}");
+            Assert.True(state.Position.X > TravelFloor(20), $"X = {state.Position.X}");
             Assert.True(MathF.Abs(state.Position.Z) < 0.2f, $"Z = {state.Position.Z}");
         }
 

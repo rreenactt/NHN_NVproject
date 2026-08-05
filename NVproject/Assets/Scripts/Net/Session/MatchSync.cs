@@ -79,6 +79,8 @@ namespace NV.Client.Net.Session
                 return;
             }
 
+            ApplyRoomPhase();
+
             if (_pendingStart)
             {
                 TryBeginMatch();
@@ -224,11 +226,6 @@ namespace NV.Client.Net.Session
             {
                 _session = NetSession.Current;
                 _client = _session.Client;
-
-                if (_client != null)
-                {
-                    _client.RoomStateChanged += OnRoomStateChanged;
-                }
             }
 
             if (!_subscribedToMatch && MatchManager.Instance != null)
@@ -242,11 +239,6 @@ namespace NV.Client.Net.Session
 
         private void Unsubscribe()
         {
-            if (_client != null)
-            {
-                _client.RoomStateChanged -= OnRoomStateChanged;
-            }
-
             if (_subscribedToMatch && MatchManager.Instance != null)
             {
                 MatchManager.Instance.MatchEnded -= OnLocalMatchEnded;
@@ -255,7 +247,19 @@ namespace NV.Client.Net.Session
             _subscribedToMatch = false;
         }
 
-        private void OnRoomStateChanged()
+        /// 룸 단계를 매치 레이어에 옮긴다. **전문을 그대로 읽는다. 변경 이벤트를 듣지 않는다.**
+        ///
+        /// 예전에는 `NetworkClient.RoomStateChanged` 로만 왔고, 그것이 네트워크 매치를 통째로
+        /// 죽였다 — `Playing` 으로 바뀌는 그 전문이 **게임 씬을 여는 원인**이고, 이 컴포넌트는
+        /// 그 씬에서 만들어지므로 구독하는 시점에는 이미 지나간 뒤다. 전문은 내용이 바뀔 때만
+        /// 이벤트를 올리고 단계는 다시 바뀌지 않으므로, `_pendingStart` 가 영원히 서지 않고
+        /// 매치가 시작되지 않는다. 증상은 서버는 매치를 돌리는데 클라이언트는 로비 단계에
+        /// 머무는 것 — 역할이 없고, 서버 권위 플래그가 전부 꺼져 있고, 목표물이 없다.
+        ///
+        /// `RoomState` 는 알림이 아니라 **게시**다(ADR 0003). 2Hz 로 전체가 계속 오고 멱등하며,
+        /// 같은 매치를 두 번 시작하는 것은 `_startedTick` 이 이미 막는다. 그러니 지금 온 것을
+        /// 읽으면 된다 — 놓칠 수 있는 순간이 없다.
+        private void ApplyRoomPhase()
         {
             if (_client == null || !_client.HasRoomState || MatchManager.Instance == null)
             {

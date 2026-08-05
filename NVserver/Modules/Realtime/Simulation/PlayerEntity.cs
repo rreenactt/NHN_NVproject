@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Numerics;
 using NV.Realtime.Transport;
 using NV.Shared.Contracts.Enums;
@@ -104,13 +105,36 @@ namespace NV.Realtime.Simulation
 
         /// 탄창에 남은 탄. 기획서 §4.3 — Seeker 만 쓴다.
         ///
-        /// 재장전은 아직 없다. 기획서 §4.3 의 재장전은 **체인이 놓아준 뒤** 일어나고, 그 체인
-        /// 견인이 OQ-4 에 걸려 있다(IG-016) — 순서를 임의로 정하면 벌칙의 의미가 달라진다.
-        /// 그래서 지금은 탄창을 비우면 그 매치에서 더 쏠 수 없다.
+        /// **재장전하는 것은 체인이다.** 탄창이 비면 체인이 걸리고(<see cref="ChainReleaseTick"/>),
+        /// 제단으로 끌려가 3초를 기다린 뒤에야 이 값이 다시 찬다. 그래서 이 필드를 채우는
+        /// 곳은 매치 시작과 체인이 놓아주는 순간 둘뿐이다 — 그 밖에서 채우면 기획서 §4.3 의
+        /// 벌칙이 사라진다.
         public int Ammo { get; set; }
 
         /// 다음 발사가 가능한 틱. `NextInsertTick` 과 같은 이유로 매치 시작에 되돌리지 않는다.
         public uint NextFireTick { get; set; }
+
+        /// 체인이 끌고 가는 경로. 시작 지점에서 제단 옆자리까지 **걸어갈 수 있는** 길이다.
+        ///
+        /// 직선이 아니다. 직선으로 끌면 벽을 뚫고 지나가고, 벌칙의 값어치가 "걸어서 온 거리를
+        /// 되돌린다" 에서 "지도상의 간격만큼 되돌린다" 로 바뀐다 — 멀리 돌아온 사람일수록 덜
+        /// 손해를 보게 된다. `GridRoute` 가 격자 위에서 찾는다.
+        public List<Vector3> ChainRoute { get; } = new();
+
+        /// <see cref="ChainRoute"/> 의 총 길이(m). 견인 시간이 여기서 나온다.
+        public float ChainRouteLength { get; set; }
+
+        /// 견인이 시작된 틱. <see cref="ChainFrom"/> 과 짝이며 보간의 분모를 만든다.
+        public uint ChainStartTick { get; set; }
+
+        /// 견인이 끝나는 틱. 이 틱까지는 제단 쪽으로 끌려가는 중이다.
+        public uint ChainDragUntilTick { get; set; }
+
+        /// 체인이 놓아주는 틱. **이 틱에 탄창이 찬다.** 0 이면 체인에 걸려 있지 않다.
+        public uint ChainReleaseTick { get; set; }
+
+        /// 지금 체인에 걸려 있는가. 걸려 있는 동안 이동 입력이 무시되고 위치는 체인이 정한다.
+        public bool Chained => ChainReleaseTick != 0u;
 
         /// 열린 문간을 빠져나갔는가. 기획서 §3 의 탈출이다.
         ///

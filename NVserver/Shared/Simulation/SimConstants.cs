@@ -25,8 +25,16 @@ namespace NV.Shared.Simulation
         public const float EyeHeightRatio = 0.9f;
 
         // 이동
-        public const float MoveSpeed = 6.5f;
-        public const float SprintMultiplier = 1.45f;
+        //
+        // **클라이언트의 설계값이다.** 걷기 2.5, 달리기 5.0. 이 두 값은 취향이 아니라
+        // 다른 튜닝의 기준점이다 — 발소리 가청 거리(1.6m 에서 100%, 18m 에서 0), 살금
+        // 걸음 1.1, 3m 격자의 미로 폭, 걸음 애니메이션의 보폭이 전부 여기에 맞춰져 있다.
+        //
+        // 6.5/9.4 였고, 그것이 오프라인 씬(2.5/5.0)과 어긋나 있었다. 증상은 로비를 지나
+        // 매치에 들어가는 순간 캐릭터가 2.6배 빨라지는 것 — 같은 맵이 갑자기 좁아지고
+        // 발소리 거리가 무의미해진다.
+        public const float MoveSpeed = 2.5f;
+        public const float SprintMultiplier = 2f;
         public const float CrouchMultiplier = 0.5f;
         public const float GroundAcceleration = 60f;
         public const float AirAcceleration = 12f;

@@ -6,9 +6,15 @@ namespace NV.Client.Net.Session
 {
     /// 세션 단계에 따라 씬을 오간다. 세션 오브젝트에 붙어 씬보다 오래 산다.
     ///
-    /// 로비에서 들어온 경우에만 존재한다(`MainLobbyController` 가 붙인다). 개발용 씬에서
-    /// 바로 시작한 경우에는 돌아갈 로비가 없으므로 이 컴포넌트도 없다 — 있으면
-    /// MultiplayerTest 를 열자마자 대기 상태를 보고 로비로 튕겨 버린다.
+    /// **로비 흐름의 씬에만 존재한다** — 메인 로비와 대기방이 <see cref="EnsureOn"/> 로
+    /// 붙인다. 개발용 씬(`MultiplayerTest`·`SampleScene`)에서 바로 시작한 경우에는 돌아갈
+    /// 로비가 없으므로 이 컴포넌트도 없다 — 있으면 그 씬을 열자마자 대기 상태를 보고 로비로
+    /// 튕겨 버린다.
+    ///
+    /// **대기방도 붙여야 한다.** 붙이는 곳이 메인 로비뿐이던 동안, `GameLobby.unity` 를 열고
+    /// 바로 Play 하면 세션이 `Idle` 인 채로 대기방이 서고 — 아무도 없는 빈 스탠드 여덟 개다 —
+    /// LEAVE 는 `Leave()` 를 불러 이미 `Idle` 인 상태를 다시 `Idle` 로 만들 뿐이라 화면이
+    /// 바뀌지 않는다. 나가는 문이 없는 방이 되고, 증상은 "방에 사람이 없고 나올 수도 없다" 다.
     ///
     /// 어느 씬을 열지는 룸의 맵으로 정한다. 서버가 룸마다 다른 맵을 물릴 수 있고,
     /// 클라이언트가 그 맵과 다른 씬을 열면 증상이 맵 해시 불일치 하나로만 나타난다.
@@ -34,6 +40,20 @@ namespace NV.Client.Net.Session
 
         /// 대기방 씬을 열 수 없다고 이미 말했는가. 같은 오류를 프레임마다 쌓지 않기 위한 것이다.
         private bool _gameLobbyMissing;
+
+        /// 이 세션에 라우터가 붙어 있게 한다. 로비 흐름의 씬이 저마다 부른다.
+        ///
+        /// 판정을 한 곳에 둔다. 씬마다 따로 적으면 한 씬이 빠뜨렸을 때 그 씬만 나가는 문이
+        /// 없는 방이 되고, 그것은 예외도 로그도 없이 "버튼이 안 먹는다" 로만 보인다.
+        public static void EnsureOn(NetSession session)
+        {
+            if (session == null || session.GetComponent<SessionSceneRouter>() != null)
+            {
+                return;
+            }
+
+            session.gameObject.AddComponent<SessionSceneRouter>();
+        }
 
         private void Awake()
         {

@@ -134,7 +134,29 @@ namespace NV.Client.Net
 
             PrecomputeMapHash();
 
+            EnsureAppearanceSync();
+
             Bind();
+        }
+
+        /// 명단의 캐릭터를 몸에 입히는 다리를 세운다.
+        ///
+        /// 여기서 만드는 이유는 **원격 몸을 이 컴포넌트가 만들기 때문**이다. 매치 레이어가
+        /// 없는 씬(`MultiplayerTest`)에도 몸은 있고, 로비에서 고른 캐릭터는 거기서도 보여야
+        /// 한다 — `MatchBootstrap` 에 매달면 그 씬에서는 아무도 옷을 입지 않는다.
+        ///
+        /// 씬에 미리 두지 않는다. 이 프로젝트의 규칙대로 씬은 거의 비어 있고, 어떤 메뉴를
+        /// 돌렸는지에 동작이 달라지지 않아야 한다.
+        private void EnsureAppearanceSync()
+        {
+            if (FindFirstObjectByType<Session.AppearanceSync>() != null)
+            {
+                return;
+            }
+
+            var go = new GameObject("Appearance Sync");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<Session.AppearanceSync>();
         }
 
         /// 맵 해시를 **미리** 계산한다.
@@ -182,6 +204,16 @@ namespace NV.Client.Net
             _client.WelcomeReceived += OnWelcome;
             _client.Ended += OnEnded;
             _client.FireObserved += OnFireObserved;
+
+            // **Welcome 은 대개 이미 지나갔다.** 접속하는 것은 로비이고 이 컴포넌트는 게임 씬에서
+            // 만들어지므로, 구독만 해 두면 이 씬에서는 그 이벤트가 다시 오지 않는다 — 맵 해시
+            // 검사가 통째로 건너뛰어지고 상태는 "미확인" 으로 남는다. 그 검사가 이 좌표계 커플링의
+            // 유일한 감시이며, 어긋났을 때의 증상은 "특정 위치에서만 캐릭터가 튐" 하나뿐이라
+            // 조용히 넘어가는 것이 가장 나쁘다. `OnWelcome` 은 `_mapHashChecked` 로 멱등하다.
+            if (_client.HasWelcome)
+            {
+                OnWelcome();
+            }
         }
 
         private void OnDestroy()

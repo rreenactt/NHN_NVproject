@@ -75,6 +75,23 @@ namespace NV.Shared.Collision
             return ((floor * Depth) + z) * Width + x;
         }
 
+        /// `Cells` 인덱스 → 격자 좌표. <see cref="CellIndex"/> 의 역이다.
+        ///
+        /// **역도 여기에 둔다.** 경로 탐색이 셀 번호로 큐를 돌리고 좌표로 되돌려야 하는데,
+        /// 그쪽에서 나누기를 다시 적으면 순서가 어긋날 자리가 하나 더 생긴다 — 그리고 그
+        /// 어긋남은 위의 주석대로 크기도 해시도 맞은 채 격자만 90도 돌아간 모습으로 나타난다.
+        public void CellCoords(int cell, out int floor, out int x, out int z)
+        {
+            var perFloor = Width * Depth;
+
+            floor = cell / perFloor;
+
+            var rest = cell - (floor * perFloor);
+
+            z = rest / Width;
+            x = rest - (z * Width);
+        }
+
         public bool InBounds(int floor, int x, int z)
         {
             return floor >= 0 && floor < Floors

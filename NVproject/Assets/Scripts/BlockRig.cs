@@ -82,6 +82,19 @@ public class BlockRig : MonoBehaviour
     public float HipHeight { get; private set; }
 
     /// <summary>
+    /// Edge of the head cube, in metres. Anything worn on the head sizes itself from this rather
+    /// than from a constant, so headgear still fits if the figure's proportions are retuned.
+    /// </summary>
+    public float HeadSize { get; private set; }
+
+    /// <summary>
+    /// Have the blocks been made yet? The rig builds in <c>Awake</c>, but anything that dresses the
+    /// body can arrive first — a networked body is painted from a roster bulletin that may land on
+    /// the same frame the puppet is created.
+    /// </summary>
+    public bool IsBuilt => _built;
+
+    /// <summary>
     /// Downward shim that plants the feet on the floor. A CharacterController comes to rest
     /// its own <c>skinWidth</c> above the ground, so a body hung straight off the transform
     /// floats by exactly that much — 8 cm with Unity's default, which is plainly visible.
@@ -110,6 +123,7 @@ public class BlockRig : MonoBehaviour
         Vector3 torsoSize = new Vector3(8f, 12f, 4f) * px;
         Vector3 limbSize = new Vector3(4f, 12f, 4f) * px;
         Vector3 headSize = new Vector3(8f, 8f, 8f) * px;
+        HeadSize = headSize.x;
 
         var capsule = GetComponent<CharacterController>();
         GroundOffset = capsule != null ? capsule.skinWidth : 0f;

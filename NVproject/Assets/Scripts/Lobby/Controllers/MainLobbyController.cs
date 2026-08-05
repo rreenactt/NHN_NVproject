@@ -45,13 +45,10 @@ namespace NV.Client.Lobby.Controllers
             _session = NetSession.Current;
             _session.StateChanged += OnSessionChanged;
 
-            // 로비에서 들어왔을 때만 씬 이동을 붙인다. 개발용 씬에서 바로 시작한
-            // 경우에는 돌아갈 로비가 없다 — 붙어 있으면 그 씬을 열자마자 대기 상태를
-            // 보고 로비로 튕겨 버린다.
-            if (_session.GetComponent<SessionSceneRouter>() == null)
-            {
-                _session.gameObject.AddComponent<SessionSceneRouter>();
-            }
+            // 로비 흐름의 씬에서만 씬 이동을 붙인다. 개발용 씬에서 바로 시작한 경우에는
+            // 돌아갈 로비가 없다 — 붙어 있으면 그 씬을 열자마자 대기 상태를 보고 로비로
+            // 튕겨 버린다. 대기방도 같은 이유로 스스로 붙인다.
+            SessionSceneRouter.EnsureOn(_session);
         }
 
         private void OnDisable()

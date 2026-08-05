@@ -62,6 +62,12 @@ namespace NV.Game
             GameConfig config = match != null ? match.Config : null;
             if (config == null) yield break;
 
+            // **누가 몸을 옮기는가.** 서버가 전투를 판정하는 매치에서는 견인도 서버의 것이다
+            // (`Room.StepChain`) — 여기서 `Teleport` 를 부르면 다음 스냅샷이 그것을 되돌리고,
+            // 증상은 Seeker 가 제단 쪽으로 끌리다 말고 튕겨 돌아오는 것이다. 그때 이 컴포넌트가
+            // 하는 일은 체인을 그리는 것뿐이고, 몸은 서버가 보내는 위치를 따라간다.
+            bool serverDriven = match.ServerOwnsCombat;
+
             Active = true;
             agent?.SetChained(true);
             if (weapon != null) weapon.FireBlocked = true;
@@ -81,6 +87,46 @@ namespace NV.Game
             float length = _routeLength;
             float travel = Mathf.Clamp(length / Mathf.Max(1f, config.chainDragSpeed),
                                        config.chainDragTime, config.chainDragMaxTime);
+
+            if (serverDriven)
+            {
+                // 체인이 끝나는 시점도 서버가 정한다. 여기서 로컬 타이머로 끝내면 서버가 아직
+                // 끌고 가는 중인데 화면에서만 풀려 — 조작이 돌아온 것처럼 보이다가 다음
+                // 스냅샷에 다시 묶인다. 서버가 놓아주는 신호는 **탄창이 다시 찬 것**이다
+                // (`Room.StepChain` 이 해제 틱에 그것 하나를 한다).
+                //
+                // 상한을 둔다. 신호가 오지 않는 경우(매치가 끝났다, 소켓이 끊겼다)에 영원히
+                // 묶인 채로 남는 것이 가장 나쁘다.
+                float deadline = travel + config.chainWait + 5f;
+
+                for (float t = 0f; t < deadline; t += Time.deltaTime)
+                {
+                    // 몸은 서버가 옮긴다. 체인은 지금 몸이 있는 곳에서 제단까지 다시 그린다.
+                    UpdateChain(NearestSegment(transform.position), transform.position);
+
+                    Remaining = Mathf.Max(0f, (travel + config.chainWait) - t);
+
+                    if (weapon != null && weapon.Ammo > 0)
+                    {
+                        break;
+                    }
+
+                    yield return null;
+                }
+
+                Remaining = 0f;
+                DestroyChain();
+                agent?.SetChained(false);
+
+                // **재장전하지 않는다.** 탄창은 서버가 채우고 `MatchSync` 가 `AcceptAmmo` 로
+                // 넘긴다. 여기서 `ForceReload` 를 부르면 로컬로 3발이 생겼다가 0.5초 뒤
+                // 전문이 그것을 되돌린다.
+                if (weapon != null) weapon.FireBlocked = false;
+
+                Active = false;
+                _routine = null;
+                yield break;
+            }
 
             // Collision stays off for the haul. The route is walkable by construction, but the
             // corners hug wall edges and a CharacterController scraping them at 26 m/s would
@@ -237,6 +283,37 @@ namespace NV.Game
 
             for (int i = 1; i < _route.Length; i++)
                 _routeLength += Vector3.Distance(_route[i - 1], _route[i]);
+        }
+
+        /// <summary>
+        /// Which corner of the route the body has been hauled past, judged from where the body
+        /// actually is.
+        ///
+        /// The offline haul knows this for free — it *is* the thing walking the route, so it hands
+        /// the segment index straight to <see cref="UpdateChain"/>. Server-driven, the body arrives
+        /// as a stream of positions with no index attached, so the chain has to work out how much
+        /// of itself has been reeled in. Nearest corner is enough: the route's corners are metres
+        /// apart and the chain only needs to lose a bend at roughly the right moment.
+        /// </summary>
+        private int NearestSegment(Vector3 position)
+        {
+            if (_route == null || _route.Length < 2) return 0;
+
+            int best = 0;
+            float bestDistance = float.MaxValue;
+
+            // The last corner is the landing spot; the chain should still draw one link to the
+            // ring when the body is standing on it, so the search stops one short.
+            for (int i = 0; i < _route.Length - 1; i++)
+            {
+                float distance = (_route[i] - position).sqrMagnitude;
+                if (distance >= bestDistance) continue;
+
+                bestDistance = distance;
+                best = i;
+            }
+
+            return best;
         }
 
         /// <summary>Walks the route to find the point a given distance along it.</summary>

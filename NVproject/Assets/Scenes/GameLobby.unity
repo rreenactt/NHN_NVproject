@@ -149,7 +149,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NV.Client.Lobby.GameLobby.GameLobbyBootstrap
   slotSpacing: 1.35
-  fallbackCapacity: 8
+  fallbackCapacity: 5
 --- !u!4 &1796747679
 Transform:
   m_ObjectHideFlags: 0

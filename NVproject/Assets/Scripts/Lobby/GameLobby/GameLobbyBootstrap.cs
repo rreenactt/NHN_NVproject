@@ -56,6 +56,14 @@ namespace NV.Client.Lobby.GameLobby
         {
             _session = NetSession.Current;
 
+            // **나가는 문.** 라우터가 없으면 이 씬은 들어올 수는 있어도 나갈 수 없는 방이다 —
+            // LEAVE 는 세션을 `Idle` 로 만들 뿐이고, 씬을 바꾸는 것은 라우터의 일이다.
+            //
+            // 붙이는 곳이 메인 로비뿐이던 동안, `GameLobby.unity` 를 열고 바로 Play 하면
+            // 접속하지 않은 채 빈 스탠드만 서고 LEAVE 가 먹지 않았다. 대기방은 개발용 씬이
+            // 아니라 로비 흐름의 일부이므로 스스로 붙이는 것이 맞다.
+            SessionSceneRouter.EnsureOn(_session);
+
             // 로비는 서 있는 방이므로 포인터는 플레이어의 것이다.
             //
             // 이름을 다 적는다. `UnityEngine.UIElements` 에도 `Cursor` 가 있고, UI Toolkit 을
@@ -82,11 +90,10 @@ namespace NV.Client.Lobby.GameLobby
 
         private void Update()
         {
-            if (_session == null)
-            {
-                _session = NetSession.Current;
-                return;
-            }
+            // `_session` 을 여기서 다시 잡지 않는다. `NetSession.Current` 는 없으면 만들므로
+            // `Awake` 가 null 을 받는 길이 없고, 여기서 다시 잡는 가지는 **구독을 건너뛴다** —
+            // `OnEnable` 은 이미 지나갔으므로 `StateChanged` 가 붙지 않은 채 필드만 채워지고,
+            // 명단이 와도 줄이 그려지지 않는 방이 된다.
 
             // 정원은 참가 전 조회로 오므로 씬이 열린 뒤에 정해질 수 있다. 바뀌면 줄을 다시 세운다.
             var capacity = Capacity();
