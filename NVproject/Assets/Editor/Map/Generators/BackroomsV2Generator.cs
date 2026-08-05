@@ -21,7 +21,7 @@ namespace NV.Client.EditorTools.Generators
     /// cannot touch anything can never close a pocket, so no fill can undo what the spanning tree
     /// promised.
     /// </summary>
-    public sealed class BackroomsV2Generator : IMapGenerator
+    public sealed class BackroomsV2Generator : IMapGenerator, IMapSceneDecorator
     {
         public string DisplayName => "Backrooms V2";
 
@@ -41,6 +41,24 @@ namespace NV.Client.EditorTools.Generators
             }
 
             return new Solver(v2).Run();
+        }
+
+        /// <summary>
+        /// Puts the mood on the baked root so it ships inside the prefab. Plain
+        /// <c>AddComponent</c>, no <c>Undo</c> — an undo registration inside a bake gets rolled
+        /// back wholesale if anything after it errors, leaving a half-decorated prefab.
+        /// </summary>
+        public void Decorate(GameObject root, MapBlueprint blueprint)
+        {
+            if (root == null) return;
+
+            var ambience = root.GetComponent<BackroomsV2Ambience>();
+            if (ambience == null) ambience = root.AddComponent<BackroomsV2Ambience>();
+
+            if (blueprint != null && blueprint.Palette.TryGetValue(MapSurface.LightPanel, out var colour))
+            {
+                ambience.lightColor = colour;
+            }
         }
 
         /// <summary>
