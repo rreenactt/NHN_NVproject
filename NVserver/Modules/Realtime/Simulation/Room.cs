@@ -1901,8 +1901,26 @@ namespace NV.Realtime.Simulation
 
         private void Leave(int sessionId, byte playerId)
         {
-            _players.Remove(sessionId);
-            ReleaseSlot(playerId);
+            // **한 세션에 두 번 올 수 있다.** 강제 퇴장이 여기를 부르고, 그 뒤 실제로 소켓이
+            // 닫히면 접속 경로의 `finally` 가 같은 세션의 퇴장을 한 번 더 붙인다.
+            //
+            // 두 번째 호출이 슬롯을 그냥 반납하면 **그 사이에 들어온 사람의 번호를 푼다** —
+            // 강제 퇴장과 소켓 종료 사이는 한 틱이 아니라 회선이 정리되는 시간이고, 그 동안
+            // 새 클라이언트가 방금 빈 번호를 받을 수 있다. 그러면 다음에 들어온 사람이 같은
+            // 번호를 또 받아 한 룸에 같은 `PlayerId` 가 둘이 된다.
+            //
+            // 그래서 **지금 그 번호를 쓰는 사람이 없을 때만** 반납한다. 명단에 없는 세션의
+            // 퇴장도 그냥 무시할 수는 없다 — 예약은 접속 스레드가 하고 `Join` 은 다음 틱에
+            // 적용되므로, `Join` 이 거부된 경우 이 경로가 슬롯을 되돌리는 유일한 길이다.
+            if (_players.TryGetValue(sessionId, out var leaving))
+            {
+                _players.Remove(sessionId);
+                ReleaseSlot(leaving.PlayerId);
+            }
+            else if (FindByPlayerId(playerId) == null)
+            {
+                ReleaseSlot(playerId);
+            }
 
             for (var index = _heldInputs.Count - 1; index >= 0; index--)
             {

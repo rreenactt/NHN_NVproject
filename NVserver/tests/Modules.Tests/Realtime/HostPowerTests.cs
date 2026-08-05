@@ -124,6 +124,42 @@ namespace NV.Modules.Tests.Realtime
             Assert.Empty(transport.Disconnected);
         }
 
+        /// **강제 퇴장은 퇴장을 두 번 만든다.** 룸이 명단에서 빼고, 그 뒤 실제로 소켓이 닫히면
+        /// 접속 경로가 같은 세션의 퇴장을 한 번 더 붙인다.
+        ///
+        /// 두 번째 호출이 슬롯을 그냥 반납하면 그 사이에 들어온 사람의 번호를 푼다 — 그러면
+        /// 다음에 들어온 사람이 같은 번호를 또 받아 한 룸에 같은 `PlayerId` 가 둘이 된다.
+        [Fact]
+        public void 강제_퇴장_뒤_늦은_퇴장이_남의_슬롯을_풀지_않는다()
+        {
+            var room = RoomFixture.Create();
+
+            // **둘 다 슬롯을 예약해서 넣는다.** 손으로 `PlayerId` 를 정하면 예약되지 않은
+            // 슬롯이 남아, 뒤에 예약으로 들어오는 쪽이 이미 쓰이는 번호를 집는다 — 이 테스트가
+            // 확인하려는 것이 바로 번호 충돌이므로 설정에서 그것을 만들면 안 된다.
+            RoomFixture.JoinHuman(room, 1, isHost: true);
+            var kicked = RoomFixture.JoinHuman(room, 2);
+            room.Advance();
+
+            room.PostCommand(RoomCommand.Kick(1, kicked));
+            room.Advance();
+
+            // 슬롯이 풀렸으므로 새 클라이언트가 그 번호를 받는다.
+            var replacement = RoomFixture.JoinHuman(room, 3);
+            room.Advance();
+
+            Assert.Equal(kicked, replacement);
+
+            // 이제 내보내진 쪽의 소켓이 닫힌다. 접속 경로가 옛 세션·옛 슬롯으로 퇴장을 붙인다.
+            room.PostCommand(RoomCommand.Leave(2, kicked));
+            room.Advance();
+
+            // 새 사람은 그대로 있어야 하고, 그 번호는 아직 예약된 상태여야 한다.
+            Assert.Equal(2, room.PlayerCount);
+            Assert.True(room.TryReserveSlot(out var next), "남은 슬롯이 있어야 한다.");
+            Assert.NotEqual(replacement, next);
+        }
+
         // ==================================================== 방장 위임
 
         [Fact]
