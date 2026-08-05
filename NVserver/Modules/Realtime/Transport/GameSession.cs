@@ -182,54 +182,24 @@ namespace NV.Realtime.Transport
         /// 자격은 여기서 보지 않는다. 방장인지, 지금 단계에서 가능한 전이인지는
         /// 룸이 틱 경계에서 판단한다 — 그 판단에 필요한 상태를 틱 루프만 소유하므로
         /// 여기서 미리 걸러 봐야 한 틱 뒤의 진실과 어긋날 수 있다.
+        /// 제어 요청을 룸 커맨드로 옮긴다. 변환은 `ControlRouter` 가 한다.
+        ///
+        /// **여기에 두지 않는 이유는 시험할 수 없기 때문이다.** 이 클래스는 `WebSocket` 을 들고
+        /// 있어 소켓 없이 만들 수 없고, 그래서 변환이 여기 있던 동안 테스트가 닿지 않았다 —
+        /// 그 사이에 대기방 제어 넷이 조용히 버려지고 있었다.
+        ///
+        /// **거부를 `LogWarning` 으로 올린다.** `LogDebug` 였고, 그것이 넷이 죽은 것을 몇 번의
+        /// 세션 동안 숨겼다. 정상 동작에서는 나오지 않는 줄이므로 시끄러워질 이유가 없다 —
+        /// 나온다면 클라이언트와 서버의 버전이 어긋났다는 뜻이고, 그것은 알아야 하는 사실이다.
         private void DispatchControl(ReadOnlySpan<byte> payload, Room room, ILogger logger)
         {
-            ControlMessage message;
-
-            try
+            if (!ControlRouter.TryRoute(payload, SessionId, out var command, out var error))
             {
-                message = MessageCodec.ReadControl(payload);
-            }
-            catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
-            {
-                logger.LogDebug(exception, "세션 {SessionId}: 손상된 제어 메시지.", SessionId);
+                logger.LogWarning("세션 {SessionId}: 제어 메시지를 버렸다. {Error}", SessionId, error);
                 return;
             }
 
-            switch (message.Kind)
-            {
-                case ControlKind.StartMatch:
-                    room.PostCommand(RoomCommand.Start(SessionId));
-                    break;
-
-                case ControlKind.EndMatch:
-                    room.PostCommand(RoomCommand.EndMatch(SessionId, message.Value));
-                    break;
-
-                case ControlKind.ReturnToLobby:
-                    room.PostCommand(RoomCommand.ReturnToLobby(SessionId));
-                    break;
-
-                case ControlKind.SetReady:
-                    // 0 이 아니면 참으로 읽는다. 손상된 값을 거부하기보다 받아들이는 쪽이
-                    // 안전하다 — 준비는 되돌릴 수 있고, 거부하면 화면이 눌린 채로 남는다.
-                    room.PostCommand(RoomCommand.SetReady(SessionId, message.Value != 0));
-                    break;
-
-                case ControlKind.KickPlayer:
-                    room.PostCommand(RoomCommand.Kick(SessionId, message.Value));
-                    break;
-
-                case ControlKind.TransferHost:
-                    room.PostCommand(RoomCommand.TransferHost(SessionId, message.Value));
-                    break;
-
-                case ControlKind.SetCharacter:
-                    // 범위와 중복은 룸이 본다. 여기서 미리 거르면 한 틱 뒤의 진실과 어긋난다 —
-                    // 그 사이에 다른 사람이 같은 캐릭터를 집을 수 있다.
-                    room.PostCommand(RoomCommand.SetCharacter(SessionId, message.Value));
-                    break;
-            }
+            room.PostCommand(command);
         }
 
         private void DispatchInput(ReadOnlySpan<byte> payload, Room room, ILogger logger)
