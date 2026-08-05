@@ -1,7 +1,8 @@
 using System.Collections.Generic;
+using NV.Shared.Contracts.Messages;
 using UnityEngine;
 
-namespace NV.Lobby
+namespace NV.Client.Lobby
 {
     /// <summary>How a figure stands about. One per character, so no two people in the row move alike.</summary>
     public enum IdleStyle
@@ -50,9 +51,14 @@ namespace NV.Lobby
     /// different beige. Eight complete looks, each with its own colours, silhouette and way of
     /// standing, means every figure in the row reads as somebody.
     ///
-    /// **One skin per person, and no two people may wear the same one.** That is enforced on the
-    /// authority (see <see cref="LobbyManager"/>), not in the UI — the UI only greys out what is
-    /// already taken.
+    /// **One skin per person, and no two people may wear the same one.** 그 판정은 서버에 있다
+    /// (`Room.SetCharacter`). 여기서 하는 일은 이미 쓰이는 것을 흐리게 그리는 것뿐이다.
+    ///
+    /// **목록의 순서가 와이어 값이다.** `RoomPlayerEntry.CharacterId` 가 이 목록의 인덱스이며,
+    /// 서버는 이름도 색도 모르고 개수(`ProtocolInfo.LobbyCharacterCount`)만 안다 — 그래야
+    /// 표현이 한 곳에만 있다. 그래서 **줄을 재배열하면 이미 접속한 클라이언트와 어긋난다.**
+    /// 새 캐릭터는 끝에 붙이고, 지울 때는 그 자리를 비워 둘 방법이 없으므로 개수 상수를
+    /// 함께 고친다.
     /// </summary>
     public static class LobbyCharacterCatalog
     {
@@ -73,7 +79,24 @@ namespace NV.Lobby
 
         public static int Count => All.Count;
 
-        private static List<Character> Build() => new List<Character>
+        private static List<Character> Build()
+        {
+            var all = Characters();
+
+            // 개수는 와이어의 값이다. 서버가 이 상수로 범위를 검사하므로, 표가 더 길면
+            // 고를 수 있게 그려 놓고 서버가 거부하는 캐릭터가 생기고, 짧으면 남이 입은
+            // 캐릭터를 그릴 수 없다. 둘 다 화면에서만 이상하게 보인다.
+            if (all.Count != ProtocolInfo.LobbyCharacterCount)
+            {
+                Debug.LogError(
+                    $"[Lobby] 캐릭터 표가 {all.Count}개인데 프로토콜은 "
+                    + $"{ProtocolInfo.LobbyCharacterCount}개다. 둘을 맞춘다.");
+            }
+
+            return all;
+        }
+
+        private static List<Character> Characters() => new List<Character>
         {
             new Character
             {
@@ -142,5 +165,27 @@ namespace NV.Lobby
 
         /// <summary>Server-side validation: is this even a character?</summary>
         public static bool IsValid(string id) => Find(id) != null;
+
+        // ==================================================== 와이어 값으로 다루기
+
+        /// 와이어의 캐릭터 번호가 이 표에 있는가. `RoomPlayerEntry.NoCharacter` 는 거짓이다.
+        public static bool IsValidId(byte characterId) => characterId < All.Count;
+
+        /// 번호로 찾는다. 범위를 벗어나면 null — 미배정과 모르는 번호를 같게 다룬다.
+        ///
+        /// 예외를 던지지 않는다. 서버가 이 빌드보다 캐릭터가 많은 표를 쓸 수 있고, 그때는
+        /// "그 캐릭터를 모른다" 를 화면에 말해야 한다.
+        public static Character At(byte characterId)
+        {
+            return IsValidId(characterId) ? All[characterId] : null;
+        }
+
+        /// 명단에 쓰는 짧은 이름. 모르는 번호는 빈 문자열이다.
+        public static string LabelOf(byte characterId)
+        {
+            Character character = At(characterId);
+
+            return character != null ? character.label : string.Empty;
+        }
     }
 }

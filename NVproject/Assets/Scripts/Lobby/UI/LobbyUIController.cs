@@ -134,6 +134,10 @@ namespace NV.Client.Lobby.UI
             _events.ProfileChanged -= RefreshProfile;
             _events.ToastRequested -= OnToast;
 
+            // 대기방은 씬 오브젝트(미리보기 카메라·렌더 텍스처)를 들고 있다. 트리만 버리면
+            // 그것들이 씬에 남아 도메인 리로드마다 하나씩 늘어난다.
+            GameLobby?.Dispose();
+
             Toasts.Clear();
             Popups.CloseAll();
             Loading.Reset();

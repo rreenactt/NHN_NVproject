@@ -64,6 +64,8 @@ namespace NV.Client.Lobby.UI
             _start = Root.Q<Button>("room-start");
             _ready = Root.Q<Button>("room-ready");
 
+            Characters = new CharacterPickerView(Root);
+
             var copyCode = Root.Q<Button>("room-copy-code");
             var copyLink = Root.Q<Button>("room-copy-link");
             var leave = Root.Q<Button>("room-leave");
@@ -102,6 +104,9 @@ namespace NV.Client.Lobby.UI
         }
 
         public VisualElement Root { get; }
+
+        /// 캐릭터 칸. 페이지의 한 칸이므로 이 뷰가 갱신을 함께 돌린다.
+        public CharacterPickerView Characters { get; }
 
         /// 버튼이 무엇을 하는지는 뷰가 정하지 않는다. `GameLobbyController` 가 채운다 —
         /// 뷰가 세션을 직접 부르기 시작하면 화면 흐름이 뷰 수만큼 흩어진다.
@@ -151,8 +156,18 @@ namespace NV.Client.Lobby.UI
 
             RefreshRoster();
             RefreshButtons();
+            Characters?.Refresh(_session);
 
             _note.text = StartNote();
+        }
+
+        /// 화면 트리를 버리기 전에 부른다.
+        ///
+        /// 캐릭터 미리보기의 카메라와 렌더 텍스처는 `VisualElement` 와 달리 도메인 리로드를
+        /// 넘어 씬에 남는다. 치우지 않으면 리로드마다 무대가 하나씩 늘어난다.
+        public void Dispose()
+        {
+            Characters?.Dispose();
         }
 
         /// 시작·준비 버튼의 모양.
@@ -251,6 +266,12 @@ namespace NV.Client.Lobby.UI
                     : entry.Name);
                 name.AddToClassList("roster-name");
                 row.Add(name);
+
+                // 어떤 캐릭터를 입었는지 명단에 쓴다. 미리보기는 자기 것 하나뿐이므로,
+                // 남이 무엇을 골랐는지 알 수 있는 자리가 이 줄밖에 없다.
+                var character = new Label(LobbyCharacterCatalog.LabelOf(entry.CharacterId));
+                character.AddToClassList("roster-character");
+                row.Add(character);
 
                 var tag = new Label(Tag(entry, client, isSelf));
                 tag.AddToClassList("roster-tag");

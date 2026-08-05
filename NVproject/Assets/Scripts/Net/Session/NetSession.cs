@@ -370,6 +370,16 @@ namespace NV.Client.Net.Session
             return Client != null && Client.SendControl(ControlKind.SetReady, ready ? (byte)1 : (byte)0);
         }
 
+        /// 캐릭터를 고른다. 범위와 중복은 서버가 본다.
+        ///
+        /// 결과를 기다리지 않는다. 거부되면 다음 명단 전문이 여전히 전에 입던 것을 말해 주고,
+        /// 화면은 그것을 그린다 — 실패 알림을 따로 만들면 그것은 놓칠 수 있는 한 번짜리
+        /// 메시지가 된다.
+        public bool SetCharacter(byte characterId)
+        {
+            return Client != null && Client.SendControl(ControlKind.SetCharacter, characterId);
+        }
+
         /// 방장으로서 매치 시작을 요청한다. 자격과 인원은 서버가 다시 본다.
         public bool RequestStart()
         {

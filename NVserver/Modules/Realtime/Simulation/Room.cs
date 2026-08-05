@@ -1667,6 +1667,10 @@ namespace NV.Realtime.Simulation
                     case RoomCommandKind.SetReady:
                         SetReady(command.SessionId, command.Value != 0);
                         break;
+
+                    case RoomCommandKind.SetCharacter:
+                        SetCharacter(command.SessionId, command.Value);
+                        break;
                 }
             }
         }
@@ -1917,6 +1921,56 @@ namespace NV.Realtime.Simulation
             }
 
             player.Ready = ready;
+            _stateDirty = true;
+        }
+
+        /// 참가자가 캐릭터를 골랐다.
+        ///
+        /// **중복을 거부하는 것이 이 함수의 존재 이유다.** 두 클라이언트가 같은 틱에 같은
+        /// 캐릭터를 고를 수 있고, 그중 하나만 입을 수 있다. 먼저 처리된 쪽이 갖고 나중은
+        /// 무시된다 — 슬롯 다툼과 같은 규칙이다.
+        ///
+        /// 거부를 따로 알리지 않는다. 명단 전문이 2Hz 로 진실을 계속 보내므로, 요청이
+        /// 거부된 클라이언트는 다음 전문에서 자기가 여전히 전에 입던 것을 입고 있는 것을
+        /// 본다. 거부 알림을 만들면 그것은 놓칠 수 있는 한 번짜리 메시지가 된다(ADR 0003).
+        ///
+        /// 대기 단계에서만 받는다. 매치 중에 외형이 바뀌면 원격 몸이 매치 중간에 갈아입는다.
+        private void SetCharacter(int sessionId, byte characterId)
+        {
+            if (Phase != RoomPhase.Waiting || !_players.TryGetValue(sessionId, out var player))
+            {
+                return;
+            }
+
+            if (characterId >= ProtocolInfo.LobbyCharacterCount)
+            {
+                _logger.LogDebug(
+                    "룸 {RoomId} 세션 {SessionId}: 캐릭터 번호 {CharacterId} 가 범위를 벗어났다.",
+                    RoomId,
+                    sessionId,
+                    characterId);
+                return;
+            }
+
+            if (player.CharacterId == characterId)
+            {
+                return;
+            }
+
+            var owner = WearerOf(characterId);
+
+            if (owner != null)
+            {
+                _logger.LogDebug(
+                    "룸 {RoomId} 세션 {SessionId}: 캐릭터 {CharacterId} 는 플레이어 {OwnerId} 가 입고 있다.",
+                    RoomId,
+                    sessionId,
+                    characterId,
+                    owner.PlayerId);
+                return;
+            }
+
+            player.CharacterId = characterId;
             _stateDirty = true;
         }
 

@@ -26,6 +26,7 @@ namespace NV.Client.Lobby.Controllers
 
             _ui.GameLobby.OnStart = Start;
             _ui.GameLobby.OnToggleReady = ToggleReady;
+            _ui.GameLobby.Characters.OnPick = PickCharacter;
             _ui.GameLobby.OnLeave = Leave;
         }
 
@@ -88,6 +89,13 @@ namespace NV.Client.Lobby.Controllers
         private void ToggleReady(bool ready)
         {
             _session.SetReady(ready);
+        }
+
+        /// 캐릭터를 요청한다. 범위와 중복은 서버가 본다 — 거부되면 다음 명단 전문이 여전히
+        /// 전에 입던 것을 말해 준다.
+        private void PickCharacter(byte characterId)
+        {
+            _session.SetCharacter(characterId);
         }
 
         private void Leave()

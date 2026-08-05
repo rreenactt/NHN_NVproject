@@ -52,6 +52,21 @@
                 <ui:VisualElement name="room-roster" class="roster roster-grow" />
             </ui:VisualElement>
 
+            <!--
+                캐릭터는 팝업이 아니라 페이지의 한 칸이다. 팝업으로 만들면 열려 있는 동안
+                남이 집어 가는 것을 반영하려고 갱신 신호를 팝업까지 끌어와야 하는데, 페이지
+                안에 있으면 명단 전문이 오는 주기에 함께 다시 그려진다.
+            -->
+            <ui:VisualElement class="panel room-character-panel">
+                <ui:Label class="panel-title" text="CHARACTER" />
+
+                <ui:VisualElement name="character-preview" class="character-preview" />
+
+                <ui:ScrollView name="character-list" class="character-list" />
+
+                <ui:Label name="character-note" class="hint" />
+            </ui:VisualElement>
+
             <ui:VisualElement class="panel room-actions">
                 <ui:Label class="panel-title" text="MATCH" />
 

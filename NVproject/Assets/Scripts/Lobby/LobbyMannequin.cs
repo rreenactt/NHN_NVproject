@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace NV.Lobby
+namespace NV.Client.Lobby
 {
     /// <summary>
     /// The figure standing in a stand. Blocks, built in code, in the same proportions as the

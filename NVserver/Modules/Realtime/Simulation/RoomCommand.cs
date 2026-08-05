@@ -25,6 +25,9 @@ namespace NV.Realtime.Simulation
 
         /// 참가자가 준비를 켜거나 껐다. `Value` 가 0 또는 1 이다.
         SetReady = 6,
+
+        /// 참가자가 캐릭터를 골랐다. `Value` 가 캐릭터 번호다.
+        SetCharacter = 7,
     }
 
     /// HTTP·WebSocket 스레드가 룸 상태를 직접 바꾸지 않고 큐에 넣는 단위.
@@ -98,6 +101,17 @@ namespace NV.Realtime.Simulation
                 sessionId,
                 0,
                 ready ? (byte)1 : (byte)0,
+                string.Empty,
+                false);
+        }
+
+        public static RoomCommand SetCharacter(int sessionId, byte characterId)
+        {
+            return new RoomCommand(
+                RoomCommandKind.SetCharacter,
+                sessionId,
+                0,
+                characterId,
                 string.Empty,
                 false);
         }

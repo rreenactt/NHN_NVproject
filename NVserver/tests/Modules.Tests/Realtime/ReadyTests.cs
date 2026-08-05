@@ -243,36 +243,9 @@ namespace NV.Modules.Tests.Realtime
         }
 
         /// 명단 전문에서 이 세션의 준비 상태를 읽는다.
-        ///
-        /// 룸의 내부를 들여다보지 않는다 — 전문이 진실이고, 화면이 읽는 것도 그것이다.
         private static bool ReadyOf(Room room, int sessionId)
         {
-            var transport = new RecordingTransport();
-            room.Broadcast(transport);
-
-            // 전문은 변경이 없으면 주기가 될 때까지 나가지 않는다. 이 룸의 명단은 방금
-            // 바뀌었거나 주기가 지났으므로 한 번의 `Broadcast` 로 잡히지만, 잡히지 않으면
-            // 그것이 실패다 — 조용히 거짓을 돌려주지 않는다.
-            Assert.True(
-                transport.TryLastRoomState(sessionId, out _, out var roster),
-                "명단 전문이 나가지 않았다.");
-
-            foreach (var entry in roster)
-            {
-                if (entry.PlayerId == PlayerIdOf(room, sessionId))
-                {
-                    return entry.IsReady;
-                }
-            }
-
-            Assert.Fail("명단에 그 세션이 없다.");
-            return false;
-        }
-
-        /// 세션 id 에서 슬롯 번호로. 테스트가 `Join` 에 손으로 넘긴 값과 같은 규칙이다.
-        private static byte PlayerIdOf(Room room, int sessionId)
-        {
-            return (byte)(sessionId - 1);
+            return RoomFixture.EntryOf(room, sessionId).IsReady;
         }
     }
 }

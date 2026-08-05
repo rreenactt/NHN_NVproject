@@ -2,6 +2,11 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
+
+// 캐릭터 표는 새 로비(NV.Client.Lobby)로 옮겼다. 이 파일들은 서버 연동 대기방으로
+// 대체되며 함께 지워진다 — NVserver/docs/game-lobby-plan.md 7.1 절.
+using NV.Client.Lobby;
+
 namespace NV.Lobby
 {
     /// <summary>

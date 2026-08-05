@@ -215,6 +215,51 @@ namespace NV.Modules.Tests.Realtime
             }
         }
 
+        /// 이 세션에 간 최신 명단 전문의 명단. **나올 때까지 틱을 돌린다.**
+        ///
+        /// 전문은 변경이 있을 때 또는 주기(`RoomStateIntervalTicks`)마다 나간다. 그래서 한 번의
+        /// `Broadcast` 로는 잡히지 않을 수 있고, 특히 **같은 테스트에서 두 번째로 읽을 때** 그렇다 —
+        /// 첫 번째 읽기가 변경 플래그를 이미 소비했기 때문이다. 그것을 모른 채 한 번만 부르면
+        /// "전문이 안 나갔다" 가 규칙의 실패로 보인다.
+        ///
+        /// 룸의 내부를 들여다보지 않는 것이 이 헬퍼의 목적이다. 전문이 진실이고, 화면이 읽는
+        /// 것도 그것이다.
+        public static RoomPlayerEntry[] RosterOf(Room room, int sessionId)
+        {
+            for (var guard = 0; guard <= RealtimeConstants.Rooms.RoomStateIntervalTicks + 1; guard++)
+            {
+                var transport = new RecordingTransport();
+                room.Broadcast(transport);
+
+                if (transport.TryLastRoomState(sessionId, out _, out var roster))
+                {
+                    return roster;
+                }
+
+                room.Advance();
+            }
+
+            Assert.Fail($"세션 {sessionId} 에 명단 전문이 나가지 않았다.");
+            return Array.Empty<RoomPlayerEntry>();
+        }
+
+        /// 명단에서 이 세션의 줄. 세션 id 와 슬롯 번호의 관계는 `FillAndStart` 와 같은 규칙이다.
+        public static RoomPlayerEntry EntryOf(Room room, int sessionId)
+        {
+            var playerId = (byte)(sessionId - 1);
+
+            foreach (var entry in RosterOf(room, sessionId))
+            {
+                if (entry.PlayerId == playerId)
+                {
+                    return entry;
+                }
+            }
+
+            Assert.Fail($"명단에 세션 {sessionId}(슬롯 {playerId})이 없다.");
+            return default;
+        }
+
         /// 역할 공개가 끝날 때까지 틱을 돌린다.
         ///
         /// 스냅샷을 보내지 않는다(`Broadcast` 를 부르지 않는다) — 이 구간의 프레임까지

@@ -533,6 +533,94 @@
     flex-grow: 1;
 }
 
+.room-character-panel {
+    width: 300px;
+    margin-left: 18px;
+    flex-direction: column;
+}
+
+/*
+    미리보기. 배경 이미지는 런타임에 만든 렌더 텍스처이며(`CharacterPreview`), 카메라가
+    매 프레임 스스로 그리므로 idle 이 여기서 움직인다.
+*/
+.character-preview {
+    height: 210px;
+    margin-top: 6px;
+    margin-bottom: 10px;
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-color: rgb(78, 68, 40);
+    border-right-color: rgb(78, 68, 40);
+    border-top-color: rgb(78, 68, 40);
+    border-bottom-color: rgb(78, 68, 40);
+    background-color: rgb(14, 12, 8);
+}
+
+.character-list {
+    flex-grow: 1;
+}
+
+.character-item {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    border-left-width: 1px;
+    border-left-color: rgba(0, 0, 0, 0);
+}
+
+.character-item:hover {
+    background-color: rgba(201, 179, 107, 0.08);
+    border-left-color: rgb(168, 146, 78);
+}
+
+/* 지금 입고 있는 것. 목록에서 자기 줄을 세어 찾게 하지 않는다. */
+.character-item-mine {
+    border-left-color: rgb(255, 246, 214);
+    background-color: rgba(201, 179, 107, 0.12);
+}
+
+/* 남이 입은 것은 감추지 않고 흐리게 둔다. 감추면 8종 중 몇 종인지 알 수 없다. */
+.character-item-taken {
+    opacity: 0.42;
+}
+
+/* 색 조각이 이름보다 먼저 말한다. */
+.character-chip {
+    width: 18px;
+    height: 18px;
+    margin-right: 10px;
+    border-left-width: 2px;
+    border-right-width: 2px;
+    border-top-width: 2px;
+    border-bottom-width: 2px;
+}
+
+.character-name {
+    flex-grow: 1;
+    color: rgb(242, 231, 194);
+    font-size: 12px;
+    letter-spacing: 1px;
+}
+
+.character-state {
+    color: rgb(120, 104, 58);
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+
+/* 명단의 캐릭터 이름. 이름과 꼬리표 사이에 조용히 앉는다. */
+.roster-character {
+    color: rgb(120, 104, 58);
+    font-size: 10px;
+    letter-spacing: 1px;
+    margin-right: 12px;
+}
+
 /*
     준비 도장. 색으로 먼저 말한다 — 여덟 줄에서 준비한 사람을 글자로 세게 하면 안 된다.
     준비하지 않은 줄은 글자가 없고 자리만 남는다(줄이 흔들리지 않게).

@@ -180,6 +180,12 @@ namespace NV.Realtime.Transport
                     // 안전하다 — 준비는 되돌릴 수 있고, 거부하면 화면이 눌린 채로 남는다.
                     room.PostCommand(RoomCommand.SetReady(SessionId, message.Value != 0));
                     break;
+
+                case ControlKind.SetCharacter:
+                    // 범위와 중복은 룸이 본다. 여기서 미리 거르면 한 틱 뒤의 진실과 어긋난다 —
+                    // 그 사이에 다른 사람이 같은 캐릭터를 집을 수 있다.
+                    room.PostCommand(RoomCommand.SetCharacter(SessionId, message.Value));
+                    break;
             }
         }
 
