@@ -707,14 +707,43 @@ namespace NV.Shared.Serialization
             var kind = (ControlKind)reader.ReadByte();
             var value = reader.ReadByte();
 
-            if (kind != ControlKind.StartMatch
-                && kind != ControlKind.EndMatch
-                && kind != ControlKind.ReturnToLobby)
+            if (!IsDefinedControl(kind))
             {
                 throw new InvalidOperationException($"정의되지 않은 제어 종류다: {(byte)kind}");
             }
 
             return new ControlMessage(kind, value);
+        }
+
+        /// `ControlKind` 에 있는 종류인가.
+        ///
+        /// **이 목록은 `ControlKind` 와 함께 자란다.** 빠뜨리면 그 종류는 여기서 예외가 되고,
+        /// `GameSession.DispatchControl` 이 그것을 "손상된 제어 메시지" 로 삼켜 `LogDebug` 한
+        /// 줄만 남긴다 — 클라이언트는 보냈고 서버는 버렸으며 아무 곳에도 오류가 없다.
+        ///
+        /// 실제로 그렇게 잃었다. 준비·캐릭터·강제 퇴장·방장 위임 넷을 추가하면서 여기를 고치지
+        /// 않아, 룸의 판정은 전부 테스트로 통과하는데 화면에서는 아무 일도 일어나지 않았다.
+        /// 룸 테스트가 `RoomCommand` 를 직접 넣어 이 문을 지나지 않았기 때문에 잡히지 않았다.
+        ///
+        /// `Enum.IsDefined` 를 쓰지 않는다. `Shared` 는 IL2CPP 로도 컴파일되고 그 함수는
+        /// 리플렉션이다. 대신 **모든 값이 왕복하는지 검사하는 테스트**가 이 목록을 못질한다.
+        private static bool IsDefinedControl(ControlKind kind)
+        {
+            switch (kind)
+            {
+                case ControlKind.StartMatch:
+                case ControlKind.EndMatch:
+                case ControlKind.ReturnToLobby:
+                case ControlKind.SetReady:
+                case ControlKind.SetCharacter:
+                case ControlKind.KickPlayer:
+                case ControlKind.TransferHost:
+                    return true;
+
+                default:
+                    // `None`(0)과 비워 둔 2, 그리고 모르는 값. 전부 거부한다.
+                    return false;
+            }
         }
     }
 }

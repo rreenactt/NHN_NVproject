@@ -240,6 +240,59 @@ namespace NV.Modules.Tests.Serialization
             Assert.Equal(3, decoded.Value);
         }
 
+        /// 대기방의 네 종류가 **값을 잃지 않고** 건너가는가.
+        ///
+        /// 값을 흘리는 종류가 하나라도 있으면 증상이 조용하다 — 캐릭터 선택은 0번을 고른 것이
+        /// 되고, 강제 퇴장과 방장 위임은 0번 슬롯을 가리킨다. 그 셋 다 "눌렀는데 아무 일도
+        /// 없다" 또는 "엉뚱한 사람이 당한다" 로만 나타난다.
+        [Theory]
+        [InlineData(ControlKind.SetReady, 1)]
+        [InlineData(ControlKind.SetCharacter, 5)]
+        [InlineData(ControlKind.SetCharacter, 7)]
+        [InlineData(ControlKind.KickPlayer, 3)]
+        [InlineData(ControlKind.TransferHost, 4)]
+        public void 대기방_제어는_값을_그대로_싣는다(ControlKind kind, byte value)
+        {
+            var buffer = new byte[ControlMessage.WireSize];
+            var written = MessageCodec.WriteControl(buffer, new ControlMessage(kind, value));
+
+            var decoded = MessageCodec.ReadControl(buffer);
+
+            Assert.Equal(ControlMessage.WireSize, written);
+            Assert.Equal(kind, decoded.Kind);
+            Assert.Equal(value, decoded.Value);
+        }
+
+        /// **`ControlKind` 의 모든 값이 왕복해야 한다.**
+        ///
+        /// 이것이 놓친 것을 잡는 테스트다. `ReadControl` 은 아는 종류의 목록을 손으로 들고
+        /// 있는데, 종류를 넷 추가하면서 그 목록을 고치지 않아 넷 다 서버 문 앞에서 버려졌다 —
+        /// 룸의 판정은 테스트로 전부 통과했고(그 테스트들은 `RoomCommand` 를 직접 넣어 코덱을
+        /// 지나지 않는다) 화면에서는 아무 일도 일어나지 않았으며, 로그에는 `LogDebug` 한 줄뿐이었다.
+        ///
+        /// 그래서 목록을 여기서 다시 적지 않고 **열거형을 훑는다.** 값을 추가한 뒤 코덱을
+        /// 잊으면 이 테스트가 그 값의 이름을 대며 실패한다.
+        [Fact]
+        public void 모든_제어_종류가_왕복한다()
+        {
+            var buffer = new byte[ControlMessage.WireSize];
+
+            foreach (ControlKind kind in Enum.GetValues(typeof(ControlKind)))
+            {
+                if (kind == ControlKind.None)
+                {
+                    continue;
+                }
+
+                MessageCodec.WriteControl(buffer, new ControlMessage(kind, 7));
+
+                var decoded = MessageCodec.ReadControl(buffer);
+
+                Assert.Equal(kind, decoded.Kind);
+                Assert.Equal(7, decoded.Value);
+            }
+        }
+
         [Fact]
         public void 정의되지_않은_제어는_거부한다()
         {

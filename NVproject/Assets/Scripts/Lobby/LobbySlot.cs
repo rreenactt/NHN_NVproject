@@ -38,6 +38,11 @@ namespace NV.Lobby
         private MeshRenderer _plateRenderer;
         private Transform _mine;          // the "this one is you" marker
 
+        /// 지금 인형이 입고 있는 캐릭터. -1 은 아직 아무것도 입지 않았다는 뜻이다.
+        ///
+        /// `ApplyCharacter` 가 멱등이 아니기 때문에 필요하다 — 자세한 이유는 `Bind` 에 있다.
+        private int _appliedCharacter = -1;
+
         public static LobbySlot Spawn(int index, Vector3 position, Transform parent)
         {
             var go = new GameObject("Slot " + (index + 1));
@@ -111,10 +116,28 @@ namespace NV.Lobby
         /// <param name="characterId">카탈로그 인덱스. 범위를 벗어나면 옷을 갈아입히지 않는다.</param>
         public void Bind(int characterId, bool isReady, bool isLocal)
         {
-            if (_mannequin == null) _mannequin = LobbyMannequin.Spawn(transform, Index);
-
-            if (characterId >= 0 && characterId < LobbyCharacterCatalog.Count)
+            if (_mannequin == null)
             {
+                _mannequin = LobbyMannequin.Spawn(transform, Index);
+
+                // 새 인형은 아무것도 입지 않았다. 아래의 멱등 판정이 통과해야 한다.
+                _appliedCharacter = -1;
+            }
+
+            // **바뀌었을 때만 갈아입힌다.** `ApplyCharacter` 는 멱등이 아니다 — 머리 장식을
+            // 지우고 다시 만들고, 머티리얼을 새로 할당하고, idle 제스처 타이머를 되돌린다.
+            //
+            // 이 함수는 서버 전문으로 폴링되므로(프레임마다 불릴 수 있다) 그대로 부르면
+            // 제스처가 매 프레임 리셋되어 **인형이 굳은 채로 서 있고**, 프레임마다 GameObject
+            // 와 머티리얼이 하나씩 생긴다. 증상은 "캐릭터를 골라도 아무 일도 없다" 로 보인다.
+            //
+            // 프로토타입은 명단 변경 이벤트로만 불렀기 때문에 이 함정을 밟지 않았다.
+            // `SetReady` 는 스스로 같은 판정을 갖고 있다.
+            if (characterId != _appliedCharacter
+                && characterId >= 0
+                && characterId < LobbyCharacterCatalog.Count)
+            {
+                _appliedCharacter = characterId;
                 _mannequin.ApplyCharacter(LobbyCharacterCatalog.All[characterId]);
             }
 
@@ -133,6 +156,10 @@ namespace NV.Lobby
 
             if (_mannequin != null) Destroy(_mannequin.gameObject);
             _mannequin = null;
+
+            // 인형과 함께 버린다. 남겨 두면 같은 캐릭터가 다시 들어왔을 때 새 인형이 옷을
+            // 입지 못한다 — 판정이 "이미 그것을 입고 있다" 로 통과해 버린다.
+            _appliedCharacter = -1;
             _plateRenderer.sharedMaterial = _emptyMaterial;
             _mine.gameObject.SetActive(false);
         }

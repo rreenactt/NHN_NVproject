@@ -329,18 +329,30 @@ namespace NV.Client.Lobby.GameLobby
                 LobbyCharacterCatalog.Character character = LobbyCharacterCatalog.All[index];
                 var characterId = (byte)index;
 
-                var item = new VisualElement();
+                // `Button` 이다. 평범한 `VisualElement` + `PointerDownEvent` 로도 눌리지만,
+                // 버튼은 이 프로젝트에서 이미 동작이 확인된 경로이고 눌림 상태(`:active`)를
+                // 스타일시트가 그려 준다.
+                var item = new Button(() => OnPickCharacter?.Invoke(characterId));
                 item.AddToClassList("character");
+
+                // **칸의 배경이 그 캐릭터의 색이다.** 이것이 칸의 내용 전부다 — `lobby.uss` 의
+                // `.character__label` 은 글자색이 거의 검정이라 배경 없이는 읽히지 않는다.
+                // 배경을 빼먹었더니 여덟 개의 빈 테두리가 되어, 골라도 아무 일도 없는 것처럼
+                // 보였다.
+                item.style.backgroundColor = character.suit;
 
                 var label = new Label(character.label);
                 label.AddToClassList("character__label");
+
+                // 글자는 클릭을 먹지 않는다. 칸 자체가 눌린 것이 되어야 `:hover` 와 눌림
+                // 상태가 칸에 걸린다.
+                label.pickingMode = PickingMode.Ignore;
                 item.Add(label);
 
                 var owner = new Label(string.Empty);
                 owner.AddToClassList("character__owner");
+                owner.pickingMode = PickingMode.Ignore;
                 item.Add(owner);
-
-                item.RegisterCallback<PointerDownEvent>(_ => OnPickCharacter?.Invoke(characterId));
 
                 grid.Add(item);
 
@@ -380,7 +392,12 @@ namespace NV.Client.Lobby.GameLobby
                 item.Owner.text = owner;
                 item.Root.EnableInClassList("character--mine", mine);
                 item.Root.EnableInClassList("character--taken", taken);
-                item.Root.SetEnabled(waiting && !taken && !mine);
+
+                // **자기 것은 끄지 않는다.** 남이 입은 것만 끈다 — 자기 칸을 끄면 지금 입고
+                // 있는 것이 "쓸 수 없는 것" 과 같은 모습(비활성 틴트)이 되어, 고른 결과가
+                // 화면에서 실패처럼 읽힌다. 자기 것을 다시 누르는 것은 서버가 아무 일도
+                // 하지 않고 넘긴다.
+                item.Root.SetEnabled(waiting && !taken);
             }
 
             if (_characterNote != null)

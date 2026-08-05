@@ -90,10 +90,12 @@ namespace NV.Client.Lobby.GameLobby
 
             // 정원은 참가 전 조회로 오므로 씬이 열린 뒤에 정해질 수 있다. 바뀌면 줄을 다시 세운다.
             var capacity = Capacity();
+            var rebuilt = false;
 
             if (_builtCapacity != capacity)
             {
                 BuildRow(capacity);
+                rebuilt = true;
             }
 
             if (!HudIsLive)
@@ -102,7 +104,20 @@ namespace NV.Client.Lobby.GameLobby
                 return;
             }
 
-            Refresh();
+            // 줄을 다시 세웠으면 빈 스탠드뿐이므로 한 번 그린다.
+            if (rebuilt)
+            {
+                Refresh();
+            }
+
+            // **프레임마다 그리지 않는다.** 그릴 것이 생기는 시점은 명단 전문이 바뀔 때이고
+            // 그것은 `NetSession.StateChanged` 로 온다(`NetworkClient` 가 항목을 비교해
+            // 바뀌었을 때만 올린다).
+            //
+            // 처음에는 여기서 매 프레임 불렀고, 그것이 인형을 굳게 만들었다 —
+            // `LobbySlot.Bind` 가 부르는 `ApplyCharacter` 는 멱등이 아니라서 idle 제스처를
+            // 되돌리고 머리 장식을 다시 만든다. 지금은 그쪽도 멱등이지만, 명단 줄과 캐릭터
+            // 칸을 프레임마다 다시 만드는 것 자체가 쓰레기를 만든다.
         }
 
         private int Capacity()
