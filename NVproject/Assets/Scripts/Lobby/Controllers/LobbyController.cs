@@ -19,7 +19,7 @@ namespace NV.Client.Lobby.Controllers
         private readonly RoomService _rooms;
         private readonly MapChoiceService _maps;
         private readonly LobbyUIController _ui;
-        private readonly RoomController _room;
+        private readonly GameLobbyController _room;
 
         public LobbyController(
             NetSession session,
@@ -36,7 +36,7 @@ namespace NV.Client.Lobby.Controllers
             _maps = maps;
             _ui = ui;
 
-            _room = new RoomController(session, ui);
+            _room = new GameLobbyController(session, ui);
 
             ui.OnCreateRoom = OpenCreateRoom;
             ui.OnJoinByCode = OpenJoinByCode;

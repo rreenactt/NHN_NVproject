@@ -1,0 +1,91 @@
+using NV.Client.Lobby.UI;
+using NV.Client.Net.Session;
+
+namespace NV.Client.Lobby.Controllers
+{
+    /// 어느 페이지가 보이는지를 세션 상태에 맞춘다.
+    ///
+    /// 옛 `RoomController` 를 승계한다. 그것은 방 팝업을 여닫았고 이것은 페이지를 바꾼다.
+    ///
+    /// 페이지 전환을 버튼 클릭에 묶지 않는 이유는 방에 들어가는 경로가 넷이기 때문이다 —
+    /// 방 만들기, 코드 참가, 목록에서 참가, 빠른 참가. 그 넷이 각자 화면을 바꾸게 하면
+    /// 하나를 빠뜨렸을 때 방에는 들어갔는데 화면은 로비인 상태가 된다.
+    ///
+    /// 상태를 보고 바꾸므로 자동 재시도로 다시 붙은 경우에도 저절로 맞는다.
+    public sealed class GameLobbyController
+    {
+        private readonly NetSession _session;
+        private readonly LobbyUIController _ui;
+
+        private bool _inRoom;
+
+        public GameLobbyController(NetSession session, LobbyUIController ui)
+        {
+            _session = session;
+            _ui = ui;
+
+            _ui.GameLobby.OnStart = Start;
+            _ui.GameLobby.OnLeave = Leave;
+        }
+
+        /// 방 안에 있다고 볼 상태인가.
+        ///
+        /// `InGame` 을 포함한다. 매치가 시작되면 `SessionSceneRouter` 가 게임 씬을 여는데,
+        /// 씬이 바뀌기까지 몇 프레임이 걸린다. 그 사이에 로비 페이지로 돌리면 방 화면이
+        /// 한순간 사라지고 목록이 번쩍인다.
+        private bool ShouldBeInRoom =>
+            _session.State == SessionState.InLobby
+            || _session.State == SessionState.InGame
+            || _session.State == SessionState.Ended;
+
+        /// 세션 상태가 바뀔 때마다 부른다.
+        public void Sync()
+        {
+            if (ShouldBeInRoom)
+            {
+                if (!_inRoom)
+                {
+                    Enter();
+                }
+
+                _ui.GameLobby.Refresh();
+                return;
+            }
+
+            if (_inRoom)
+            {
+                Exit();
+            }
+        }
+
+        private void Enter()
+        {
+            _inRoom = true;
+
+            // 들어오는 길에 열려 있던 팝업을 걷는다. 방 만들기와 코드 참가는 스스로 닫지만,
+            // 실패로 되돌아왔다가 다시 붙은 경우처럼 남아 있을 수 있는 길이 있다. 방 안에서
+            // 뒤에 남은 참가 팝업은 지금 방을 조용히 버리는 버튼이다.
+            _ui.Popups.CloseAll();
+
+            _ui.GameLobby.Reset();
+            _ui.ShowRoomPage(true);
+        }
+
+        private void Exit()
+        {
+            _inRoom = false;
+            _ui.ShowRoomPage(false);
+        }
+
+        /// 방장이 매치 시작을 요청한다. 자격·인원은 서버가 다시 본다.
+        private void Start()
+        {
+            _session.RequestStart();
+        }
+
+        private void Leave()
+        {
+            _session.Leave();
+        }
+    }
+}

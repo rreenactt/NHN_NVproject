@@ -462,6 +462,85 @@
     color: rgb(214, 108, 96);
 }
 
+/* ============================================================ 페이지
+
+   로비와 대기방. 한 번에 하나만 보이고, 그 판정은 `LobbyUIController.ShowRoomPage` 하나가
+   갖는다. 둘 다 `flex-grow: 1` 이지만 감춰진 쪽은 `display: none` 이라 자리를 먹지 않는다.
+*/
+
+.page {
+    flex-grow: 1;
+    flex-direction: column;
+}
+
+/* ============================================================ 대기방 */
+
+.room-page {
+    flex-grow: 1;
+    flex-direction: column;
+    margin-top: 18px;
+}
+
+.room-head {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 14px;
+}
+
+.room-head-left {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* 방 정보는 오른쪽 끝에 모은다. 코드가 화면의 주인공이고 이쪽은 확인용이다. */
+.room-head-right {
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+/*
+    페이지의 코드는 왼쪽에 붙인다. 팝업에서는 프레임 폭 안에서 가운데였고, 여기서는
+    화면 폭 전체가 배경이라 가운데 정렬이 코드를 허공에 띄운다.
+*/
+.room-head .room-code {
+    -unity-text-align: middle-left;
+    margin-bottom: 4px;
+}
+
+.room-body {
+    flex-grow: 1;
+    flex-direction: row;
+}
+
+.room-roster-panel {
+    flex-grow: 1;
+    flex-direction: column;
+}
+
+.room-actions {
+    width: 260px;
+    margin-left: 18px;
+    flex-direction: column;
+}
+
+/*
+    페이지에는 높이가 있으므로 명단이 정원 전체를 그린다. 팝업의 `max-height: 84%` 아래에서
+    8칸을 그리면 아래의 시작 버튼이 잘렸고, 그래서 "모자란 만큼만 그리기" 라는 규칙이 따로
+    있었다 — 그 타협이 없어진 자리가 이 한 줄이다.
+*/
+.roster-grow {
+    flex-grow: 1;
+}
+
+/* 페이지의 명단은 줄 사이를 벌린다. 팝업에서는 높이를 아끼려고 붙여 놓았다. */
+.room-page .roster-row {
+    margin-top: 6px;
+    padding-bottom: 4px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(78, 68, 40, 0.5);
+}
+
 /* ============================================================ popups */
 
 .popup-root {

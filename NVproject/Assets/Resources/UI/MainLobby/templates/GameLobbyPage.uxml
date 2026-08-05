@@ -1,0 +1,63 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!--
+        대기방. 방 안에 있는 동안의 화면 전부다.
+
+        팝업이 아니라 페이지인 이유가 두 가지다. 하나는 뒤에 방 목록이 살아 있으면 안 된다는
+        것이고 — 방 안에서 다른 방을 누르는 것은 지금 방을 조용히 버리는 일이다 — 다른 하나는
+        높이다. `.popup-frame` 은 `max-height: 84%` 에 스크롤이 없어 정원 8칸을 다 그리지
+        못했고, 그래서 옛 방 팝업은 "몇 줄만 그리기" 규칙을 따로 만들어야 했다. 준비·캐릭터·
+        방장 메뉴가 붙으면 같은 벽에 다시 부딪힌다.
+
+        요소 이름은 옛 `RoomPopup.uxml` 것을 그대로 쓴다. 화면 구조만 바꾸는 단계이므로
+        이름까지 바꾸면 무엇이 옮겨졌고 무엇이 새로 생겼는지 diff 에서 갈리지 않는다.
+
+        명단은 서버의 0x82 전문으로 다시 그려진다. 한 번짜리 알림이 아니라 2Hz 로 영원히
+        오는 전문이며, 이름은 비어 있을 수 있다(와이어가 길이 0 을 허용한다).
+    -->
+    <ui:VisualElement name="room-page" class="room-page">
+
+        <!-- ================================================ 머리 — 코드와 방 정보 -->
+        <ui:VisualElement name="room-head" class="room-head">
+            <ui:VisualElement class="room-head-left">
+                <ui:Label class="panel-title" text="INVITE CODE" />
+                <ui:Label name="room-code" class="room-code" text="------" />
+
+                <ui:VisualElement class="row">
+                    <ui:Button name="room-copy-code" class="button button-small" text="코드 복사" />
+                    <ui:Button name="room-copy-link" class="button button-small" text="링크 복사" />
+                </ui:VisualElement>
+                <ui:Label name="room-copy-result" class="hint" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="room-head-right">
+                <ui:Label name="room-map" class="panel-meta" />
+                <ui:Label name="room-visibility" class="panel-meta" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- ================================================ 본문 — 명단과 조작 -->
+        <ui:VisualElement class="room-body">
+
+            <ui:VisualElement class="panel room-roster-panel">
+                <ui:VisualElement class="panel-head">
+                    <ui:Label class="panel-title" text="PLAYERS" />
+                    <ui:Label name="room-players-count" class="field-label roster-count" />
+                </ui:VisualElement>
+
+                <ui:VisualElement name="room-roster" class="roster roster-grow" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="panel room-actions">
+                <ui:Label class="panel-title" text="MATCH" />
+
+                <!-- 꺼진 버튼은 이유 없이 꺼져 있으면 고장으로 읽힌다. -->
+                <ui:Label name="room-note" class="hint" />
+
+                <ui:VisualElement class="action-spacer" />
+
+                <ui:Button name="room-start" class="button button-primary" text="게임 시작" />
+                <ui:Button name="room-leave" class="button" text="나가기" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

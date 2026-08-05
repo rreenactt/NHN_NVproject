@@ -28,6 +28,9 @@ namespace NV.Client.Lobby.UI
         private readonly ConnectionStatusView _connection;
         private readonly RoomListView _roomList;
 
+        private readonly VisualElement _pageBrowser;
+        private readonly VisualElement _pageRoom;
+
         private readonly Label _statusLine;
         private readonly Label _statusAction;
         private readonly VisualElement _status;
@@ -62,6 +65,15 @@ namespace NV.Client.Lobby.UI
             _connection = new ConnectionStatusView(root.Q<VisualElement>("connection"));
             _roomList = new RoomListView(root, () => OnRefresh?.Invoke());
 
+            _pageBrowser = root.Q<VisualElement>("page-browser");
+            _pageRoom = root.Q<VisualElement>("page-room");
+
+            GameLobby = new GameLobbyView(_pageRoom, session);
+
+            // 로비 페이지로 시작한다. 방에 들어가 있는 상태로 화면이 다시 만들어지는 경우
+            // (도메인 리로드)는 `GameLobbyController.Sync` 가 곧바로 바로잡는다.
+            ShowRoomPage(false);
+
             _status = root.Q<VisualElement>("status");
             _statusLine = root.Q<Label>("status-line");
             _statusAction = root.Q<Label>("status-action");
@@ -81,6 +93,9 @@ namespace NV.Client.Lobby.UI
             _events.ProfileChanged += RefreshProfile;
             _events.ToastRequested += OnToast;
         }
+
+        /// 대기방 페이지. `GameLobbyController` 가 언제 보일지 정한다.
+        public GameLobbyView GameLobby { get; }
 
         public PopupHost Popups { get; }
 
@@ -187,6 +202,29 @@ namespace NV.Client.Lobby.UI
                     evt.StopPropagation();
                 }
             }, TrickleDown.TrickleDown);
+        }
+
+        // ==================================================== 페이지
+
+        /// 대기방 페이지를 보인다(또는 로비 페이지로 되돌린다).
+        ///
+        /// `display` 로 가른다. 트리에서 떼면 돌아올 때 다시 만들어야 하고, 여기에는 감춰야
+        /// 하는 정보가 없다 — 게임 HUD 가 역할별 패널을 떼어내는 것은 그쪽에는 있기 때문이다.
+        ///
+        /// 두 페이지를 동시에 보이지 않게 하는 것이 이 함수의 전부다. 두 곳에서 각자
+        /// `display` 를 만지면 둘 다 켜진 상태가 표현 가능해지고, 그러면 로비 목록이 대기방
+        /// 뒤에 겹쳐 보인다.
+        public void ShowRoomPage(bool show)
+        {
+            if (_pageBrowser != null)
+            {
+                _pageBrowser.style.display = show ? DisplayStyle.None : DisplayStyle.Flex;
+            }
+
+            if (_pageRoom != null)
+            {
+                _pageRoom.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+            }
         }
 
         // ==================================================== 갱신
