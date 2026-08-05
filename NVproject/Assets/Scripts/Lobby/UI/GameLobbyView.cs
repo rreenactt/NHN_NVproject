@@ -28,8 +28,10 @@ namespace NV.Client.Lobby.UI
         private readonly Label _note;
         private readonly Label _copyResult;
         private readonly Label _playersCount;
+        private readonly Label _readyCount;
         private readonly VisualElement _roster;
         private readonly Button _start;
+        private readonly Button _ready;
         private readonly Button _copyLink;
 
         /// <param name="slot">`MainLobby.uxml` 의 `#page-room`. 여기에 페이지 본체를 넣는다.</param>
@@ -57,8 +59,10 @@ namespace NV.Client.Lobby.UI
             _note = Root.Q<Label>("room-note");
             _copyResult = Root.Q<Label>("room-copy-result");
             _playersCount = Root.Q<Label>("room-players-count");
+            _readyCount = Root.Q<Label>("room-ready-count");
             _roster = Root.Q<VisualElement>("room-roster");
             _start = Root.Q<Button>("room-start");
+            _ready = Root.Q<Button>("room-ready");
 
             var copyCode = Root.Q<Button>("room-copy-code");
             var copyLink = Root.Q<Button>("room-copy-link");
@@ -83,6 +87,14 @@ namespace NV.Client.Lobby.UI
                 _start.clicked += () => OnStart?.Invoke();
             }
 
+            if (_ready != null)
+            {
+                // 지금 상태의 반대를 요청한다. 로컬 사본을 두지 않으므로 여기서 읽는 값도
+                // 서버가 보낸 명단이다 — 두 번 빠르게 누르면 두 번째가 첫 번째의 결과를
+                // 보기 전에 나갈 수 있고, 그때는 같은 값을 두 번 보내 서버가 무시한다.
+                _ready.clicked += () => OnToggleReady?.Invoke(!_session.IsLocalReady);
+            }
+
             if (leave != null)
             {
                 leave.clicked += () => OnLeave?.Invoke();
@@ -94,6 +106,8 @@ namespace NV.Client.Lobby.UI
         /// 버튼이 무엇을 하는지는 뷰가 정하지 않는다. `GameLobbyController` 가 채운다 —
         /// 뷰가 세션을 직접 부르기 시작하면 화면 흐름이 뷰 수만큼 흩어진다.
         public Action OnStart { get; set; }
+
+        public Action<bool> OnToggleReady { get; set; }
 
         public Action OnLeave { get; set; }
 
@@ -136,9 +150,49 @@ namespace NV.Client.Lobby.UI
             }
 
             RefreshRoster();
+            RefreshButtons();
 
-            _start.SetEnabled(_session.CanStart);
             _note.text = StartNote();
+        }
+
+        /// 시작·준비 버튼의 모양.
+        ///
+        /// **한 사람에게 둘 다 보이지 않는다.** 방장에게는 시작 버튼이 준비이므로 준비 토글을
+        /// 감추고, 방장이 아닌 사람에게는 시작 버튼을 감춘다 — 눌러도 서버가 거부하는 버튼을
+        /// 보여 주면 그것이 고장으로 읽힌다.
+        ///
+        /// 대기 단계에서만 준비를 받는다(`Room.SetReady`). 매치 중·결과 화면에서는 토글을
+        /// 감춘다.
+        private void RefreshButtons()
+        {
+            var waiting = _session.State == SessionState.InLobby;
+            var isHost = _session.IsHost;
+
+            if (_start != null)
+            {
+                _start.style.display = isHost ? DisplayStyle.Flex : DisplayStyle.None;
+                _start.SetEnabled(_session.CanStart);
+            }
+
+            if (_ready != null)
+            {
+                _ready.style.display = !isHost && waiting ? DisplayStyle.Flex : DisplayStyle.None;
+
+                var ready = _session.IsLocalReady;
+
+                _ready.text = ready ? "준비 취소" : "준비";
+
+                // 켜진 것과 꺼진 것이 글자만으로 갈리면 읽지 않고 지나간다.
+                _ready.EnableInClassList("button-primary", !ready);
+            }
+
+            if (_readyCount != null)
+            {
+                var waitingFor = _session.NotReadyCount;
+
+                _readyCount.style.display = waiting ? DisplayStyle.Flex : DisplayStyle.None;
+                _readyCount.text = waitingFor > 0 ? waitingFor + "명 준비 안 함" : "전원 준비";
+            }
         }
 
         /// 인원과 정원을 함께 쓴다.
@@ -201,6 +255,17 @@ namespace NV.Client.Lobby.UI
                 var tag = new Label(Tag(entry, client, isSelf));
                 tag.AddToClassList("roster-tag");
                 row.Add(tag);
+
+                // 준비 도장. **대기 단계에서만 그린다** — 준비는 매치가 끝나 로비로 돌아올 때
+                // 내려가므로 매치 중에는 참인 값이지만, 화면에 두면 매치 중에 준비를 기다리는
+                // 것처럼 읽힌다.
+                var stamp = new Label(entry.IsReady ? "READY" : string.Empty);
+                stamp.AddToClassList("roster-ready");
+                stamp.EnableInClassList("roster-ready-on", entry.IsReady);
+                stamp.style.display = _session.State == SessionState.InLobby
+                    ? DisplayStyle.Flex
+                    : DisplayStyle.None;
+                row.Add(stamp);
 
                 _roster.Add(row);
             }
@@ -285,15 +350,31 @@ namespace NV.Client.Lobby.UI
                 //
                 // 서버는 이제 정적 룸에서 받는 사람 자신을 방장으로 싣는다. 이 갈래는
                 // 그보다 오래된 서버에 붙었을 때를 위한 것이며, 그 사실을 말해 준다.
-                return HasNoHost()
-                    ? "이 방에 방장이 없어 아무도 시작할 수 없다. 서버가 오래된 빌드일 수 있다."
-                    : "방장이 시작하기를 기다린다.";
+                if (HasNoHost())
+                {
+                    return "이 방에 방장이 없어 아무도 시작할 수 없다. 서버가 오래된 빌드일 수 있다.";
+                }
+
+                // 준비 여부에 따라 다음에 할 일이 다르다. 준비하지 않은 사람에게 "방장을
+                // 기다린다" 만 쓰면 자기가 막고 있다는 사실이 화면에 없다.
+                return _session.IsLocalReady
+                    ? "방장이 시작하기를 기다린다."
+                    : "준비를 누르면 방장이 시작할 수 있다.";
             }
 
             var count = _session.Client != null ? _session.Client.RosterCount : 0;
 
-            return count < _session.MinPlayers
-                ? $"{_session.MinPlayers}명부터 시작할 수 있다. 지금 {count}명."
+            if (count < _session.MinPlayers)
+            {
+                return $"{_session.MinPlayers}명부터 시작할 수 있다. 지금 {count}명.";
+            }
+
+            var waitingFor = _session.NotReadyCount;
+
+            // **꺼진 이유를 인원으로 말한다.** "준비를 기다린다" 만 쓰면 몇 명이 남았는지
+            // 명단을 세어 알아야 한다.
+            return waitingFor > 0
+                ? $"{waitingFor}명이 아직 준비하지 않았다."
                 : "시작할 수 있다.";
         }
 

@@ -226,6 +226,15 @@ namespace NV.Client.Net
                     }
 
                     GUI.enabled = true;
+
+                    // 준비 토글도 여기 둔다. **정적 룸은 준비 조건을 건너뛰므로** 이 패널의
+                    // 개발 루프에서는 눌러야 시작되는 것이 아니다 — 그래도 두는 이유는 이
+                    // 경로(`Control(SetReady)` → 명단 전문)를 개발 루프에서 눌러 볼 수 있게
+                    // 하는 것이다. 그러지 않으면 대기방 화면 없이는 시험할 방법이 없다.
+                    if (GUILayout.Button(session.IsLocalReady ? "준비 취소" : "준비", GUILayout.Height(26f)))
+                    {
+                        session.SetReady(!session.IsLocalReady);
+                    }
                 }
 
                 if (session.State == SessionState.Ended && session.IsHost

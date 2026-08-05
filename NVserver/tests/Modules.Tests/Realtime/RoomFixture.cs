@@ -180,12 +180,38 @@ namespace NV.Modules.Tests.Realtime
                 room.PostCommand(RoomCommand.Join(index + 1, (byte)index, string.Empty, index == 0));
             }
 
+            // **방장을 뺀 전원이 준비해야 시작된다.** 방장(세션 1)은 보내지 않는다 — 시작
+            // 버튼을 누르는 것이 그 사람의 준비다(`Room.EveryoneElseIsReady`).
+            //
+            // 같은 드레인에 넣어도 된다. 큐가 FIFO 이므로 Join → SetReady → Start 순으로
+            // 적용되고, 준비는 이미 명단에 있는 사람에게 적힌다.
+            for (var index = 1; index < count; index++)
+            {
+                room.PostCommand(RoomCommand.SetReady(index + 1, true));
+            }
+
             room.PostCommand(RoomCommand.Start(1));
             room.Advance();
 
             if (skipReveal)
             {
                 SkipReveal(room);
+            }
+        }
+
+        /// 이 세션들이 준비를 누른다.
+        ///
+        /// **방장은 넣지 않는다.** 시작 버튼이 방장의 준비이고, 시작 조건은 요청자를 뺀
+        /// 나머지만 본다(`Room.EveryoneElseIsReady`).
+        ///
+        /// 매치가 끝나 로비로 돌아오면 준비가 전원 내려가므로(`Room.ResetToWaiting`),
+        /// 두 번째 매치를 시작하려면 다시 불러야 한다. 그것이 규칙이며 테스트가 그것을
+        /// 그대로 밟는다.
+        public static void Ready(Room room, params int[] sessionIds)
+        {
+            foreach (var sessionId in sessionIds)
+            {
+                room.PostCommand(RoomCommand.SetReady(sessionId, true));
             }
         }
 

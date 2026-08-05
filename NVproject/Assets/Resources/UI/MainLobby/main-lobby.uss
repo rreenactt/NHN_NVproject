@@ -533,6 +533,31 @@
     flex-grow: 1;
 }
 
+/*
+    준비 도장. 색으로 먼저 말한다 — 여덟 줄에서 준비한 사람을 글자로 세게 하면 안 된다.
+    준비하지 않은 줄은 글자가 없고 자리만 남는다(줄이 흔들리지 않게).
+*/
+.roster-ready {
+    width: 58px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    -unity-text-align: middle-right;
+    color: rgb(112, 100, 62);
+}
+
+.roster-ready-on {
+    color: rgb(255, 246, 214);
+    -unity-font-style: bold;
+}
+
+/*
+    이름이 남는 폭을 먹는다. 그러지 않으면 `space-between` 이 세 요소를 양 끝과 가운데로
+    벌려 꼬리표가 줄 중앙에 떠 버린다.
+*/
+.room-page .roster-name {
+    flex-grow: 1;
+}
+
 /* 페이지의 명단은 줄 사이를 벌린다. 팝업에서는 높이를 아끼려고 붙여 놓았다. */
 .room-page .roster-row {
     margin-top: 6px;

@@ -41,7 +41,12 @@
             <ui:VisualElement class="panel room-roster-panel">
                 <ui:VisualElement class="panel-head">
                     <ui:Label class="panel-title" text="PLAYERS" />
-                    <ui:Label name="room-players-count" class="field-label roster-count" />
+
+                    <ui:VisualElement class="panel-head-right">
+                        <!-- 준비 인원은 보조다. 준비 여부는 명단의 도장이 먼저 말한다. -->
+                        <ui:Label name="room-ready-count" class="panel-meta" />
+                        <ui:Label name="room-players-count" class="field-label roster-count" />
+                    </ui:VisualElement>
                 </ui:VisualElement>
 
                 <ui:VisualElement name="room-roster" class="roster roster-grow" />
@@ -55,6 +60,12 @@
 
                 <ui:VisualElement class="action-spacer" />
 
+                <!--
+                    준비와 시작은 한 사람에게 동시에 필요하지 않다. 방장에게는 시작 버튼이
+                    준비이므로 준비 토글을 보이지 않고, 나머지에게는 시작 버튼이 없다.
+                    둘 다 두면 같은 뜻의 조작이 두 개가 된다.
+                -->
+                <ui:Button name="room-ready" class="button button-primary" text="준비" />
                 <ui:Button name="room-start" class="button button-primary" text="게임 시작" />
                 <ui:Button name="room-leave" class="button" text="나가기" />
             </ui:VisualElement>

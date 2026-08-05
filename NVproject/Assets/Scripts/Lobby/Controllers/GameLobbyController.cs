@@ -25,6 +25,7 @@ namespace NV.Client.Lobby.Controllers
             _ui = ui;
 
             _ui.GameLobby.OnStart = Start;
+            _ui.GameLobby.OnToggleReady = ToggleReady;
             _ui.GameLobby.OnLeave = Leave;
         }
 
@@ -81,6 +82,12 @@ namespace NV.Client.Lobby.Controllers
         private void Start()
         {
             _session.RequestStart();
+        }
+
+        /// 준비를 켜거나 끈다. 눌린 모양은 다음 명단 전문이 만든다.
+        private void ToggleReady(bool ready)
+        {
+            _session.SetReady(ready);
         }
 
         private void Leave()

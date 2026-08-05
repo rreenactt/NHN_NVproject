@@ -62,6 +62,13 @@ namespace NV.Modules.Tests.Realtime
                     sessionId == 1));
             }
 
+            // 들어오지 못한 세션에도 보낸다. 명단에 없는 세션의 준비는 무시되므로
+            // (`Room.SetReady`) 몇 명이 들어왔는지 여기서 다시 세지 않아도 된다.
+            for (var sessionId = 2; sessionId <= RealtimeConstants.Rooms.MaxPlayers + 3; sessionId++)
+            {
+                RoomFixture.Ready(room, sessionId);
+            }
+
             room.PostCommand(RoomCommand.Start(1));
             Run(room, transport, 1);
 
@@ -272,6 +279,7 @@ namespace NV.Modules.Tests.Realtime
 
             room.PostCommand(RoomCommand.Join(1, 0, "host", true));
             room.PostCommand(RoomCommand.Join(2, 1));
+            RoomFixture.Ready(room, 2);
             room.Advance();
 
             // 대기 중에 30틱치를 보낸다. 버려지지 않으면 시작 직후 몰아서 적용된다.
@@ -297,6 +305,11 @@ namespace NV.Modules.Tests.Realtime
 
             room.PostCommand(RoomCommand.Join(1, 0, "host", true));
             room.PostCommand(RoomCommand.Join(2, 1));
+
+            // 준비는 되어 있다. 그래야 이 테스트가 자격 하나만 검사한다 — 준비 미완으로도
+            // 거부되면 어느 조건이 막았는지 알 수 없다.
+            RoomFixture.Ready(room, 2);
+
             room.PostCommand(RoomCommand.Start(2));
             room.Advance();
 
@@ -397,6 +410,10 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(1, after.HostPlayerId);
 
             // 승계한 쪽이 시작할 수 있어야 한다. 못 하면 방이 영구히 잠긴다.
+            //
+            // 세션 3 이 준비한다. 승계자(세션 2)는 요청자이므로 자기 준비를 요구받지 않는다.
+            RoomFixture.Ready(room, 3);
+
             room.PostCommand(RoomCommand.Start(2));
             room.Advance();
 
@@ -638,6 +655,11 @@ namespace NV.Modules.Tests.Realtime
             room.Advance();
             room.PostCommand(RoomCommand.ReturnToLobby(1));
             room.Advance();
+
+            // **로비로 돌아오면 준비가 전원 내려간다.** 다시 눌러야 두 번째 매치가 시작된다 —
+            // 자리를 비운 사람을 데리고 시작하지 않기 위한 규칙이다.
+            RoomFixture.Ready(room, 2);
+
             room.PostCommand(RoomCommand.Start(1));
             room.Advance();
 
@@ -1044,6 +1066,10 @@ namespace NV.Modules.Tests.Realtime
             room.Advance();
             room.PostCommand(RoomCommand.ReturnToLobby(1));
             room.Advance();
+
+            // 로비로 돌아오면 준비가 내려간다. 다시 누른다.
+            RoomFixture.Ready(room, 2);
+
             room.PostCommand(RoomCommand.Start(1));
             RoomFixture.SkipReveal(room);
 

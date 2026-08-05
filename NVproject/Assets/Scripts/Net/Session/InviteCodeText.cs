@@ -26,6 +26,20 @@ namespace NV.Client.Net.Session
             return InviteCodeFormat.IsValid(normalized);
         }
 
+        /// 설정으로 미리 열어 둔 개발용 룸의 id 인가.
+        ///
+        /// 초대 코드 형식을 만족하지 않는 방 id 가 그것이다. 서버는 `Game:StaticRooms` 의
+        /// id 를 코드 규칙으로 검사하지 않으므로(`test` 는 4자라 초대 코드가 될 수 없다)
+        /// 그 차이가 곧 구분법이다.
+        ///
+        /// **여기 한 곳에만 둔다.** 두 곳이 각자 판정하면 한쪽만 고쳐지고, 그 어긋남은
+        /// "개발용 룸에서만 화면이 다르게 동작한다" 로만 나타난다. 지금 이 판정을 읽는 곳은
+        /// 방 목록의 DEV 표식과 대기방의 시작 조건 둘이다.
+        public static bool IsStaticRoomId(string code)
+        {
+            return !string.IsNullOrEmpty(code) && !IsValid(code);
+        }
+
         /// 입력 칸 아래에 띄우는 설명. 형식을 만족하면 빈 문자열이다.
         ///
         /// 길이와 문자를 따로 말해 준다. 하나로 뭉치면 다 지운 칸과 한 글자

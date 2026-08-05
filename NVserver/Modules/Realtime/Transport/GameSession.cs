@@ -174,6 +174,12 @@ namespace NV.Realtime.Transport
                 case ControlKind.ReturnToLobby:
                     room.PostCommand(RoomCommand.ReturnToLobby(SessionId));
                     break;
+
+                case ControlKind.SetReady:
+                    // 0 이 아니면 참으로 읽는다. 손상된 값을 거부하기보다 받아들이는 쪽이
+                    // 안전하다 — 준비는 되돌릴 수 있고, 거부하면 화면이 눌린 채로 남는다.
+                    room.PostCommand(RoomCommand.SetReady(SessionId, message.Value != 0));
+                    break;
             }
         }
 

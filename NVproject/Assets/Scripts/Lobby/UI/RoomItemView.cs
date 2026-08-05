@@ -98,7 +98,7 @@ namespace NV.Client.Lobby.UI
                 return;
             }
 
-            if (IsStaticRoom(room.Code))
+            if (InviteCodeText.IsStaticRoomId(room.Code))
             {
                 _badge.style.display = DisplayStyle.Flex;
                 _badge.text = "DEV";
@@ -107,15 +107,6 @@ namespace NV.Client.Lobby.UI
             }
 
             _badge.style.display = DisplayStyle.None;
-        }
-
-        /// 초대 코드 형식을 만족하지 않는 방 id 는 설정으로 미리 열어 둔 정적 룸이다.
-        ///
-        /// 서버는 `Game:StaticRooms` 의 id 를 코드 규칙으로 검사하지 않는다 —
-        /// `test` 는 4자라 초대 코드가 될 수 없다. 그 차이가 곧 구분법이다.
-        private static bool IsStaticRoom(string code)
-        {
-            return !string.IsNullOrEmpty(code) && !InviteCodeText.IsValid(code);
         }
     }
 }

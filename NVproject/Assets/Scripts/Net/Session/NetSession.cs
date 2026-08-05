@@ -99,11 +99,83 @@ namespace NV.Client.Net.Session
         public bool IsHost => Client != null && Client.IsLocalHost;
 
         /// <summary>방장이 지금 시작을 누를 수 있는가. 화면이 버튼을 이 값으로 켠다.</summary>
+        ///
+        /// 서버의 `Room.Start` 와 같은 조건을 본다. **판정이 아니라 친절이다** — 서버가 다시
+        /// 보므로 이 값이 틀려도 규칙은 지켜지지만, 틀리면 화면이 거짓말을 한다: 켜져 있는데
+        /// 눌러도 아무 일이 없거나, 꺼져 있는데 실은 시작할 수 있는 상태가 된다.
         public bool CanStart =>
             State == SessionState.InLobby
             && IsHost
             && Client != null
-            && Client.RosterCount >= MinPlayers;
+            && Client.RosterCount >= MinPlayers
+            && EveryoneElseIsReady;
+
+        /// <summary>나 자신이 준비를 눌렀는가. 명단 전문에서 읽는다.</summary>
+        ///
+        /// 사본을 두지 않는다. 눌린 상태를 여기 적어 두면 서버가 받아들이지 않은 토글이
+        /// 화면에만 남고, 그 차이는 눈으로 잡을 수 없다.
+        public bool IsLocalReady
+        {
+            get
+            {
+                if (Client == null || !Client.HasWelcome)
+                {
+                    return false;
+                }
+
+                for (var index = 0; index < Client.RosterCount; index++)
+                {
+                    var entry = Client.RosterEntry(index);
+
+                    if (entry.PlayerId == Client.LocalPlayerId)
+                    {
+                        return entry.IsReady;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>준비하지 않은 사람 수. 봇과 나 자신은 세지 않는다.</summary>
+        ///
+        /// 화면이 "몇 명을 기다리는지" 를 쓰는 데 쓴다. 0 이면 시작할 수 있다.
+        public int NotReadyCount
+        {
+            get
+            {
+                if (Client == null)
+                {
+                    return 0;
+                }
+
+                var localId = Client.HasWelcome ? Client.LocalPlayerId : (byte)0xFF;
+                var count = 0;
+
+                for (var index = 0; index < Client.RosterCount; index++)
+                {
+                    var entry = Client.RosterEntry(index);
+
+                    if (entry.PlayerId == localId || entry.IsBot || entry.IsReady)
+                    {
+                        continue;
+                    }
+
+                    count++;
+                }
+
+                return count;
+            }
+        }
+
+        /// <summary>나를 뺀 모든 사람이 준비했는가. 서버의 `EveryoneElseIsReady` 와 같은 규칙.</summary>
+        ///
+        /// **개발용 정적 룸은 조건을 건너뛴다.** 서버가 그 룸에서 준비를 보지 않으므로
+        /// (`Room.EveryoneElseIsReady`) 여기서 보면 두 클라이언트 개발 루프의 시작 버튼이
+        /// 서버가 받아들일 상태에서도 꺼져 있게 된다. 정적 룸 판정은 `InviteCodeText` 한
+        /// 곳에만 있다.
+        public bool EveryoneElseIsReady =>
+            InviteCodeText.IsStaticRoomId(Code) || NotReadyCount == 0;
 
         /// <summary>시작에 필요한 최소 인원. 서버가 알려 준 값이며 클라이언트가 정하지 않는다.</summary>
         public int MinPlayers => Room.MinPlayers > 0 ? Room.MinPlayers : 2;
@@ -287,6 +359,15 @@ namespace NV.Client.Net.Session
             }
 
             return true;
+        }
+
+        /// 준비를 켜거나 끈다.
+        ///
+        /// 로컬 상태를 바꾸지 않는다. 눌린 모양은 다음 명단 전문(2Hz)이 만든다 — 반 박자
+        /// 늦지만, 서버가 거부한 토글이 화면에 남는 것보다 낫다.
+        public bool SetReady(bool ready)
+        {
+            return Client != null && Client.SendControl(ControlKind.SetReady, ready ? (byte)1 : (byte)0);
         }
 
         /// 방장으로서 매치 시작을 요청한다. 자격과 인원은 서버가 다시 본다.

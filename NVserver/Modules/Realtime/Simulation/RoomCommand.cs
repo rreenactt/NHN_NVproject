@@ -22,6 +22,9 @@ namespace NV.Realtime.Simulation
         /// 보여야 하고, 나중에 다른 스레드에서 봇을 넣는 경로가 붙을 때 `_players` 를
         /// 직접 만지는 코드가 생기지 않는다.
         AddBot = 5,
+
+        /// 참가자가 준비를 켜거나 껐다. `Value` 가 0 또는 1 이다.
+        SetReady = 6,
     }
 
     /// HTTP·WebSocket 스레드가 룸 상태를 직접 바꾸지 않고 큐에 넣는 단위.
@@ -86,6 +89,17 @@ namespace NV.Realtime.Simulation
         public static RoomCommand ReturnToLobby(int sessionId)
         {
             return new RoomCommand(RoomCommandKind.ReturnToLobby, sessionId, 0, 0, string.Empty, false);
+        }
+
+        public static RoomCommand SetReady(int sessionId, bool ready)
+        {
+            return new RoomCommand(
+                RoomCommandKind.SetReady,
+                sessionId,
+                0,
+                ready ? (byte)1 : (byte)0,
+                string.Empty,
+                false);
         }
 
         /// 봇 하나를 넣는다. 세션 id 와 슬롯은 룸이 적용 시점에 발급한다 —

@@ -1663,6 +1663,10 @@ namespace NV.Realtime.Simulation
                     case RoomCommandKind.AddBot:
                         JoinBot();
                         break;
+
+                    case RoomCommandKind.SetReady:
+                        SetReady(command.SessionId, command.Value != 0);
+                        break;
                 }
             }
         }
@@ -1895,6 +1899,27 @@ namespace NV.Realtime.Simulation
             _stateDirty = true;
         }
 
+        /// 참가자가 준비를 켜거나 껐다.
+        ///
+        /// **대기 단계에서만 받는다.** 매치 중의 준비는 뜻이 없고, 받아 두면 매치가 끝나
+        /// 로비로 돌아온 순간 이미 준비된 사람이 있게 된다 — `ResetToWaiting` 이 지우는
+        /// 것과 정반대로 움직인다.
+        private void SetReady(int sessionId, bool ready)
+        {
+            if (Phase != RoomPhase.Waiting || !_players.TryGetValue(sessionId, out var player))
+            {
+                return;
+            }
+
+            if (player.Ready == ready)
+            {
+                return;
+            }
+
+            player.Ready = ready;
+            _stateDirty = true;
+        }
+
         private void Start(int sessionId)
         {
             if (Phase != RoomPhase.Waiting)
@@ -1915,6 +1940,15 @@ namespace NV.Realtime.Simulation
                     RoomId,
                     _players.Count,
                     RealtimeConstants.Rooms.MinPlayersToStart);
+                return;
+            }
+
+            if (!EveryoneElseIsReady(sessionId, out var waitingFor))
+            {
+                _logger.LogInformation(
+                    "룸 {RoomId}: 플레이어 {PlayerId} 가 아직 준비하지 않아 시작하지 않는다.",
+                    RoomId,
+                    waitingFor);
                 return;
             }
 
@@ -2003,6 +2037,43 @@ namespace NV.Realtime.Simulation
                 _placementSeed);
         }
 
+        /// 요청자를 뺀 모든 **사람**이 준비했는가.
+        ///
+        /// 세 갈래가 각각 이유를 갖는다.
+        ///
+        /// - **요청자를 뺀다.** 시작 버튼을 누르는 것이 그 사람의 준비다. 방장에게도 토글을
+        ///   요구하면 같은 뜻의 조작이 두 개가 되고, 방장이 자기 준비를 잊어 시작이 안 되는
+        ///   상태가 생긴다.
+        /// - **봇을 뺀다.** 봇은 준비 요청을 보낼 입이 없다. 세면 개발용 방이 영구히 시작되지
+        ///   않는다.
+        /// - **정적 룸은 조건 자체를 건너뛴다.** 두 클라이언트 개발 루프가 그 룸으로 돌아가고,
+        ///   `IsAuthorized` 가 이미 정적 룸을 예외로 두고 있다 — 개발용 예외를 그 경계 안에만
+        ///   두면 실제 매치의 판정에는 닿지 않는다.
+        ///
+        /// <param name="waitingFor">거짓일 때 아직 준비하지 않은 사람 하나의 PlayerId. 로그용이다.</param>
+        private bool EveryoneElseIsReady(int sessionId, out byte waitingFor)
+        {
+            waitingFor = RoomStateHeader.NoPlayer;
+
+            if (_isStatic)
+            {
+                return true;
+            }
+
+            foreach (var player in _players.Values)
+            {
+                if (player.SessionId == sessionId || player.IsBot || player.Ready)
+                {
+                    continue;
+                }
+
+                waitingFor = player.PlayerId;
+                return false;
+            }
+
+            return true;
+        }
+
         /// 결과를 판정한 것은 방장 클라이언트다. 매치 규칙이 아직 클라이언트에 있는
         /// 동안의 한시적 경로이며, 서버는 단계 전이와 중계만 한다.
         private void EndMatch(int sessionId, byte outcome)
@@ -2052,6 +2123,14 @@ namespace NV.Realtime.Simulation
 
         private void ResetToWaiting()
         {
+            // **준비를 전원 내린다.** 남겨 두면 로비로 돌아온 방이 즉시 "전원 준비" 를 만족해
+            // 자리를 비운 사람을 데리고 다음 매치가 시작된다. 매치가 끝난 뒤 다시 앉아
+            // 있는지는 사람만 답할 수 있다.
+            foreach (var player in _players.Values)
+            {
+                player.Ready = false;
+            }
+
             Volatile.Write(ref _phase, (int)RoomPhase.Waiting);
             _seekerPlayerId = RoomStateHeader.NoPlayer;
             _placementSeed = 0;

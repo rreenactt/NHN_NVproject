@@ -260,6 +260,9 @@ namespace NV.Modules.Tests.Realtime
             world.Room.PostCommand(RoomCommand.ReturnToLobby(1));
             world.Room.Advance();
 
+            // 로비로 돌아오면 준비가 전원 내려간다. 다시 누르지 않으면 시작되지 않는다.
+            RoomFixture.Ready(world.Room, 2);
+
             world.Room.PostCommand(RoomCommand.Start(1));
             world.Room.Advance();
             RoomFixture.SkipReveal(world.Room);
