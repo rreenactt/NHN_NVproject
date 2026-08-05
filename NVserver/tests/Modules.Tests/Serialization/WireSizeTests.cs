@@ -54,10 +54,20 @@ namespace NV.Modules.Tests.Serialization
         }
 
         /// 세션 수신·송신 버퍼가 이 값보다 커야 한다. 넘으면 접속이 끊긴다.
+        ///
+        /// 123 이었다. 명단 항목이 2B 에서 4B 로 넓어졌다 — 준비 플래그와 캐릭터 번호가
+        /// 붙었고, 그것이 대기방을 서버 권위로 만든 자리다(프로토콜 4).
         [Fact]
-        public void 여덟명_룸_상태_최대는_123바이트다()
+        public void 여덟명_룸_상태_최대는_139바이트다()
         {
-            Assert.Equal(123, MessageCodec.RoomStateMaxWireSize(8));
+            Assert.Equal(139, MessageCodec.RoomStateMaxWireSize(8));
+        }
+
+        /// 항목 고정부. 늘어나면 위의 상한도 함께 늘어난다.
+        [Fact]
+        public void 명단_항목_고정부는_4바이트다()
+        {
+            Assert.Equal(4, RoomPlayerEntry.FixedWireSize);
         }
     }
 }

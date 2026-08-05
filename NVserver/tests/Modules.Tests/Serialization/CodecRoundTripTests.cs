@@ -135,11 +135,16 @@ namespace NV.Modules.Tests.Serialization
         public void 룸_상태는_라운드트립한다()
         {
             // 이름 없음·짧은 이름·상한까지 찬 이름을 한 전문에 섞는다.
+            // 플래그와 캐릭터도 섞는다 — 준비한 사람, 준비하지 않은 봇, 캐릭터 미배정.
             var players = new[]
             {
-                new RoomPlayerEntry(0, "host"),
-                new RoomPlayerEntry(3, string.Empty),
-                new RoomPlayerEntry(7, new string('W', ProtocolInfo.MaxDisplayNameBytes)),
+                new RoomPlayerEntry(0, "host", RoomPlayerFlags.Ready, 3),
+                new RoomPlayerEntry(3, string.Empty, RoomPlayerFlags.Bot, 0),
+                new RoomPlayerEntry(
+                    7,
+                    new string('W', ProtocolInfo.MaxDisplayNameBytes),
+                    RoomPlayerFlags.None,
+                    RoomPlayerEntry.NoCharacter),
             };
 
             var header = new RoomStateHeader(
@@ -156,8 +161,8 @@ namespace NV.Modules.Tests.Serialization
             var decodedPlayers = new RoomPlayerEntry[8];
             var count = MessageCodec.ReadRoomState(buffer, out var decodedHeader, decodedPlayers);
 
-            // 고정부 + (2+4) + (2+0) + (2+12) = 37B
-            Assert.Equal(RoomStateHeader.WireSize + 22, written);
+            // 고정부 + (4+4) + (4+0) + (4+12) = 39B
+            Assert.Equal(RoomStateHeader.WireSize + 28, written);
             Assert.Equal(players.Length, count);
             Assert.Equal(header.Phase, decodedHeader.Phase);
             Assert.Equal(header.HostPlayerId, decodedHeader.HostPlayerId);
@@ -173,7 +178,15 @@ namespace NV.Modules.Tests.Serialization
             {
                 Assert.Equal(players[index].PlayerId, decodedPlayers[index].PlayerId);
                 Assert.Equal(players[index].Name, decodedPlayers[index].Name);
+                Assert.Equal(players[index].Flags, decodedPlayers[index].Flags);
+                Assert.Equal(players[index].CharacterId, decodedPlayers[index].CharacterId);
             }
+
+            // 유도 프로퍼티가 비트를 제대로 가르는가. 화면이 읽는 것은 이쪽이다.
+            Assert.True(decodedPlayers[0].IsReady);
+            Assert.False(decodedPlayers[0].IsBot);
+            Assert.False(decodedPlayers[1].IsReady);
+            Assert.True(decodedPlayers[1].IsBot);
         }
 
         [Fact]
@@ -207,8 +220,8 @@ namespace NV.Modules.Tests.Serialization
                 new RoomStateHeader(RoomPhase.Waiting, 0, RoomStateHeader.NoPlayer, 0, 0u, 1),
                 new[] { new RoomPlayerEntry(0, "ab") });
 
-            // 고정부 다음이 playerId, 그 다음이 nameLength 다.
-            buffer[RoomStateHeader.WireSize + 1] = 200;
+            // 고정부 다음이 playerId · flags · characterId 이고, 그 다음이 nameLength 다.
+            buffer[RoomStateHeader.WireSize + 3] = 200;
 
             Assert.Throws<InvalidOperationException>(
                 () => MessageCodec.ReadRoomState(buffer, out _, new RoomPlayerEntry[8]));

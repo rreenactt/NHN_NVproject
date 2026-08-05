@@ -198,7 +198,7 @@ namespace NV.Client.Lobby.UI
                 name.AddToClassList("roster-name");
                 row.Add(name);
 
-                var tag = new Label(Tag(entry.PlayerId, client, isSelf));
+                var tag = new Label(Tag(entry, client, isSelf));
                 tag.AddToClassList("roster-tag");
                 row.Add(tag);
 
@@ -242,9 +242,18 @@ namespace NV.Client.Lobby.UI
             }
         }
 
-        private static string Tag(byte playerId, NetworkClient client, bool isSelf)
+        /// 한 줄의 꼬리표. 방장·나·봇을 한 문자열로 합친다.
+        ///
+        /// 봇은 서버가 알려 준다(`RoomPlayerFlags.Bot`). 이름으로 짐작하게 두면 `BOT 1` 이라고
+        /// 스스로 이름을 지은 사람과 구분되지 않는다.
+        private static string Tag(in RoomPlayerEntry entry, NetworkClient client, bool isSelf)
         {
-            var isHost = client.HasRoomState && client.RoomState.HostPlayerId == playerId;
+            var isHost = client.HasRoomState && client.RoomState.HostPlayerId == entry.PlayerId;
+
+            if (entry.IsBot)
+            {
+                return isHost ? "봇 · 방장" : "봇";
+            }
 
             if (isHost && isSelf)
             {

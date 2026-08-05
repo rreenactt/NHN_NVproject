@@ -478,7 +478,12 @@ namespace NV.Realtime.Simulation
             var count = 0;
             foreach (var player in _players.Values)
             {
-                _rosterBuffer[count] = new RoomPlayerEntry(player.PlayerId, player.Name);
+                _rosterBuffer[count] = new RoomPlayerEntry(
+                    player.PlayerId,
+                    player.Name,
+                    FlagsOf(player),
+                    player.CharacterId);
+
                 count++;
             }
 
@@ -532,6 +537,28 @@ namespace NV.Realtime.Simulation
                     new ReadOnlySpan<byte>(_stateBuffer, 0, length),
                     Reliability.Reliable);
             }
+        }
+
+        /// 명단 한 줄의 상태 비트.
+        ///
+        /// 준비는 대기 단계의 값이지만 단계로 걸러 내지 않는다. `Start` 가 준비를 지우지 않고
+        /// `ResetToWaiting` 이 지우므로, 매치 중에도 값은 참인 상태로 남아 있다 — 그것이
+        /// 진실이고, 화면은 매치 중에 준비 도장을 그리지 않으면 된다.
+        private static RoomPlayerFlags FlagsOf(PlayerEntity player)
+        {
+            var flags = RoomPlayerFlags.None;
+
+            if (player.Ready)
+            {
+                flags |= RoomPlayerFlags.Ready;
+            }
+
+            if (player.IsBot)
+            {
+                flags |= RoomPlayerFlags.Bot;
+            }
+
+            return flags;
         }
 
         /// 명단 전문 하나를 버퍼에 쓴다. 방장만 호출자가 정한다.
@@ -1648,12 +1675,19 @@ namespace NV.Realtime.Simulation
             }
 
             // 어느 스폰을 고를지는 판정이다. PlayerId 로 갈라 같은 룸에서 겹치지 않게 한다.
-            _players[sessionId] = new PlayerEntity(
+            var joined = new PlayerEntity(
                 sessionId,
                 playerId,
                 _map.SpawnPosition(playerId),
                 _map.SpawnYaw(playerId),
                 name);
+
+            // 아무것도 입지 않은 참가자를 만들지 않는다. 정원 8 · 캐릭터 8 이므로 자리가
+            // 있는 한 남는 캐릭터도 항상 있다. 미배정을 허용하면 명단에 빈 칸이 생기고,
+            // "고르지 않으면 시작할 수 없다" 는 규칙을 하나 더 만들어야 한다.
+            joined.CharacterId = FirstFreeCharacter();
+
+            _players[sessionId] = joined;
 
             // 방장 자리는 먼저 주장한 세션이 갖는다. 이미 방장이 있으면 무시한다 —
             // 같은 토큰으로 두 번 붙는 경우이며, 나중 접속에 자리를 넘기면
@@ -1745,12 +1779,18 @@ namespace NV.Realtime.Simulation
             // 눈으로 맞출 수 있다. 1 을 더하는 것은 표시용이다 — 0번 봇이라고 부르지 않는다.
             var name = RealtimeConstants.Bots.NamePrefix + (playerId + 1);
 
-            _players[sessionId] = new PlayerEntity(
+            var bot = new PlayerEntity(
                 sessionId,
                 playerId,
                 _map.SpawnPosition(playerId),
                 _map.SpawnYaw(playerId),
                 name);
+
+            // 봇도 캐릭터를 입는다. 사람과 같은 명단 줄을 그리므로, 비워 두면 개발용 방의
+            // 화면만 다른 모양이 되고 그 차이가 무엇을 뜻하는지 알 수 없다.
+            bot.CharacterId = FirstFreeCharacter();
+
+            _players[sessionId] = bot;
 
             _minds[sessionId] = new BotMind(BotSeedFor(playerId));
 
@@ -2033,6 +2073,39 @@ namespace NV.Realtime.Simulation
             }
 
             return sessionId != 0 && sessionId == _hostSessionId;
+        }
+
+        /// 아무도 입지 않은 캐릭터 중 가장 작은 번호. 전부 차 있으면 0 이다.
+        ///
+        /// 전부 차는 경우는 캐릭터 수가 정원보다 적을 때만 생긴다. 지금은 둘 다 8 이라
+        /// 일어나지 않지만, 둘은 유도 관계가 아니라 독립된 값이므로(`ProtocolInfo.
+        /// LobbyCharacterCount` 주석) 그 경우에 답이 있어야 한다. 중복을 허용하는 쪽을
+        /// 고른다 — 들어오지 못하게 하는 것보다 겹쳐 보이는 것이 낫다.
+        private byte FirstFreeCharacter()
+        {
+            for (byte candidate = 0; candidate < ProtocolInfo.LobbyCharacterCount; candidate++)
+            {
+                if (WearerOf(candidate) == null)
+                {
+                    return candidate;
+                }
+            }
+
+            return 0;
+        }
+
+        /// 이 캐릭터를 입고 있는 참가자. 아무도 없으면 null.
+        private PlayerEntity? WearerOf(byte characterId)
+        {
+            foreach (var player in _players.Values)
+            {
+                if (player.CharacterId == characterId)
+                {
+                    return player;
+                }
+            }
+
+            return null;
         }
 
         private void RefreshHostPlayerId()

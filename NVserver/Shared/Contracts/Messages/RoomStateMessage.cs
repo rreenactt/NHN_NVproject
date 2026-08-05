@@ -74,16 +74,40 @@ namespace NV.Shared.Contracts.Messages
     /// 명단의 한 줄.
     public readonly struct RoomPlayerEntry
     {
-        /// playerId(1) + nameLength(1)
-        public const int FixedWireSize = 2;
+        /// 캐릭터가 아직 배정되지 않은 상태. 0 은 유효한 캐릭터 인덱스라 쓸 수 없다.
+        public const byte NoCharacter = 0xFF;
+
+        /// playerId(1) + flags(1) + characterId(1) + nameLength(1)
+        public const int FixedWireSize = 4;
 
         public RoomPlayerEntry(byte playerId, string name)
+            : this(playerId, name, RoomPlayerFlags.None, NoCharacter)
+        {
+        }
+
+        public RoomPlayerEntry(byte playerId, string name, RoomPlayerFlags flags, byte characterId)
         {
             PlayerId = playerId;
             Name = name;
+            Flags = flags;
+            CharacterId = characterId;
         }
 
         public byte PlayerId { get; }
+
+        /// 이 사람에 대한 참/거짓들. 준비했는가, 봇인가.
+        public RoomPlayerFlags Flags { get; }
+
+        /// 입고 있는 캐릭터. 방 안에서 유일하며, 미배정은 <see cref="NoCharacter"/> 다.
+        ///
+        /// 서버는 **번호만** 안다. 이름·색·에셋은 클라이언트의 표이며 서버가 알 이유가
+        /// 없다 — 아는 순간 그 표가 두 곳에 생긴다. 서버가 판정하는 것은 범위와 중복
+        /// 둘뿐이고, 그 판정에 필요한 것은 개수(`ProtocolInfo.LobbyCharacterCount`)다.
+        public byte CharacterId { get; }
+
+        public bool IsReady => (Flags & RoomPlayerFlags.Ready) != 0;
+
+        public bool IsBot => (Flags & RoomPlayerFlags.Bot) != 0;
 
         /// 표시 이름. 계정이 없으므로 세션 수명만큼만 살고 중복도 사칭도 막지 않는다.
         /// 비어 있을 수 있다 — 그때 화면은 "플레이어 {PlayerId}" 로 대신한다.

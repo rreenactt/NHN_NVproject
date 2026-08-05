@@ -41,6 +41,26 @@ namespace NV.Realtime.Simulation
         /// 표시 이름. 명단에만 쓰이며 판정에 관여하지 않는다.
         public string Name { get; }
 
+        /// 대기방에서 준비를 눌렀는가. **대기 단계에서만 의미가 있다.**
+        ///
+        /// 매치 시작 조건이 이 값을 본다(`Room.Start`). 매치가 끝나고 로비로 돌아올 때
+        /// 전원 내려간다(`Room.ResetToWaiting`) — 남겨 두면 자리를 비운 사람을 데리고
+        /// 다음 매치가 시작된다.
+        ///
+        /// 봇은 항상 거짓이다. 봇은 준비 요청을 보내지 않으므로 조건에서 빼야 하고,
+        /// 그 예외가 시작 판정 쪽에 있다.
+        public bool Ready { get; set; }
+
+        /// 입고 있는 캐릭터 번호. 방 안에서 유일하다.
+        ///
+        /// 서버는 **번호만** 안다. 무엇처럼 생겼는지는 클라이언트의 표이고, 서버가 판정하는
+        /// 것은 범위(`ProtocolInfo.LobbyCharacterCount`)와 중복 둘뿐이다.
+        ///
+        /// 판정에 관여하지 않는다 — 이동·전투·목표물 어디도 이 값을 읽지 않는다. 읽기
+        /// 시작하면 외형 선택이 실력 차이가 되고, 그 순간 이 값은 `Shared` 의 시뮬레이션
+        /// 상수 쪽으로 옮겨야 한다.
+        public byte CharacterId { get; set; } = RoomPlayerEntry.NoCharacter;
+
         /// 필드로 둔다. 프로퍼티면 매 접근마다 구조체가 복사되어 제자리 수정이 안 된다.
         public PlayerState State;
 

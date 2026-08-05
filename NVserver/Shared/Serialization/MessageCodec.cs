@@ -235,6 +235,8 @@ namespace NV.Shared.Serialization
                 }
 
                 writer.WriteByte(player.PlayerId);
+                writer.WriteByte((byte)player.Flags);
+                writer.WriteByte(player.CharacterId);
                 writer.WriteByte((byte)name.Length);
 
                 for (var position = 0; position < name.Length; position++)
@@ -291,6 +293,8 @@ namespace NV.Shared.Serialization
             for (var index = 0; index < playerCount; index++)
             {
                 var playerId = reader.ReadByte();
+                var flags = (RoomPlayerFlags)reader.ReadByte();
+                var characterId = reader.ReadByte();
                 var nameLength = reader.ReadByte();
 
                 if (nameLength > ProtocolInfo.MaxDisplayNameBytes)
@@ -307,7 +311,7 @@ namespace NV.Shared.Serialization
                     ? string.Empty
                     : new string(scratch.Slice(0, nameLength));
 
-                players[index] = new RoomPlayerEntry(playerId, name);
+                players[index] = new RoomPlayerEntry(playerId, name, flags, characterId);
             }
 
             header = new RoomStateHeader(

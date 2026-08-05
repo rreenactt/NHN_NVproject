@@ -638,7 +638,13 @@ namespace NV.Client.Net
 
             for (var index = 0; index < count; index++)
             {
+                // **항목의 모든 필드를 본다.** 이 비교가 화면 갱신 신호를 만드는 유일한
+                // 지점이므로, 빠진 필드는 "서버는 보내는데 화면이 바뀌지 않는" 상태가 된다.
+                // 준비 토글이 정확히 그 모양으로 조용히 실패한다 — 이름과 인원이 그대로이고
+                // 플래그만 바뀌기 때문이다. 항목에 필드를 더하면 여기에도 더한다.
                 if (_roster[index].PlayerId != _rosterIncoming[index].PlayerId
+                    || _roster[index].Flags != _rosterIncoming[index].Flags
+                    || _roster[index].CharacterId != _rosterIncoming[index].CharacterId
                     || !string.Equals(_roster[index].Name, _rosterIncoming[index].Name, StringComparison.Ordinal))
                 {
                     return true;
