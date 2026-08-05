@@ -53,6 +53,13 @@ namespace NV.Client.Net.Session
 
         /// 서버가 판정하는 지형과 클라이언트가 그리는 지형이 다르다.
         MapHashMismatch,
+
+        /// 방장이 내보냈다.
+        ///
+        /// **회선 절단과 갈라 두는 이유는 자동 재시도다.** 같은 사유로 뭉치면 재시도가
+        /// 방금 내보내진 사람을 그 방에 다시 데려간다. 구분하는 단서는 서버가 실은 닫힘
+        /// 코드 하나(4003)뿐이다.
+        Kicked,
     }
 
     /// 실패 하나. 사유와 사람이 읽을 문구, 그리고 재시도해도 되는지를 함께 담는다.
@@ -172,6 +179,16 @@ namespace NV.Client.Net.Session
                         kind,
                         "서버와 다른 지형에서 시뮬레이션하고 있다." + Detail(detail),
                         "룸의 맵에 맞는 씬을 열고, 씨드를 바꿨다면 맵을 다시 export 한다.",
+                        false);
+
+                case SessionFailureKind.Kicked:
+                    return new SessionFailure(
+                        kind,
+                        "방장이 내보냈다.",
+
+                        // 다시 들어갈 수 있다는 사실을 숨기지 않는다. 계정이 없으므로 코드를
+                        // 아는 사람은 실제로 다시 들어올 수 있고, 그것이 이 기능의 한계다.
+                        "다른 방에 들어가거나 새로 방을 만든다.",
                         false);
 
                 default:

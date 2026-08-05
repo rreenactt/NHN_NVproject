@@ -646,6 +646,18 @@
     flex-grow: 1;
 }
 
+/* 방장에게만 보이는 줄별 버튼. 이름 쪽으로 새지 않게 오른쪽 끝에 모은다. */
+.roster-actions {
+    flex-direction: row;
+    margin-left: 10px;
+}
+
+.roster-actions .button {
+    margin-left: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
 /* 페이지의 명단은 줄 사이를 벌린다. 팝업에서는 높이를 아끼려고 붙여 놓았다. */
 .room-page .roster-row {
     margin-top: 6px;

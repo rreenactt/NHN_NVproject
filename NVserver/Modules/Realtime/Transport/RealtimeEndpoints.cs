@@ -367,6 +367,11 @@ namespace NV.Realtime.Transport
                 // 한쪽이 끝나면 다른 쪽도 정리한다. 송신 채널을 닫으면 송신 펌프가 빠진다.
                 session.CompleteOutbound();
                 await Task.WhenAll(send, receive).ConfigureAwait(false);
+
+                // 강제 퇴장은 닫힘 코드를 실어 보낸다. **펌프가 끝난 뒤에 한다** — 송신
+                // 펌프가 아직 돌고 있으면 같은 소켓에 두 개의 송신이 겹치고, WebSocket 은
+                // 동시 송신을 허용하지 않는다.
+                await session.CloseWithReasonAsync(context.RequestAborted).ConfigureAwait(false);
             }
             finally
             {

@@ -118,6 +118,12 @@ namespace NV.Client.Net
 
         public string LastError { get; private set; }
 
+        /// 서버가 실은 닫힘 코드. 없으면 0.
+        ///
+        /// 세션이 강제 퇴장과 회선 절단을 가르는 유일한 단서다. 전송이 사라진 뒤에는 물을
+        /// 곳이 없으므로 실패로 넘어가는 순간 여기에 적어 둔다.
+        public int CloseCode { get; private set; }
+
         public IInputSource InputSource { get; set; }
 
         /// <summary>마지막 스냅샷을 받은 시각(unscaled). 0 이면 아직 하나도 받지 않았다.</summary>
@@ -238,6 +244,11 @@ namespace NV.Client.Net
             var url = ClientTransportFactory.BuildUrl(host, room, secure, hostToken, displayName);
             Endpoint = url;
             LastError = null;
+
+            // 지난 접속의 닫힘 코드를 지운다. 남겨 두면 다음 실패가 그것을 자기 것으로
+            // 읽고, 한 번 강제 퇴장된 사람은 그 뒤로 무엇이 끊겨도 강제 퇴장으로 보인다.
+            CloseCode = 0;
+
             State = ConnectionState.Connecting;
             _stateElapsed = 0f;
 
@@ -369,6 +380,13 @@ namespace NV.Client.Net
 
             LastError = string.IsNullOrEmpty(reason) ? "알 수 없는 오류" : reason;
             Debug.LogWarning("[NV] 접속 실패: " + LastError);
+
+            // **전송을 버리기 전에 닫힘 코드를 집는다.** 아래에서 Dispose 하면 물을 곳이
+            // 없어지고, 세션은 강제 퇴장을 회선 절단으로 읽는다.
+            if (_transport != null)
+            {
+                CloseCode = ClientTransportFactory.CloseCode(_transport);
+            }
 
             if (_transport is IDisposable disposable)
             {

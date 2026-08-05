@@ -114,6 +114,12 @@ namespace NV.Client.Lobby.UI
 
         public Action<bool> OnToggleReady { get; set; }
 
+        /// 대상 슬롯 번호와 표시 이름. 이름은 확인 문구에 쓴다 — 번호만 넘기면 컨트롤러가
+        /// 명단을 다시 뒤져야 하고, 그 사이에 명단이 바뀌면 다른 사람의 이름이 뜬다.
+        public Action<byte, string> OnKick { get; set; }
+
+        public Action<byte, string> OnTransferHost { get; set; }
+
         public Action OnLeave { get; set; }
 
         /// 방에 들어갈 때 한 번. 지난 방의 흔적을 지운다.
@@ -288,10 +294,55 @@ namespace NV.Client.Lobby.UI
                     : DisplayStyle.None;
                 row.Add(stamp);
 
+                AddHostActions(row, entry, isSelf);
+
                 _roster.Add(row);
             }
 
             AddEmptySlots(client.RosterCount);
+        }
+
+        /// 방장에게만 붙는 줄별 버튼 — 위임과 강제 퇴장.
+        ///
+        /// **대기 단계에서만 그린다.** 서버는 매치 중에도 둘을 받지만(방을 되찾을 방법이
+        /// 필요하다) 매치 중에 사람을 끊는 것은 진행 중인 판정을 흔드는 일이므로 화면에서
+        /// 권하지 않는다.
+        ///
+        /// 자기 줄에는 붙지 않는다. 자기를 내보내는 것은 나가기이고 그 버튼은 따로 있으며,
+        /// 자기에게 방장을 넘기는 것은 아무 일도 아니다.
+        private void AddHostActions(VisualElement row, in RoomPlayerEntry entry, bool isSelf)
+        {
+            if (!_session.IsHost || isSelf || _session.State != SessionState.InLobby)
+            {
+                return;
+            }
+
+            var playerId = entry.PlayerId;
+            var name = string.IsNullOrEmpty(entry.Name) ? "플레이어 " + playerId : entry.Name;
+
+            var actions = new VisualElement();
+            actions.AddToClassList("roster-actions");
+
+            // 봇에게는 방장을 넘길 수 없다 — 서버가 거부한다(봇은 아무 요청도 보내지 않으므로
+            // 그 방은 시작할 수 없는 방이 된다). 눌러도 안 되는 버튼을 그리지 않는다.
+            if (!entry.IsBot)
+            {
+                var transfer = new Button(() => OnTransferHost?.Invoke(playerId, name))
+                {
+                    text = "방장 넘기기",
+                };
+                transfer.AddToClassList("button");
+                transfer.AddToClassList("button-small");
+                actions.Add(transfer);
+            }
+
+            var kick = new Button(() => OnKick?.Invoke(playerId, name)) { text = "내보내기" };
+            kick.AddToClassList("button");
+            kick.AddToClassList("button-small");
+            kick.AddToClassList("button-danger");
+            actions.Add(kick);
+
+            row.Add(actions);
         }
 
         /// 남은 자리를 **정원까지 전부** 그린다.

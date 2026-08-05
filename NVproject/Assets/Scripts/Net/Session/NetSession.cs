@@ -22,6 +22,14 @@ namespace NV.Client.Net.Session
         /// 백오프 간격(초). 이 배열 길이가 재시도 횟수 상한이다.
         private static readonly float[] RetryDelays = { 0.5f, 1f, 2f, 4f };
 
+        /// 서버가 강제 퇴장에 쓰는 WebSocket 닫힘 코드.
+        ///
+        /// 서버의 `RealtimeConstants.Kick.CloseCode` 와 **같은 값이어야 한다.** `Shared` 에
+        /// 두지 않은 이유는 그것이 와이어 포맷이 아니라 전송 계층의 값이라는 것이다 —
+        /// `Shared/Transport` 가 게임의 강제 퇴장을 알게 만들지 않는다. 두 곳이 갈리면
+        /// 강제 퇴장이 회선 절단으로 읽혀 자동 재시도가 그 방에 다시 붙는다.
+        private const int KickedCloseCode = 4003;
+
         private static NetSession _instance;
 
         [Tooltip("명단에 보일 이름. 비우면 '플레이어 N' 으로 표시된다.")]
@@ -380,6 +388,21 @@ namespace NV.Client.Net.Session
             return Client != null && Client.SendControl(ControlKind.SetCharacter, characterId);
         }
 
+        /// 방장으로서 누군가를 내보낸다. 자격은 서버가 다시 본다.
+        ///
+        /// 대상은 **슬롯 번호**다. 클라이언트가 아는 것이 그것뿐이고(명단 전문이 싣는 값),
+        /// 세션 id 는 서버 안의 값이다.
+        public bool KickPlayer(byte playerId)
+        {
+            return Client != null && Client.SendControl(ControlKind.KickPlayer, playerId);
+        }
+
+        /// 방장을 넘긴다. 넘긴 뒤 이 클라이언트는 시작 권한을 잃는다.
+        public bool TransferHost(byte playerId)
+        {
+            return Client != null && Client.SendControl(ControlKind.TransferHost, playerId);
+        }
+
         /// 방장으로서 매치 시작을 요청한다. 자격과 인원은 서버가 다시 본다.
         public bool RequestStart()
         {
@@ -576,7 +599,7 @@ namespace NV.Client.Net.Session
                     if (Client.State == ConnectionState.Failed
                         || Client.State == ConnectionState.Disconnected)
                     {
-                        Fail(SessionFailureKind.ConnectionLost, Client.LastError);
+                        Fail(LostReason(), Client.LastError);
                         break;
                     }
 
@@ -633,7 +656,24 @@ namespace NV.Client.Net.Session
                 return;
             }
 
-            Fail(SessionFailureKind.ConnectionLost, Client != null ? Client.LastError : null);
+            Fail(LostReason(), Client != null ? Client.LastError : null);
+        }
+
+        /// 붙어 있다가 끊긴 이유. 강제 퇴장인가 회선 절단인가.
+        ///
+        /// **닫힘 코드가 유일한 단서다.** 서버는 강제 퇴장을 `4003` 으로 알린다(서버의
+        /// `RealtimeConstants.Kick.CloseCode`). 그 값이 이쪽 상수로 복제되어 있다는 것이
+        /// 이 판정의 약점이지만, `Shared` 에 두면 전송 계층이 게임 규칙을 알게 된다 —
+        /// 대신 두 자리에 서로를 가리키는 주석을 남긴다.
+        ///
+        /// 코드를 잃는 경로가 있으면 회선 절단으로 읽히고, 그때는 자동 재시도가 그 방에
+        /// 다시 붙는다. 계정이 없으므로 그것을 막을 방법은 없고, 이것이 강제 퇴장 기능의
+        /// 실제 한계다.
+        private SessionFailureKind LostReason()
+        {
+            return Client != null && Client.CloseCode == KickedCloseCode
+                ? SessionFailureKind.Kicked
+                : SessionFailureKind.ConnectionLost;
         }
 
         // ==================================================== 실패와 재시도

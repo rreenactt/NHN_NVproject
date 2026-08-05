@@ -75,6 +75,20 @@ namespace NV.Client.Net
 #endif
         }
 
+        /// 서버가 실은 닫힘 코드. 없으면 0.
+        ///
+        /// 4000~4999 는 애플리케이션 용도이며 이 프로젝트는 강제 퇴장에 하나를 쓴다. 그
+        /// 코드가 없으면 클라이언트가 강제 퇴장을 회선 절단으로 읽고, 자동 재시도가 방금
+        /// 내보내진 사람을 다시 그 방에 데려간다.
+        public static int CloseCode(IClientTransport transport)
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return ((WebGlWebSocketTransport)transport).CloseCode;
+#else
+            return ((EditorWebSocketTransport)transport).CloseCode;
+#endif
+        }
+
         public static string FailureReason(IClientTransport transport)
         {
 #if UNITY_WEBGL && !UNITY_EDITOR

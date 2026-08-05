@@ -27,6 +27,8 @@ namespace NV.Client.Lobby.Controllers
             _ui.GameLobby.OnStart = Start;
             _ui.GameLobby.OnToggleReady = ToggleReady;
             _ui.GameLobby.Characters.OnPick = PickCharacter;
+            _ui.GameLobby.OnKick = Kick;
+            _ui.GameLobby.OnTransferHost = TransferHost;
             _ui.GameLobby.OnLeave = Leave;
         }
 
@@ -96,6 +98,31 @@ namespace NV.Client.Lobby.Controllers
         private void PickCharacter(byte characterId)
         {
             _session.SetCharacter(characterId);
+        }
+
+        /// 강제 퇴장. **확인을 지난다.**
+        ///
+        /// 되돌릴 수 없고 대상이 아무 잘못이 없을 수 있다. 잘못 누르면 남의 판을 끝내고,
+        /// 그 사람은 이유를 알 수 없다.
+        private void Kick(byte playerId, string name)
+        {
+            ConfirmDialog.Open(
+                _ui.Popups,
+                "내보내기",
+                $"{name} 을(를) 방에서 내보낸다. 되돌릴 수 없다.",
+                () => _session.KickPlayer(playerId));
+        }
+
+        /// 방장 위임. **확인을 지난다.**
+        ///
+        /// 넘긴 뒤에는 되돌릴 수 없다 — 되돌리려면 새 방장이 다시 넘겨 주어야 한다.
+        private void TransferHost(byte playerId, string name)
+        {
+            ConfirmDialog.Open(
+                _ui.Popups,
+                "방장 넘기기",
+                $"{name} 에게 방장을 넘긴다. 시작 권한도 함께 넘어간다.",
+                () => _session.TransferHost(playerId));
         }
 
         private void Leave()

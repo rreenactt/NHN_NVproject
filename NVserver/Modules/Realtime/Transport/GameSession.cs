@@ -82,6 +82,41 @@ namespace NV.Realtime.Transport
             }
         }
 
+        /// 닫힘 코드를 실어 소켓을 닫는다. 강제 퇴장에만 쓴다.
+        ///
+        /// **이 코드가 강제 퇴장의 유일한 신호다.** 그냥 소켓을 버리면 브라우저는 1006
+        /// (비정상 종료)을 보고, 클라이언트는 회선 절단으로 읽어 자동 재시도가 방금 내보낸
+        /// 사람을 다시 데려온다.
+        ///
+        /// 실패를 삼킨다. 이미 닫힌 소켓에 닫기를 보내면 예외가 나고, 그 시점에 할 일은
+        /// 아무것도 없다 — 상대는 이미 떠났다.
+        public async Task CloseWithReasonAsync(CancellationToken cancellationToken)
+        {
+            if (DisconnectReason != RealtimeConstants.Kick.Reason)
+            {
+                return;
+            }
+
+            if (_socket.State != WebSocketState.Open && _socket.State != WebSocketState.CloseReceived)
+            {
+                return;
+            }
+
+            try
+            {
+                await _socket
+                    .CloseOutputAsync(
+                        (WebSocketCloseStatus)RealtimeConstants.Kick.CloseCode,
+                        RealtimeConstants.Kick.Reason,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is WebSocketException or OperationCanceledException
+                or ObjectDisposedException)
+            {
+            }
+        }
+
         public async Task RunReceivePumpAsync(Room room, ILogger logger, CancellationToken cancellationToken)
         {
             var buffer = new byte[RealtimeConstants.Sessions.ReceiveBufferBytes];
@@ -179,6 +214,14 @@ namespace NV.Realtime.Transport
                     // 0 이 아니면 참으로 읽는다. 손상된 값을 거부하기보다 받아들이는 쪽이
                     // 안전하다 — 준비는 되돌릴 수 있고, 거부하면 화면이 눌린 채로 남는다.
                     room.PostCommand(RoomCommand.SetReady(SessionId, message.Value != 0));
+                    break;
+
+                case ControlKind.KickPlayer:
+                    room.PostCommand(RoomCommand.Kick(SessionId, message.Value));
+                    break;
+
+                case ControlKind.TransferHost:
+                    room.PostCommand(RoomCommand.TransferHost(SessionId, message.Value));
                     break;
 
                 case ControlKind.SetCharacter:

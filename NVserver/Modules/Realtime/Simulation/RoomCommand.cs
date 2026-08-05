@@ -28,6 +28,12 @@ namespace NV.Realtime.Simulation
 
         /// 참가자가 캐릭터를 골랐다. `Value` 가 캐릭터 번호다.
         SetCharacter = 7,
+
+        /// 방장이 누군가를 내보냈다. `Value` 가 대상 PlayerId 다.
+        Kick = 8,
+
+        /// 방장이 방장을 넘겼다. `Value` 가 대상 PlayerId 다.
+        TransferHost = 9,
     }
 
     /// HTTP·WebSocket 스레드가 룸 상태를 직접 바꾸지 않고 큐에 넣는 단위.
@@ -114,6 +120,18 @@ namespace NV.Realtime.Simulation
                 characterId,
                 string.Empty,
                 false);
+        }
+
+        /// 대상을 `Value` 에 싣는다. `PlayerId` 는 요청자의 슬롯이며 여기서는 쓰이지 않는다 —
+        /// 자격은 세션 id 로 판정하고(방장 세션인가) 슬롯은 사칭할 수 있는 값이다.
+        public static RoomCommand Kick(int sessionId, byte targetPlayerId)
+        {
+            return new RoomCommand(RoomCommandKind.Kick, sessionId, 0, targetPlayerId, string.Empty, false);
+        }
+
+        public static RoomCommand TransferHost(int sessionId, byte targetPlayerId)
+        {
+            return new RoomCommand(RoomCommandKind.TransferHost, sessionId, 0, targetPlayerId, string.Empty, false);
         }
 
         /// 봇 하나를 넣는다. 세션 id 와 슬롯은 룸이 적용 시점에 발급한다 —

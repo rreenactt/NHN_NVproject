@@ -28,6 +28,7 @@ namespace NV.Client.Net
         private volatile bool _connected;
         private volatile bool _failed;
         private volatile string _failure;
+        private volatile int _closeCode;
         private bool _disposed;
 
         public bool IsConnected => _connected;
@@ -37,6 +38,13 @@ namespace NV.Client.Net
         public bool HasError => _failed;
 
         public string Failure => _failure;
+
+        /// 서버가 실은 닫힘 코드. 아직 닫히지 않았거나 코드가 없으면 0 이다.
+        ///
+        /// WebGL 쪽과 같은 표면을 만든다. 서버는 강제 퇴장을 4003 으로 알리고, 이것이
+        /// 없으면 에디터에서는 강제 퇴장과 회선 절단을 구분할 수 없다 — 그러면 그 경로를
+        /// WebGL 빌드로만 시험할 수 있게 되고, 그 빌드는 수 분이 걸린다.
+        public int CloseCode => _closeCode;
 
         public int QueuedMessages => _inbound.Count;
 
@@ -147,6 +155,10 @@ namespace NV.Client.Net
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
+                        // 코드를 여기서 집는다. `finally` 까지 가면 소켓이 이미 Closed 로
+                        // 넘어가 `CloseStatus` 가 남아 있기는 하지만, 읽는 자리를 하나로
+                        // 두면 나중에 소켓을 즉시 버리도록 바뀌어도 값이 살아 있다.
+                        _closeCode = (int)(result.CloseStatus ?? 0);
                         break;
                     }
 

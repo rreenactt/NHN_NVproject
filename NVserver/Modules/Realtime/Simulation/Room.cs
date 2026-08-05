@@ -104,6 +104,13 @@ namespace NV.Realtime.Simulation
 
         private int _pendingFireCount;
 
+        /// 이 틱에 끊을 세션. 강제 퇴장이 여기 쌓인다.
+        ///
+        /// **틱 루프는 소켓을 만지지 않는다**(`architecture.md` 의 스레딩 모델). 그래서 룸은
+        /// "끊어라" 를 쌓아 두고 전송을 받는 `Broadcast` 에서 비운다 — 발사 알림과 같은 모양이며,
+        /// 같은 이유로 반복하지 않는다.
+        private readonly List<int> _pendingKicks = new();
+
         private readonly WorldMap _map;
         private readonly NetworkConditionSimulator _network;
         private readonly ILogger _logger;
@@ -400,6 +407,13 @@ namespace NV.Realtime.Simulation
         /// 룸 상태 전문은 모든 단계에서 보내고, 스냅샷은 `Playing` 에서만 보낸다.
         public void Broadcast(IServerTransport transport)
         {
+            // **먼저 끊는다.** 명단은 이미 이 사람을 뺀 상태이므로, 전문을 먼저 보내면 끊길
+            // 세션에 자기가 없는 명단이 한 프레임 도착한다.
+            //
+            // 인원 0 판정보다 앞에 둔다. 마지막 사람을 내보낸 경우 아래에서 반환되어 끊기
+            // 요청이 영구히 큐에 남는다.
+            DrainKicks(transport);
+
             if (_players.Count == 0)
             {
                 return;
@@ -419,6 +433,26 @@ namespace NV.Realtime.Simulation
             }
 
             BroadcastSnapshot(transport);
+        }
+
+        /// 쌓인 강제 퇴장을 실제로 끊는다.
+        ///
+        /// 사유 문자열은 로그용이 아니다 — 전송 계층이 이것을 보고 닫힘 코드를 고르고
+        /// (`RealtimeConstants.Kick.Reason`), 클라이언트는 그 코드로 강제 퇴장과 회선
+        /// 절단을 가른다. 구분하지 못하면 자동 재시도가 그 방에 다시 붙는다.
+        private void DrainKicks(IServerTransport transport)
+        {
+            if (_pendingKicks.Count == 0)
+            {
+                return;
+            }
+
+            for (var index = 0; index < _pendingKicks.Count; index++)
+            {
+                transport.Disconnect(_pendingKicks[index], RealtimeConstants.Kick.Reason);
+            }
+
+            _pendingKicks.Clear();
         }
 
         /// 매 틱 풀 스냅샷을 보낸다.
@@ -1671,6 +1705,14 @@ namespace NV.Realtime.Simulation
                     case RoomCommandKind.SetCharacter:
                         SetCharacter(command.SessionId, command.Value);
                         break;
+
+                    case RoomCommandKind.Kick:
+                        Kick(command.SessionId, command.Value);
+                        break;
+
+                    case RoomCommandKind.TransferHost:
+                        TransferHost(command.SessionId, command.Value);
+                        break;
                 }
             }
         }
@@ -1922,6 +1964,98 @@ namespace NV.Realtime.Simulation
 
             player.Ready = ready;
             _stateDirty = true;
+        }
+
+        /// 방장이 누군가를 내보낸다.
+        ///
+        /// **`IsAuthorized` 를 쓰지 않는다.** 그 함수는 정적 룸에서 전원에게 참을 돌려주는데,
+        /// 그것은 "시작을 누를 수 있다" 를 위한 예외다. 남을 쫓아내는 권한은 다른 것이며,
+        /// 개발용 룸에서 아무나 아무를 끊을 수 있게 만들 이유가 없다 — 그래서 방장 세션인지
+        /// 직접 본다.
+        ///
+        /// 명단에서 빼는 것과 소켓을 끊는 것을 **둘 다** 한다. 끊기만 하면 그 세션의 수신
+        /// 펌프가 끝날 때 `Leave` 커맨드가 오지만 그 사이 한 틱 이상 명단에 남아 있고,
+        /// 명단에서만 빼면 소켓이 살아 스냅샷 없는 방에 붙어 있는 클라이언트가 된다.
+        private void Kick(int sessionId, byte targetPlayerId)
+        {
+            if (_hostSessionId == 0 || sessionId != _hostSessionId)
+            {
+                _logger.LogInformation(
+                    "룸 {RoomId}: 방장이 아닌 세션 {SessionId} 의 강제 퇴장 요청을 무시했다.", RoomId, sessionId);
+                return;
+            }
+
+            var target = FindByPlayerId(targetPlayerId);
+
+            if (target == null)
+            {
+                return;
+            }
+
+            if (target.SessionId == _hostSessionId)
+            {
+                // 방장이 자기를 내보내는 것은 나가기다. 그 경로는 소켓 종료이며 여기가 아니다.
+                _logger.LogInformation("룸 {RoomId}: 방장이 자기를 내보낼 수 없다.", RoomId);
+                return;
+            }
+
+            _logger.LogInformation(
+                "룸 {RoomId}: 방장이 플레이어 {PlayerId}(세션 {SessionId})를 내보냈다.",
+                RoomId,
+                targetPlayerId,
+                target.SessionId);
+
+            // 봇에게도 쓴다. 봇은 소켓이 없으므로 끊기 요청이 조용히 실패하고
+            // (`WebSocketServerTransport.TrySend` 와 같은 이유), 명단에서 빠지는 것으로 끝난다.
+            _pendingKicks.Add(target.SessionId);
+
+            Leave(target.SessionId, target.PlayerId);
+        }
+
+        /// 방장을 넘긴다.
+        ///
+        /// 승계(`LowestRemainingSessionId`)와 다르다. 그쪽은 방장이 나갈 때 서버가 정하고,
+        /// 이쪽은 방장이 살아 있는 동안 스스로 정한다.
+        ///
+        /// **봇에게는 넘길 수 없다.** 봇은 아무 요청도 보내지 않으므로 그 방은 시작할 수
+        /// 없는 방이 된다 — 승계 규칙이 봇을 후보에서 빼는 것과 같은 이유다.
+        private void TransferHost(int sessionId, byte targetPlayerId)
+        {
+            if (_hostSessionId == 0 || sessionId != _hostSessionId)
+            {
+                return;
+            }
+
+            var target = FindByPlayerId(targetPlayerId);
+
+            if (target == null || target.IsBot || target.SessionId == _hostSessionId)
+            {
+                return;
+            }
+
+            _hostSessionId = target.SessionId;
+            RefreshHostPlayerId();
+            _stateDirty = true;
+
+            _logger.LogInformation(
+                "룸 {RoomId}: 방장이 플레이어 {PlayerId} 에게 넘어갔다.", RoomId, targetPlayerId);
+        }
+
+        /// 슬롯 번호로 참가자를 찾는다. 없으면 null.
+        ///
+        /// 제어 요청은 대상을 **슬롯 번호**로 지목한다. 클라이언트가 아는 것이 그것뿐이고
+        /// (명단 전문이 싣는 값), 세션 id 는 서버 안의 값이라 밖으로 나가지 않는다.
+        private PlayerEntity? FindByPlayerId(byte playerId)
+        {
+            foreach (var player in _players.Values)
+            {
+                if (player.PlayerId == playerId)
+                {
+                    return player;
+                }
+            }
+
+            return null;
         }
 
         /// 참가자가 캐릭터를 골랐다.
