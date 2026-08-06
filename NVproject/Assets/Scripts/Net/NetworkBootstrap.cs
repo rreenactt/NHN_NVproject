@@ -51,6 +51,10 @@ namespace NV.Client.Net
 
         private Vector3 _localVelocity;
         private bool _localPlaced;
+        private Game.ChainDrag _localChain;
+        private float _dragArc;
+        private float _dragArcVelocity;
+        private bool _dragFollowing;
         private float _offlineWalkSpeed;
         private float _offlineSprintSpeed;
         private uint _clientMapHash;
@@ -346,6 +350,7 @@ namespace NV.Client.Net
 
             _localPlaced = false;
             _localVelocity = Vector3.zero;
+            _dragFollowing = false;
             _mapHashChecked = false;
             _mapHashStatus = "미확인";
 
@@ -375,6 +380,43 @@ namespace NV.Client.Net
 
             var offset = _localRig != null ? _localRig.GroundOffset : 0f;
             var current = _localPlayer.transform.position - new Vector3(0f, offset, 0f);
+
+            // **견인 중에는 경로 위에서만 움직인다.** 서버는 걸어갈 수 있는 경로 위의 점을
+            // 틱마다 보내지만, 그 점들 사이를 직선으로 이으면 — 스냅샷 보간도 SmoothDamp 도
+            // 그렇게 한다 — 45 m/s 에서는 현이 틱당 1.5 m 를 넘어 코너 옆의 벽을 그대로
+            // 가로지른다. 체인이 계산해 둔 경로에 서버 위치를 사영하고, 3D 위치가 아니라
+            // **경로 위 거리(스칼라)를 감쇠**한다. 스칼라가 어디에 있든 그 점은 경로 위다.
+            if (frozen)
+            {
+                if (_localChain == null)
+                {
+                    _localChain = _localPlayer.GetComponent<Game.ChainDrag>();
+                }
+
+                if (_localChain != null && _localChain.HasRoute)
+                {
+                    if (!_dragFollowing)
+                    {
+                        _dragArc = _localChain.ProjectOntoRoute(current);
+                        _dragArcVelocity = 0f;
+                        _dragFollowing = true;
+                    }
+
+                    // 서버의 진행은 단조 증가다(테스트가 그것을 박아 둔다). 사영은 경로가
+                    // 자기 옆을 지날 때 뒤로 튈 수 있으므로, 뒤로 가는 값은 버린다.
+                    var targetArc = Mathf.Max(_dragArc, _localChain.ProjectOntoRoute(sample.Position));
+                    _dragArc = Mathf.SmoothDamp(_dragArc, targetArc, ref _dragArcVelocity, localSmoothing);
+
+                    _localPlayer.ApplyNetworkState(
+                        _localChain.PointOnRoute(_dragArc), sample.IsGrounded, sample.Velocity.y);
+
+                    _localPlaced = true;
+                    _localVelocity = Vector3.zero;
+                    return;
+                }
+            }
+
+            _dragFollowing = false;
 
             // Frozen 동안은 스냅 임계를 견인 기준으로 올린다. 견인 최고 속도 × (보간 지연
             // + 두 틱 여유) — 평시 임계(2 m)는 견인 한 틱 반이면 넘어서, 견인 내내 스냅

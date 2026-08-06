@@ -34,6 +34,7 @@ namespace NV.Game
         private Vector3[] _route;       // corners from the Seeker to the landing spot
         private float _routeLength;
         private Coroutine _routine;
+        private bool _serverDriven;
 
         public bool Active { get; private set; }
 
@@ -67,6 +68,7 @@ namespace NV.Game
             // 증상은 Seeker 가 제단 쪽으로 끌리다 말고 튕겨 돌아오는 것이다. 그때 이 컴포넌트가
             // 하는 일은 체인을 그리는 것뿐이고, 몸은 서버가 보내는 위치를 따라간다.
             bool serverDriven = match.ServerOwnsCombat;
+            _serverDriven = serverDriven;
 
             Active = true;
             agent?.SetChained(true);
@@ -315,6 +317,57 @@ namespace NV.Game
 
             return best;
         }
+
+        /// <summary>
+        /// Whether the body being dragged should be *drawn on this route* rather than at the raw
+        /// server position. Server-driven only: the server sends one on-route point per tick, and
+        /// anything that connects those points with straight lines — snapshot interpolation,
+        /// SmoothDamp — turns each corner into a chord that passes through the wall beside it.
+        /// <see cref="NetworkBootstrap"/> projects the server position onto this route instead.
+        /// </summary>
+        public bool HasRoute => Active && _serverDriven && _route != null && _route.Length >= 2;
+
+        public float RouteLength => _routeLength;
+
+        /// <summary>
+        /// Projects a position onto the route and returns how far along it that is, in metres.
+        /// Nearest-segment, like <see cref="NearestSegment"/>, and for the same reason: the body
+        /// arrives as a stream of positions with no route index attached.
+        /// </summary>
+        public float ProjectOntoRoute(Vector3 position)
+        {
+            if (_route == null || _route.Length < 2) return 0f;
+
+            float best = 0f;
+            float bestDistance = float.MaxValue;
+            float arc = 0f;
+
+            for (int i = 1; i < _route.Length; i++)
+            {
+                Vector3 from = _route[i - 1];
+                Vector3 segment = _route[i] - from;
+                float lengthSq = segment.sqrMagnitude;
+                float t = lengthSq < 1e-8f
+                    ? 0f
+                    : Mathf.Clamp01(Vector3.Dot(position - from, segment) / lengthSq);
+
+                float distance = (position - (from + segment * t)).sqrMagnitude;
+                float segmentLength = Mathf.Sqrt(lengthSq);
+
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = arc + segmentLength * t;
+                }
+
+                arc += segmentLength;
+            }
+
+            return best;
+        }
+
+        /// <summary>The point a given distance along the route.</summary>
+        public Vector3 PointOnRoute(float distance) => PointAlongRoute(distance, out _);
 
         /// <summary>Walks the route to find the point a given distance along it.</summary>
         private Vector3 PointAlongRoute(float distance, out int segment)
