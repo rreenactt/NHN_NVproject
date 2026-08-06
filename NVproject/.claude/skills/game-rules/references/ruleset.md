@@ -36,13 +36,19 @@ immediately as a Runner win; timer-zero ends it as a Seeker win.
 |------|------------------|
 | Hits to kill a Runner | **2** |
 | First hit | Runner enters **Bleeding**; leaves a **blood trail**; must keep moving. |
-| Blood trail | Visible to the **Seeker** (via trail-vision). World-space VFX. |
+| Blood trail | Visible to the **Seeker** (via trail-vision), **and to the Runner leaking it** — not to any other Runner. World-space VFX. |
 | Any hit | Runner is **teleported to a random valid location**. |
 | Bleeding cleared | Only by the **Stop Bleeding** device (1x). |
 
 Bleeding "must keep moving": define a rule such as escalating penalty if the
 Runner stays still while bleeding (e.g. faster/heavier trail, or a slow tick).
 Tune in playtest; keep it in `GameConfig`.
+
+Seeing your own blood is part of that rule, not a leak of information: the
+penalty for standing still *is* the pool on the floor, and a Runner who cannot
+see it has no way to learn the rule or to judge how much they are giving away.
+The trail stays hidden from **other** Runners — it is the Seeker's evidence and
+the bleeder's own problem.
 
 ## Seeker gun & chain-drag
 | Rule | Value |

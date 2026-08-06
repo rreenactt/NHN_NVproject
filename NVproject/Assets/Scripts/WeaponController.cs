@@ -42,6 +42,10 @@ public class WeaponController : MonoBehaviour
     [Tooltip("The bang. Added automatically if missing, so every scene with a weapon has one.")]
     public WeaponAudio weaponAudio;
 
+    [Tooltip("The body this weapon is held by. Networked, each shot is latched on it and that " +
+             "latch — not the mouse button — is what the input frame carries.")]
+    public FirstPersonController body;
+
     [Header("Ballistics")]
     public int magazineSize = 8;
     [Tooltip("How far ahead the crosshair looks when converging the barrel. Not a bullet range — " +
@@ -103,6 +107,7 @@ public class WeaponController : MonoBehaviour
         if (blockRig == null) blockRig = GetComponent<BlockRig>();
         if (characterAnimator == null) characterAnimator = GetComponent<BlockCharacterAnimator>();
         if (crosshair == null) crosshair = GetComponent<Crosshair>();
+        if (body == null) body = GetComponent<FirstPersonController>();
 
         // Self-supplying: a scene that has a weapon at all should make a noise when it fires,
         // without anything having to remember to wire it.
@@ -180,6 +185,11 @@ public class WeaponController : MonoBehaviour
     {
         _ammo--;
         _nextFireTime = Time.time + fireCooldown;
+
+        // Tell the wire that a round was taken. This is the *only* thing that raises the fire bit:
+        // the server used to read the raw button instead and counted a long click as two rounds, so
+        // the magazine the server kept and the bullets this client drew were different numbers.
+        if (body != null) body.LatchFire();
 
         // Before the round is even resolved. The bang is not feedback about a hit — it is the
         // event itself, and everyone within sixty metres is entitled to hear it immediately.

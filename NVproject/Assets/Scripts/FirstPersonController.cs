@@ -83,6 +83,7 @@ public class FirstPersonController : MonoBehaviour
     private bool _networkGrounded = true;
     private bool _jumpLatched;
     private bool _interactLatched;
+    private bool _fireLatched;
     private bool _inputEnabled = true;
     private bool _phasing;
 
@@ -119,8 +120,34 @@ public class FirstPersonController : MonoBehaviour
     /// </summary>
     public bool SneakHeld { get; private set; }
 
-    /// <summary>Fire button held this frame.</summary>
-    public bool FireHeld { get; private set; }
+    /// <summary>
+    /// True once if the weapon actually took a shot since the last call, then false.
+    ///
+    /// **The raw button must never go on the wire.** It used to: the server read the held state out
+    /// of the last input frame it had, and that frame gets repeated for up to three ticks when a new
+    /// one does not arrive — so an ordinary 100 ms click, plus the repeat, outlasted the 5-tick fire
+    /// interval and the server counted *two* rounds for it. The client draws one bullet per click,
+    /// so the two tallies diverged on the one number that matters: the three-round magazine. The
+    /// symptom was being chained after two visible shots.
+    ///
+    /// So the wire carries the client's *decision* — one pulse per round that <see
+    /// cref="WeaponController.Fire"/> actually fired, having already applied the cooldown, the
+    /// magazine and the reload. The server re-checks all of it (`Room.FireWeapons`); this is a
+    /// request, not an instruction.
+    /// </summary>
+    public bool ConsumeFire()
+    {
+        bool fired = _fireLatched;
+        _fireLatched = false;
+        return fired;
+    }
+
+    /// <summary>
+    /// Called by <see cref="WeaponController.Fire"/> on the frame a round leaves the barrel — the
+    /// only thing allowed to raise the wire's fire bit. Latched rather than read live for the same
+    /// reason as the jump: the tick is slower than the render loop.
+    /// </summary>
+    public void LatchFire() => _fireLatched = true;
 
     /// <summary>
     /// True once if jump was pressed since the last call, then false. The network tick runs at
@@ -186,9 +213,9 @@ public class FirstPersonController : MonoBehaviour
                 // 입력을 끊을 때 이동 입력을 비운다. 남겨 두면 UI 를 띄운 채로 계속 달린다.
                 MoveInput = Vector2.zero;
                 SprintHeld = false;
-                FireHeld = false;
                 _jumpLatched = false;
                 _interactLatched = false;
+                _fireLatched = false;
             }
         }
     }
@@ -373,7 +400,9 @@ public class FirstPersonController : MonoBehaviour
 
         SneakHeld = sneaking;
         SprintHeld = sprinting;
-        FireHeld = Mouse.current != null && Mouse.current.leftButton.isPressed;
+
+        // The trigger is deliberately *not* sampled here. It is the weapon that decides whether a
+        // press becomes a round, and only that decision goes on the wire — see ConsumeFire.
         if (!MovementLocked && keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
             _jumpLatched = true;
 

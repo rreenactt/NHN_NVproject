@@ -84,6 +84,11 @@ namespace NV.Client.Net
                 var shots = go.AddComponent<WeaponAudio>();
                 shots.isLocalListener = false;
 
+                // 남이 끌려가는 것도 보여야 한다. 이 몸에는 무기가 없으므로 빈 탄창으로
+                // 걸리는 일이 없고, 서버의 `Frozen` 비트를 `MatchSync` 가 넘겨 준다.
+                // 몸은 스냅샷이 옮기고 이 컴포넌트는 사슬만 그린다.
+                go.AddComponent<ChainDrag>();
+
                 puppet.Agent = agent;
             }
 
