@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using NV.Client.Net;
 using NV.Shared.Collision;
+using Unity.AI.Navigation;
 using UnityEngine;
 
 namespace NV.Client.Map
@@ -46,6 +47,41 @@ namespace NV.Client.Map
         /// mid-freeze and the walls are transparent for everybody, for good.
         /// </summary>
         private Material _wallInstance;
+
+        /// <summary>
+        /// The match layer walks this level: the chain-drag routes over a NavMesh
+        /// (<c>ChainDrag.BuildRoute</c>) and practice Runners ride NavMeshAgents. The runtime
+        /// generator bakes one at the end of <c>Generate()</c>; a baked level is instantiated
+        /// from a prefab and nothing else ever bakes — so the level root does it, once, when it
+        /// wakes. Without this the chain's route falls back to a straight seeker→altar chord and
+        /// the drag pulls the body through every wall on the way.
+        /// </summary>
+        private void Start()
+        {
+            EnsureNavMesh();
+        }
+
+        private void EnsureNavMesh()
+        {
+            // Survives a domain reload: the surface is a UnityEngine.Object and keeps its data.
+            if (GetComponent<NavMeshSurface>() != null) return;
+
+            var surface = gameObject.AddComponent<NavMeshSurface>();
+            surface.collectObjects = CollectObjects.Children;   // the level only — never the bodies
+            surface.useGeometry = UnityEngine.AI.NavMeshCollectGeometry.PhysicsColliders;
+
+            // The lid seals the top storey against jumping out of the level; baked, its top face
+            // becomes a walkable sheet *outside* the level that exists only to mislead a position
+            // sample. Both generators name it the same, and the runtime generator hides its lid
+            // for the bake for the same reason.
+            var lid = transform.Find("Ceiling Lid");
+            Collider lidCollider = lid != null ? lid.GetComponent<Collider>() : null;
+            bool hadLid = lidCollider != null && lidCollider.enabled;
+
+            if (hadLid) lidCollider.enabled = false;
+            surface.BuildNavMesh();
+            if (hadLid) lidCollider.enabled = true;
+        }
 
         /// <inheritdoc />
         public string MapName => asset == null ? string.Empty : asset.MapName;

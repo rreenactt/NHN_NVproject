@@ -35,6 +35,7 @@ namespace NV.Game
         private float _routeLength;
         private Coroutine _routine;
         private bool _serverDriven;
+        private bool _routeWalkable;    // true only when the NavMesh solved it; never the fallback
 
         public bool Active { get; private set; }
 
@@ -258,6 +259,7 @@ namespace NV.Game
         {
             _route = null;
             _routeLength = 0f;
+            _routeWalkable = false;
 
             // 1.5 m, not 4. The bake leaves a walkable strip along the *tops of the top-floor
             // walls*, 3.1 m above the upper floor, and a generous sample radius snaps a Seeker
@@ -273,6 +275,7 @@ namespace NV.Game
                     && path.corners.Length >= 2)
                 {
                     _route = path.corners;
+                    _routeWalkable = true;
 
                     // Both ends are pinned to the real thing rather than to the navmesh's nearest
                     // point, so the chain starts at the Seeker and finishes on the landing spot.
@@ -324,8 +327,14 @@ namespace NV.Game
         /// anything that connects those points with straight lines — snapshot interpolation,
         /// SmoothDamp — turns each corner into a chord that passes through the wall beside it.
         /// <see cref="NetworkBootstrap"/> projects the server position onto this route instead.
+        ///
+        /// The straight-line fallback is deliberately excluded. The server hauls along its own
+        /// grid A* — walls respected — and projecting those positions onto a two-point chord
+        /// *forces* the body through every wall between here and the altar: worse than doing
+        /// nothing. No walkable route, no projection.
         /// </summary>
-        public bool HasRoute => Active && _serverDriven && _route != null && _route.Length >= 2;
+        public bool HasRoute => Active && _serverDriven && _routeWalkable
+            && _route != null && _route.Length >= 2;
 
         public float RouteLength => _routeLength;
 

@@ -182,10 +182,16 @@ IMapGenerator.Generate(settings) → MapBlueprint          (순수 데이터, Un
 ### 4b. 수정하지 않는 것 (전체 목록 — 이 목록이 늘어나면 설계가 틀린 것이다)
 
 `MapGeneratorRegistry`(TypeCache 자동 발견) · `MapGeneratorWindow`(이름 기반 드롭다운) ·
-`MapBlueprint` · `MapSceneBuilder` · `MapBakePipeline` · `MapBakedAsset` · `BakedMapSource` ·
+`MapBlueprint` · `MapSceneBuilder` · `MapBakePipeline` · `MapBakedAsset` ·
 `MapCatalog`/`MapCatalogWriter` · `MapExportPipeline`/`MapExport` · `MapSceneTable`(새 맵은
 행 금지) · `SessionSceneRouter` · `NVserver/Shared/**` · `NVserver/Api/appsettings.json`
 (파일 드롭 = 등록; 별칭/정적 룸 지정은 별도 결정 사항, §6d).
+
+**사후 정정 — `BakedMapSource` 는 결국 한 번 수정됐다.** V2 가 아니라 구운 맵 공통의
+구멍이었기 때문이다: 런타임 생성기는 `Generate()` 끝에 NavMesh 를 굽지만 구운 프리팹
+경로에는 굽는 주체가 없었고, 체인 드래그의 경로가 직선 폴백으로 떨어져 몸이 벽을 뚫고
+끌려갔다. 레벨 루트(`BakedMapSource.Start`)가 한 번 굽는 것으로 고쳤다 — V2 전용 코드가
+아니라 모든 구운 맵이 얻는 수정이므로 격리 경계 위반이 아니다.
 
 단 하나의 예외 가능성: `MapSurface` enum (`MapBlueprint.cs`) 에 V2 전용 표면(예: `Pillar`)이
 필요하면 값 추가는 허용 — 기존 값의 의미·순서는 불변. 기존 6종(Wall/Floor/Ceiling/Trim/
