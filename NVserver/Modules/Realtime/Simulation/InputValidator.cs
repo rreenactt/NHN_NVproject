@@ -43,10 +43,15 @@ namespace NV.Realtime.Simulation
         /// 직전의 입력이 착지와 함께 발동한다** — 의도해서 만든 것은 아니지만 점프 버퍼로
         /// 동작하고, 그것은 조작감에서 얻는 쪽이다. 반복 상한을 체공보다 길게 올리는 변경이
         /// 들어오면 그때 `Jump` 를 여기 더해야 하고, 그 테스트가 알려 준다.
+        ///
+        /// **`Fire` 가 여기 있는 것은 방어가 아니라 수리다.** 발사는 `LastInput` 에서 읽혔고,
+        /// 그래서 반복이 실제로 방아쇠를 다시 당겼다 — 한 번의 클릭이 연사 간격을 넘겨 두 발이
+        /// 됐다(`PlayerEntity.FireRequested`). 읽는 쪽은 요청 래치로 옮겼고, 이 줄은 그 비트가
+        /// 반복될 값에 두 번 다시 남지 않게 한다.
         public static InputFrame WithoutEdgeButtons(in InputFrame frame)
         {
             return new InputFrame(
-                frame.Buttons & ~ButtonFlags.Interact,
+                frame.Buttons & ~(ButtonFlags.Interact | ButtonFlags.Fire),
                 frame.MoveX,
                 frame.MoveZ,
                 frame.Yaw,

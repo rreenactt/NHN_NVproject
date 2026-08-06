@@ -39,11 +39,124 @@ namespace NV.Shared.Collision
 
         /// 박스를 velocity * deltaTime 만큼 옮기고 충돌을 해소한다.
         /// 접촉면을 만나면 남은 이동과 속도를 그 평면에 투사해 미끄러진다.
+        ///
+        /// 수직면에 막혀 멈췄고 발이 땅에 붙어 있으면 **턱을 넘어 본다**
+        /// (<see cref="SimConstants.StepHeight"/>). 그것이 없으면 계단의 챌면이 벽과
+        /// 구별되지 않아 한 단씩 점프해야 올라간다.
         public MoveResult MoveBox(Vector3 center, Vector3 halfExtents, Vector3 velocity, float deltaTime)
         {
-            var position = Depenetrate(center, halfExtents);
+            var start = Depenetrate(center, halfExtents);
+            var delta = DeterministicMath.Scale(velocity, deltaTime);
+
+            var flat = Slide(start, halfExtents, delta, velocity);
+
+            if (!BlockedByWall(flat, delta))
+            {
+                return flat;
+            }
+
+            // 공중에는 계단이 없다. 이 검사를 빼면 벽에 붙어 점프하는 것으로 벽을 오른다.
+            if (!IsGrounded(start, halfExtents, SimConstants.GroundProbeDistance))
+            {
+                return flat;
+            }
+
+            return TryStepOver(start, halfExtents, delta, velocity, flat, out var stepped) ? stepped : flat;
+        }
+
+        /// 막힌 것이 **벽인가**. 바닥이나 천장에 닿아 멈춘 것은 넘을 턱이 아니다.
+        ///
+        /// 수평 이동이 거의 없으면 넘을 것도 없다 — 제자리에서 중력만 받는 틱마다
+        /// 계단 시도를 돌리지 않기 위한 조건이기도 하다.
+        private static bool BlockedByWall(in MoveResult result, Vector3 delta)
+        {
+            if (!result.Hit)
+            {
+                return false;
+            }
+
+            if (DeterministicMath.Abs(result.LastNormal.Y) >= SimConstants.GroundNormalY)
+            {
+                return false;
+            }
+
+            var horizontal = new Vector3(delta.X, 0f, delta.Z);
+
+            return DeterministicMath.LengthSquared(horizontal) > DeterministicMath.Epsilon;
+        }
+
+        /// 올라가고, 가고, 내려놓는다. 셋 다 성공해야 채택한다.
+        ///
+        /// **내려놓는 거리는 올라간 만큼이다.** 더 내려가게 두면 턱을 넘은 것이 아니라
+        /// 구덩이를 건너뛰는 것이 되고, 낙하가 이 함수 안에서 공짜로 일어난다.
+        ///
+        /// **더 나아간 경우에만 채택한다.** 벽에 붙어 걷는 동안 오르내리기를 반복하면
+        /// 서 있는 높이가 틱마다 흔들리고, 그것은 클라이언트에서 떨림으로 보인다.
+        private bool TryStepOver(
+            Vector3 start,
+            Vector3 halfExtents,
+            Vector3 delta,
+            Vector3 velocity,
+            in MoveResult flat,
+            out MoveResult stepped)
+        {
+            stepped = flat;
+
+            var raised = SweepStraight(start, halfExtents, new Vector3(0f, SimConstants.StepHeight, 0f));
+            var lift = raised.Y - start.Y;
+
+            // 머리 위가 막혀 있다. 낮은 통로 안에서는 턱을 넘지 못하는 것이 맞다.
+            if (lift <= SimConstants.SkinWidth)
+            {
+                return false;
+            }
+
+            var horizontal = new Vector3(delta.X, 0f, delta.Z);
+            var moved = Slide(raised, halfExtents, horizontal, velocity);
+
+            var landed = SweepStraight(moved.Center, halfExtents, new Vector3(0f, -lift, 0f));
+
+            // 턱 위에 발을 딛지 못했으면 넘은 것이 아니다 — 난간 너머 허공이 그렇다.
+            if (!IsGrounded(landed, halfExtents, SimConstants.GroundProbeDistance))
+            {
+                return false;
+            }
+
+            if (HorizontalDistanceSquared(start, landed) <= HorizontalDistanceSquared(start, flat.Center))
+            {
+                return false;
+            }
+
+            stepped = new MoveResult(landed, moved.Velocity, new Vector3(0f, 1f, 0f), moved.Hit, true);
+            return true;
+        }
+
+        private static float HorizontalDistanceSquared(Vector3 from, Vector3 to)
+        {
+            var dx = to.X - from.X;
+            var dz = to.Z - from.Z;
+
+            return (dx * dx) + (dz * dz);
+        }
+
+        /// 미끄러지지 않고 닿을 때까지만 간다. 오르기·내려놓기가 쓴다 —
+        /// 그 둘이 미끄러지면 턱 위가 아니라 옆으로 흘러간 자리에 놓인다.
+        private Vector3 SweepStraight(Vector3 position, Vector3 halfExtents, Vector3 delta)
+        {
+            if (!SweepEarliest(position, halfExtents, delta, out var time, out var normal))
+            {
+                return DeterministicMath.Add(position, delta);
+            }
+
+            var contact = DeterministicMath.Add(position, DeterministicMath.Scale(delta, time));
+
+            return DeterministicMath.Add(contact, DeterministicMath.Scale(normal, SimConstants.SkinWidth));
+        }
+
+        private MoveResult Slide(Vector3 position, Vector3 halfExtents, Vector3 move, Vector3 velocity)
+        {
             var currentVelocity = velocity;
-            var remaining = DeterministicMath.Scale(velocity, deltaTime);
+            var remaining = move;
 
             var hit = false;
             var grounded = false;

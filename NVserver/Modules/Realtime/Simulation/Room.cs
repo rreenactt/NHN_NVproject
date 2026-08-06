@@ -1015,6 +1015,15 @@ namespace NV.Realtime.Simulation
                 player.InteractRequested = true;
             }
 
+            // 발사 요청도 같은 자리에서 걷는다. **`LastInput` 을 읽지 않는다** — 그것은
+            // 반복 적용되는 값이라, 누르고 있는 상태로 읽으면 클릭 한 번이 여러 발이 된다
+            // (`PlayerEntity.FireRequested` 에 그 버그가 적혀 있다). 같은 틱에 여러 프레임을
+            // 따라잡아도 요청은 하나이며, 그것이 맞다 — 연사 간격이 어차피 틱당 한 발이다.
+            if ((frame.Buttons & ButtonFlags.Fire) != 0)
+            {
+                player.FireRequested = true;
+            }
+
             Simulate(player, frame);
 
             return frame;
@@ -1227,9 +1236,15 @@ namespace NV.Realtime.Simulation
 
         /// 발사를 판정한다. 기획서 §4.3 — Seeker 의 3발.
         ///
-        /// **`Fire` 는 엣지가 아니라 누르고 있는 상태다**(`FirstPersonController.FireHeld`).
-        /// 연사 간격이 그것을 받아 준다 — `NextFireTick` 이 없으면 트리거를 누르고 있는 동안
-        /// 초당 30발이 나간다.
+        /// **`Fire` 는 엣지다**(`PlayerEntity.FireRequested`). 예전에는 누르고 있는 상태였고
+        /// 연사 간격이 그것을 받아 주는 줄 알았는데, 받아 주지 못했다 — 사람의 클릭 한 번이
+        /// 연사 간격보다 오래 눌려 있으면 그대로 두 발이 된다. 클라이언트는 클릭당 한 발을
+        /// 그리므로 두 수가 갈렸고, 갈린 쪽이 탄창이라 세 번째 발이 나오지도 않은 채 체인이
+        /// 걸렸다.
+        ///
+        /// 엣지가 되어도 `NextFireTick` 은 남는다. 요청은 클라이언트가 보내는 것이고, 보내는
+        /// 쪽을 고쳤다고 해서 서버가 세지 않아도 되는 것은 아니다 — 매 틱 요청을 보내는
+        /// 클라이언트는 언제나 만들 수 있다.
         ///
         /// Runner 는 쏘지 않는다. 기획서 §4 의 총은 술래의 것이고, `RunnerHitsToDie` 가 있는
         /// 것도 맞는 쪽이 Runner 뿐이기 때문이다.
@@ -1242,10 +1257,15 @@ namespace NV.Realtime.Simulation
 
             foreach (var player in _players.Values)
             {
-                if ((player.LastInput.Buttons & ButtonFlags.Fire) == 0)
+                if (!player.FireRequested)
                 {
                     continue;
                 }
+
+                // **자격을 보기 전에 지운다.** `InsertKeys` 와 같은 이유다 — 엣지는 한 틱만
+                // 살아야 하고, 거부된 요청이 남아 있으면 연사 간격이 풀리는 틱에 예전에 누른
+                // 방아쇠가 발동한다.
+                player.FireRequested = false;
 
                 if (RoleOf(player.PlayerId) != MatchRole.Seeker)
                 {
@@ -2400,6 +2420,10 @@ namespace NV.Realtime.Simulation
                 // 로비에서 누른 E 가 매치 첫 틱에 발동하지 않게 한다. `NextInsertTick` 은
                 // 되돌리지 않는다 — 틱 카운터가 이어지므로 지난 매치의 값은 항상 과거다.
                 player.InteractRequested = false;
+
+                // 로비에서 당긴 방아쇠도 같다. `FireWeapons` 는 `Playing` 이 아니면 아예 돌지
+                // 않으므로 그 사이에 선 요청은 지워 주는 사람이 없다.
+                player.FireRequested = false;
 
                 // 지난 매치에 빠져나간 사람이 이번 매치를 탈출한 상태로 시작하지 않게 한다.
                 player.Escaped = false;

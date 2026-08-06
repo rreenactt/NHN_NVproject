@@ -139,6 +139,37 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(before, world.FireEventCount(world.SeekerSession));
         }
 
+        /// **클릭 한 번은 한 발이다.** 이 테스트가 없던 동안 두 발이었다.
+        ///
+        /// 사람의 클릭은 100ms 쯤 눌려 있고, 그 동안 클라이언트는 매 틱 입력을 보낸다(3틱).
+        /// 손을 뗀 뒤에도 서버는 새 입력이 없으면 마지막 프레임을 `MaxInputRepeatTicks` 만큼
+        /// 반복하므로, 발사를 `LastInput` 의 눌림 상태로 읽던 시절에는 **3틱 + 3틱 = 6틱**이
+        /// 연사 간격 5틱을 넘겨 두 번째 발이 나갔다. 클라이언트는 클릭당 한 발을 그리므로
+        /// 증상은 "총알은 두 발인데 세 발 쏜 것으로 세어져 체인에 걸린다" 였다.
+        [Fact]
+        public void 한_번의_클릭은_한_발이다()
+        {
+            var world = Armed();
+
+            world.HoldTrigger(3);
+            world.Advance(Match.FireIntervalTicks * 2);
+
+            Assert.Equal(1, world.FireEventCount(world.SeekerSession));
+        }
+
+        /// 엣지가 되어도 연사 간격은 서버의 것이다. 매 틱 요청을 보내는 클라이언트는 언제나
+        /// 만들 수 있으므로, 보내는 쪽을 고친 것이 세는 쪽을 뺄 이유가 되지 않는다.
+        [Fact]
+        public void 매_틱_요청해도_연사_간격을_지킨다()
+        {
+            var world = Armed();
+
+            // 10틱 동안 매 틱 요청한다. 간격이 5틱이므로 두 발이다.
+            world.HoldTrigger(Match.FireIntervalTicks * 2);
+
+            Assert.Equal(2, world.FireEventCount(world.SeekerSession));
+        }
+
         private static FireWorld Armed()
         {
             var room = RoomFixture.Create();
@@ -202,6 +233,16 @@ namespace NV.Modules.Tests.Realtime
 
                 Room.Advance();
                 Room.Broadcast(Transport);
+            }
+
+            /// 트리거를 누른 채로 여러 틱 돌린다. 매 틱 입력을 보내는 클라이언트다 —
+            /// 사람의 클릭 한 번도 여러 틱에 걸쳐 있으므로 이 모양이다.
+            public void HoldTrigger(int ticks)
+            {
+                for (var tick = 0; tick < ticks; tick++)
+                {
+                    Fire();
+                }
             }
 
             /// 입력 없이 돌린다. **매 틱 내보낸다** — 알림이 반복되면 여기서 수가 늘어난다.

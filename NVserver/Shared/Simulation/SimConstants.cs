@@ -57,6 +57,20 @@ namespace NV.Shared.Simulation
         /// 착지 판정용 하향 탐침 거리.
         public const float GroundProbeDistance = 0.05f;
 
+        /// 걸어서 올라갈 수 있는 턱의 높이(m).
+        ///
+        /// **없으면 계단을 올라갈 수 없다.** 박스 스윕은 수직면을 만나면 그 평면으로
+        /// 미끄러질 뿐이라, 계단의 챌면(backrooms 는 3.2m/16단 = 0.2m)이 벽과 똑같이
+        /// 몸을 세운다. 증상은 "계단에서 한 칸씩 점프해야 올라가진다" 이고, 서버가
+        /// 위치를 정하므로 클라이언트에서는 **올라가려다 끌려 내려오는** 것으로 보인다.
+        ///
+        /// 0.3 은 임의의 값이 아니라 클라이언트 `CharacterController` 의
+        /// `m_StepOffset` 이다. 오프라인 플레이는 그쪽이 몸을 움직이므로, 두 값이
+        /// 다르면 같은 턱이 오프라인에서는 올라가지고 네트워크에서는 안 올라간다.
+        /// 계단 한 단(0.2m)보다 크고 제단 기단(0.5m)보다 작다 — 올라가야 할 것과
+        /// 올라가면 안 되는 것 사이에 있다.
+        public const float StepHeight = 0.3f;
+
         /// 겹침 해소 반복 상한.
         public const int MaxDepenetrationIterations = 4;
     }
