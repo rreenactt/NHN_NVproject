@@ -88,6 +88,10 @@ namespace NV.Game
             // handed out, because which half of the HUD exists depends on which side you are on.
             Create<UI.GameHudController>("Match HUD");
 
+            // The ESC system menu — its own document, sorted over the crosshair. Built here so
+            // every match scene has one without any scene carrying it.
+            Create<UI.EscapeMenuController>("Escape Menu");
+
             EnsureMatchSync();
         }
 

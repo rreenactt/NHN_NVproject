@@ -64,6 +64,7 @@ public class WeaponController : MonoBehaviour
     private int _ammo;
     private float _nextFireTime;
     private bool _reloading;
+    private FirstPersonController _playerController;
 
     public int Ammo => _ammo;
     public bool IsReloading => _reloading;
@@ -108,6 +109,8 @@ public class WeaponController : MonoBehaviour
         if (weaponAudio == null) weaponAudio = GetComponent<WeaponAudio>();
         if (weaponAudio == null) weaponAudio = gameObject.AddComponent<WeaponAudio>();
 
+        _playerController = GetComponent<FirstPersonController>();
+
         _ammo = magazineSize;
     }
 
@@ -129,6 +132,13 @@ public class WeaponController : MonoBehaviour
         UpdateAim();
 
         if (!Armed) return;
+
+        // The ESC menu (and anything else that frees the cursor) turns input off at the
+        // controller, and the weapon must honour the same flag: the click that presses a menu
+        // button must not also leave the barrel. Deliberately not FireBlocked — that flag is
+        // the chain's, and a menu that borrowed it would hand a chained Seeker a loaded gun
+        // on close.
+        if (_playerController != null && !_playerController.InputEnabled) return;
 
         var mouse = Mouse.current;
         var keyboard = Keyboard.current;
