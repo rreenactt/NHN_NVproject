@@ -533,7 +533,12 @@ namespace NV.Client.Net
             // 그냥 읽으면 절반쯤 사라진다.
             if (_controller.ConsumeJump()) buttons |= ButtonFlags.Jump;
             if (_controller.SprintHeld) buttons |= ButtonFlags.Sprint;
-            if (_controller.FireHeld) buttons |= ButtonFlags.Fire;
+
+            // 발사도 래치를 소비한다. **누르고 있는 상태를 싣지 않는다** — 서버는 새 입력이
+            // 없으면 마지막 프레임을 최대 3틱 반복하므로, 100ms 짜리 클릭 한 번이 연사
+            // 간격(5틱)을 넘겨 두 발로 세어졌다. 클라이언트는 클릭당 한 발을 그리므로 탄창이
+            // 갈렸고, 증상은 "두 발 쐈는데 세 발로 체인에 걸린다" 였다.
+            if (_controller.ConsumeFire()) buttons |= ButtonFlags.Fire;
 
             // 상호작용도 래치를 소비한다. **대상은 싣지 않는다** — 서버가 자기 좌표로
             // 무엇에 대한 상호작용인지 고른다. 지금 이 비트를 쓰는 판정은 아직 없고

@@ -614,6 +614,32 @@ namespace NV.Game
             weapon.AcceptAmmo(rounds);
         }
 
+        /// <summary>
+        /// The server has this body on the chain, or has let it go (IG-028).
+        ///
+        /// **The empty magazine cannot be the signal on a client.** Networked, the magazine is the
+        /// server's and <see cref="AcceptAmmo"/> overwrites the local count every frame from a 2 Hz
+        /// bulletin, so the local <c>Fire</c> that used to raise the chain never sees zero — the
+        /// Seeker was dragged to the altar by the server with no chain drawn anywhere. The snapshot's
+        /// <c>Frozen</c> bit is what actually says it, and it says it about every body, so a remote
+        /// player's haul is visible too.
+        ///
+        /// **The role gate is not decoration.** The server folds the chain and the match-wide
+        /// movement lock into that one bit, and this client learns the match phase half a second
+        /// late; without it, the tick where the match ends would briefly chain everybody.
+        /// </summary>
+        public void AcceptChained(PlayerAgent agent, bool chained)
+        {
+            if (agent == null) return;
+
+            var chain = agent.GetComponent<ChainDrag>();
+            if (chain == null) return;
+
+            if (chained && agent.Role != Role.Seeker) return;
+
+            chain.SetServerChained(chained);
+        }
+
         public void ClearBleeding(PlayerAgent agent)
         {
             if (agent == null) return;

@@ -5,10 +5,16 @@ namespace NV.Game
 {
     /// <summary>
     /// The trail a bleeding Runner leaves. Marks are real world-space objects rather than
-    /// anything screen-space, because two players must be able to disagree about seeing the same
-    /// spot of blood: they sit on the <c>SeekerVision</c> layer, which the Seeker's camera renders
-    /// and every Runner's camera culls. That is the whole of "visible to the Seeker" — no
-    /// per-player VFX, no second copy of the trail.
+    /// anything screen-space, because players must be able to disagree about seeing the same spot
+    /// of blood: the layer decides, and <see cref="MatchLayers.BloodLayer"/> picks it from whether
+    /// this client is the one leaking. Your own blood is on the layer everyone renders; everybody
+    /// else's is on <c>SeekerVision</c>, which the Seeker's camera renders and a Runner's culls.
+    /// One layer choice, made per client, covers the whole rule — no per-player VFX and no second
+    /// copy of the trail.
+    ///
+    /// It was `SeekerVision` for every mark once, and that hid a Runner's blood from the Runner
+    /// bleeding it: the pool below is the entire cost of standing still, so the person paying it
+    /// could not see the bill.
     ///
     /// The marks are also what enforces "keep moving". Running lays one mark every
     /// <see cref="GameConfig.bloodSpacing"/> metres, which is a thin dotted line. Standing still
@@ -28,6 +34,7 @@ namespace NV.Game
         private PlayerAgent _agent;
         private GameConfig _config;
         private bool _running;
+        private int _markLayer = MatchLayers.SeekerVision;
 
         private Vector3 _lastMark;
         private float _stillTime;
@@ -46,6 +53,11 @@ namespace NV.Game
         {
             _agent = agent;
             _config = MatchManager.Instance != null ? MatchManager.Instance.Config : null;
+
+            // Resolved once, here, rather than per mark: the body this trail belongs to does not
+            // change, and a mark that picked its own layer could disagree with the one before it.
+            _markLayer = MatchLayers.BloodLayer(agent != null && agent.isLocalPlayer);
+
             _running = true;
             _lastMark = transform.position;
             _stillTime = 0f;
@@ -138,7 +150,7 @@ namespace NV.Game
                 y = hit.point.y + 0.02f;
 
             var go = new GameObject("Blood");
-            go.layer = MatchLayers.SeekerVision;
+            go.layer = _markLayer;
             go.transform.position = new Vector3(position.x, y, position.z);
             go.transform.rotation = Quaternion.Euler(90f, Random.value * 360f, 0f);
             go.transform.localScale = Vector3.one * size;

@@ -34,6 +34,7 @@ namespace NV.Game
         private Vector3[] _route;       // corners from the Seeker to the landing spot
         private float _routeLength;
         private Coroutine _routine;
+        private bool _serverChained;    // the server's answer, polled out of the snapshot flags
 
         public bool Active { get; private set; }
 
@@ -47,13 +48,117 @@ namespace NV.Game
             if (weapon == null) weapon = GetComponent<WeaponController>();
         }
 
-        /// <summary>Called by the weapon the moment the last round leaves the magazine.</summary>
+        /// <summary>
+        /// Called by the weapon the moment the last round leaves the magazine — the offline path.
+        ///
+        /// **Networked, the empty magazine is not the signal and cannot be.** The magazine belongs
+        /// to the server there, and <see cref="WeaponController.AcceptAmmo"/> overwrites the local
+        /// count from the 2 Hz bulletin every frame; three shots leave in 0.3 s, well inside one
+        /// bulletin period, so the local <c>Fire</c> never sees zero and this was simply never
+        /// called. That is what left the Seeker being hauled across the map on the end of a chain
+        /// nobody could see. The authoritative signal arrives instead as <c>EntityFlags.Frozen</c>
+        /// in the snapshot — see <see cref="SetServerChained"/>.
+        /// </summary>
         public void Trigger()
         {
             if (Active || !isActiveAndEnabled) return;
             if (agent != null && !agent.InPlay) return;
 
+            MatchManager server = MatchManager.Instance;
+            if (server != null && server.ServerOwnsCombat) return;
+
             _routine = StartCoroutine(Run());
+        }
+
+        /// <summary>
+        /// Whether the server has this body on the chain right now. Polled out of the snapshot by
+        /// <c>MatchSync</c>, which is the only thing that knows — the server folds the chain into
+        /// the same <c>Frozen</c> bit as the match-wide movement lock, because both say the same
+        /// thing about the body: it is not moving under its own will.
+        ///
+        /// **This never moves the body.** The haul is the server's (`Room.StepChain`); calling
+        /// <see cref="FirstPersonController.Teleport"/> here would be undone by the next snapshot,
+        /// and the symptom is a Seeker who lurches toward the altar and snaps back. All this does
+        /// is draw the chain from wherever the body currently is — which is also why it works
+        /// unchanged on a remote player's puppet, so everyone gets to watch it happen.
+        /// </summary>
+        public void SetServerChained(bool chained)
+        {
+            // Polled every frame, so only the *change* is allowed to do anything. Acting on the
+            // level instead would restart the whole thing — chain, notification and all — on the
+            // frame after the safety deadline below expired, for as long as the server kept saying
+            // chained.
+            if (chained == _serverChained) return;
+            _serverChained = chained;
+
+            if (!chained || Active || !isActiveAndEnabled) return;
+            if (agent != null && !agent.InPlay) return;
+
+            _routine = StartCoroutine(RunServer());
+        }
+
+        /// <summary>
+        /// Draws the chain for a haul the server is performing, and ends when the server says so.
+        ///
+        /// The release signal is <see cref="_serverChained"/> going false, not a local timer: end it
+        /// on a clock of our own and the chain lets go on screen while the server is still reeling
+        /// the body in. The deadline below is a safety net for the signal never arriving at all
+        /// (the match ended, the socket dropped) — being chained forever is the worse failure.
+        /// </summary>
+        private IEnumerator RunServer()
+        {
+            MatchManager match = MatchManager.Instance;
+            GameConfig config = match != null ? match.Config : null;
+            if (config == null)
+            {
+                _serverChained = false;
+                _routine = null;
+                yield break;
+            }
+
+            Active = true;
+            agent?.SetChained(true);
+            if (weapon != null) weapon.FireBlocked = true;
+
+            FindAnchor(config, match, out Vector3 destination, out Vector3 chainOrigin);
+            _chainOrigin = chainOrigin;
+
+            BuildRoute(transform.position, destination);
+            UpdateChain(0, transform.position);
+
+            // Only the person on the end of it gets told. On a remote body this component is
+            // presentation for somebody else's punishment.
+            if (agent == null || agent.isLocalPlayer)
+                match.Notify(ChainAltar.Instance != null ? "THE ALTAR TAKES YOU BACK" : "CHAINED");
+
+            // An estimate, for the HUD's countdown only. The server owns both the pace and the
+            // release, so this number must not be what ends the chain.
+            float travel = Mathf.Clamp(_routeLength / Mathf.Max(1f, config.chainDragSpeed),
+                                       config.chainDragTime, config.chainDragMaxTime);
+            float deadline = travel + config.chainWait + 5f;
+
+            for (float t = 0f; _serverChained && t < deadline; t += Time.deltaTime)
+            {
+                // 몸은 서버가 옮긴다. 체인은 지금 몸이 있는 곳에서 제단까지 다시 그린다.
+                UpdateChain(NearestSegment(transform.position), transform.position);
+                Remaining = Mathf.Max(0f, (travel + config.chainWait) - t);
+                yield return null;
+            }
+
+            Remaining = 0f;
+            DestroyChain();
+            agent?.SetChained(false);
+
+            // **재장전하지 않는다.** 탄창은 서버가 채우고 `MatchSync` 가 `AcceptAmmo` 로
+            // 넘긴다. 여기서 `ForceReload` 를 부르면 로컬로 3발이 생겼다가 0.5초 뒤
+            // 전문이 그것을 되돌린다.
+            if (weapon != null) weapon.FireBlocked = false;
+
+            // `_serverChained` is left alone on purpose: it mirrors the server, not this loop. If we
+            // got here on the deadline rather than on the release, it is still true and must stay
+            // true, or the next poll reads a change that never happened and chains the body again.
+            Active = false;
+            _routine = null;
         }
 
         private IEnumerator Run()
@@ -61,12 +166,6 @@ namespace NV.Game
             MatchManager match = MatchManager.Instance;
             GameConfig config = match != null ? match.Config : null;
             if (config == null) yield break;
-
-            // **누가 몸을 옮기는가.** 서버가 전투를 판정하는 매치에서는 견인도 서버의 것이다
-            // (`Room.StepChain`) — 여기서 `Teleport` 를 부르면 다음 스냅샷이 그것을 되돌리고,
-            // 증상은 Seeker 가 제단 쪽으로 끌리다 말고 튕겨 돌아오는 것이다. 그때 이 컴포넌트가
-            // 하는 일은 체인을 그리는 것뿐이고, 몸은 서버가 보내는 위치를 따라간다.
-            bool serverDriven = match.ServerOwnsCombat;
 
             Active = true;
             agent?.SetChained(true);
@@ -87,46 +186,6 @@ namespace NV.Game
             float length = _routeLength;
             float travel = Mathf.Clamp(length / Mathf.Max(1f, config.chainDragSpeed),
                                        config.chainDragTime, config.chainDragMaxTime);
-
-            if (serverDriven)
-            {
-                // 체인이 끝나는 시점도 서버가 정한다. 여기서 로컬 타이머로 끝내면 서버가 아직
-                // 끌고 가는 중인데 화면에서만 풀려 — 조작이 돌아온 것처럼 보이다가 다음
-                // 스냅샷에 다시 묶인다. 서버가 놓아주는 신호는 **탄창이 다시 찬 것**이다
-                // (`Room.StepChain` 이 해제 틱에 그것 하나를 한다).
-                //
-                // 상한을 둔다. 신호가 오지 않는 경우(매치가 끝났다, 소켓이 끊겼다)에 영원히
-                // 묶인 채로 남는 것이 가장 나쁘다.
-                float deadline = travel + config.chainWait + 5f;
-
-                for (float t = 0f; t < deadline; t += Time.deltaTime)
-                {
-                    // 몸은 서버가 옮긴다. 체인은 지금 몸이 있는 곳에서 제단까지 다시 그린다.
-                    UpdateChain(NearestSegment(transform.position), transform.position);
-
-                    Remaining = Mathf.Max(0f, (travel + config.chainWait) - t);
-
-                    if (weapon != null && weapon.Ammo > 0)
-                    {
-                        break;
-                    }
-
-                    yield return null;
-                }
-
-                Remaining = 0f;
-                DestroyChain();
-                agent?.SetChained(false);
-
-                // **재장전하지 않는다.** 탄창은 서버가 채우고 `MatchSync` 가 `AcceptAmmo` 로
-                // 넘긴다. 여기서 `ForceReload` 를 부르면 로컬로 3발이 생겼다가 0.5초 뒤
-                // 전문이 그것을 되돌린다.
-                if (weapon != null) weapon.FireBlocked = false;
-
-                Active = false;
-                _routine = null;
-                yield break;
-            }
 
             // Collision stays off for the haul. The route is walkable by construction, but the
             // corners hug wall edges and a CharacterController scraping them at 26 m/s would
@@ -426,6 +485,7 @@ namespace NV.Game
             if (controller != null) controller.Phasing = false;
             Remaining = 0f;
             Active = false;
+            _serverChained = false;
             agent?.SetChained(false);
             if (weapon != null) weapon.FireBlocked = false;
         }

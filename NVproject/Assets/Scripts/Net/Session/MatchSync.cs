@@ -209,6 +209,16 @@ namespace NV.Client.Net.Session
                 participant.Hits,
                 (flags & NV.Shared.Contracts.Enums.EntityFlags.Bleeding) != 0,
                 (flags & NV.Shared.Contracts.Enums.EntityFlags.Downed) != 0);
+
+            // 체인. **빈 탄창이 아니라 이 비트가 신호다** — 탄창은 서버의 것이고 전문이 매 프레임
+            // 로컬 값을 덮어쓰므로, 로컬 `Fire` 가 0 을 보는 일이 없어 체인이 아예 그려지지
+            // 않았다(서버는 끌고 가는데 사슬만 없었다). 서버는 체인과 매치 전체의 이동 잠금을
+            // 한 비트에 함께 싣고(`Room` 의 플래그 인코딩), 잠금은 리빌과 종료 단계에만 걸린다 —
+            // 그래서 단계로 가른다. 명단 전원에 적용하므로 남이 끌려가는 것도 보인다.
+            MatchManager.Instance.AcceptChained(
+                agent,
+                MatchManager.Instance.Phase == NV.Game.MatchPhase.Playing
+                && (flags & NV.Shared.Contracts.Enums.EntityFlags.Frozen) != 0);
         }
 
         /// 세션·클라이언트·매치가 모두 준비됐는가.
