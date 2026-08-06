@@ -156,6 +156,20 @@ namespace NV.Realtime.Simulation
         /// 한 번의 키 입력이 삽입 간격마다 계속 발동한다.
         public bool InteractRequested { get; set; }
 
+        /// 이번 틱에 발사를 요청했는가.
+        ///
+        /// **엣지다. `InteractRequested` 와 같은 이유로 같은 모양이다** — 다만 이쪽은 예전에
+        /// 엣지가 아니었고, 그것이 버그였다. `LastInput.Buttons` 의 `Fire` 를 읽던 시절에는
+        /// 방아쇠를 **누르고 있는 상태**가 판정 대상이라, 사람의 클릭 한 번(50~150ms)이
+        /// 입력 반복(`MaxInputRepeatTicks` 3틱)까지 더해 연사 간격(5틱)을 넘겨 **두 발**이
+        /// 나갔다. 클라이언트는 클릭당 한 발만 그리므로 증상은 "총알은 두 발 나갔는데 세 발
+        /// 쏜 것으로 세어져 체인에 걸린다" 였다.
+        ///
+        /// 클라이언트는 이제 **자기가 실제로 쏜 틱에만** 이 비트를 싣는다
+        /// (`FirstPersonController.ConsumeFire`). 서버는 그것을 요청으로 받고 탄약·역할·연사
+        /// 간격을 다시 본다 — `Control` 이 요청이고 룸이 다시 판정하는 것과 같은 규칙이다.
+        public bool FireRequested { get; set; }
+
         /// 다음 삽입이 가능한 틱. 기획서에 없는 간격이지만 없으면 한 번의 입력으로 열쇠
         /// 10개가 다 들어간다(`MatchConstants.KeyInsertInterval` 참조).
         ///

@@ -12,10 +12,25 @@ namespace NV.Realtime.Simulation
     /// "걸어서 온 거리를 통째로 되돌린다" 인데, 직선으로 끌면 그 거리가 아니라 지도상의 간격이
     /// 되어서 멀리 돌아온 사람일수록 덜 손해를 본다.
     ///
-    /// **`Standable` 위를 걷지, `FreeFloor` 위를 걷지 않는다.** 둘의 차이가 여기서 결정적이다 —
-    /// 계단 셀은 격자상 통행 가능하지만 몸이 서는 자리는 아니라서 `FreeFloor` 가 빠져 있다.
-    /// `FreeFloor` 로 탐색하면 계단이 통째로 막힌 것이 되어 층을 넘는 경로가 아예 없다.
-    /// 반대로 **도착지**는 `FreeFloor` 여야 한다(제단 옆자리가 그렇다).
+    /// **`Standable` 위를 걷고, 계단 안에서는 `StairLink` 위도 걷는다.** 이 두 번째 절반이
+    /// 빠져 있었고, 그래서 **층을 넘는 경로가 하나도 없었다.**
+    ///
+    /// 계단참은 위층에서만 바닥이 있고 계단 아래 샤프트는 아래층에서만 바닥이 있다. 즉
+    /// 계단 사각형 안에서 **두 층 모두 `Standable` 인 셀은 하나도 없다**(backrooms 실측:
+    /// 아래층은 z15~18 이 서 있을 수 있고 z19 가 아니며, 위층은 정확히 그 반대다). `RelayStair`
+    /// 가 도착 셀에 `Standable` 을 요구하면 층 이동이 **한 번도 성립하지 않고**, 두 층은 서로
+    /// 다른 섬이 된다. 증상은 조용하다 — 위층에서 탄창을 비운 Seeker 에게 "제단까지 걸어갈
+    /// 길이 없다" 는 경고 한 줄이 남고 체인이 걸리지 않는다. 벌칙이 사라지는 것이다.
+    ///
+    /// 내보내는 쪽은 이것을 계약으로 적어 두고 있었다(`BackroomsGenerator.BuildGrid`:
+    /// "위층 샤프트 셀은 일부러 `Standable` 이 아니지만 층을 넘는 경로가 지나는 곳이므로
+    /// 경로 탐색기를 위해 표시한다"). 지키지 않은 것은 이쪽이었다.
+    ///
+    /// **바닥 없는 계단 셀에는 다른 계단 셀에서만 들어간다**(<see cref="CanEnter"/>). 복도에서
+    /// 곧장 들어갈 수 있게 두면 위층 샤프트가 구멍 위를 가로지르는 지름길이 된다.
+    ///
+    /// 반대로 **도착지**는 `FreeFloor` 여야 한다(제단 옆자리가 그렇다) — 그 판정은 부르는 쪽에
+    /// 있다.
     ///
     /// 층은 <see cref="MapCellFlags.StairLink"/> 로만 넘는다. 그 플래그가 계단이 지나가는 셀에
     /// 붙어 있고(생성기가 계단 사각형 전체에 칠한다), 그것이 없으면 두 층은 서로 다른 섬이다.
@@ -193,7 +208,7 @@ namespace NV.Realtime.Simulation
 
             var next = _grid.CellIndex(floor, x, z);
 
-            if (_closed[next] || !Walkable(next))
+            if (_closed[next] || !CanEnter(current, next))
             {
                 return;
             }
@@ -331,9 +346,30 @@ namespace NV.Realtime.Simulation
             return false;
         }
 
+        /// 이 셀을 지나갈 수 있는가. 바닥이 있거나, 계단 안이거나.
         private bool Walkable(int cell)
         {
+            return Standable(cell) || Stair(cell);
+        }
+
+        /// <paramref name="from"/> 에서 <paramref name="to"/> 로 한 칸 갈 수 있는가.
+        ///
+        /// 바닥이 있는 셀은 어디서든 들어간다. 바닥이 없는 계단 셀 — 위층에서 계단 위를
+        /// 지나는 샤프트가 그렇다 — 은 **다른 계단 셀에서만** 들어간다. 그러지 않으면 위층
+        /// 복도에서 샤프트로 걸어 들어가 구멍 위를 가로지르는 경로가 나온다.
+        private bool CanEnter(int from, int to)
+        {
+            return Standable(to) || (Stair(to) && Stair(from));
+        }
+
+        private bool Standable(int cell)
+        {
             return (((MapCellFlags)_grid.Cells[cell]) & MapCellFlags.Standable) == MapCellFlags.Standable;
+        }
+
+        private bool Stair(int cell)
+        {
+            return (((MapCellFlags)_grid.Cells[cell]) & MapCellFlags.StairLink) == MapCellFlags.StairLink;
         }
 
     }
