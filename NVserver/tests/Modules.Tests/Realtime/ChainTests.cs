@@ -202,6 +202,55 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(before, world.FireEventCount());
         }
 
+        /// 견인은 부드럽게 출발해 부드럽게 도착한다(SmoothStep) — 오프라인 견인과 같은 곡선이다.
+        ///
+        /// 등속이면 매 틱의 이동량이 같아 출발이 홱 당겨지고 도착이 뚝 멈춘다. 이징이면
+        /// 첫 틱과 마지막 틱의 이동량이 중간보다 뚜렷이 작다 — 그것을 검사한다. 정확한
+        /// 곡선 값을 박지 않는 이유는 묶는 시간의 테스트가 정확한 틱을 박지 않는 이유와
+        /// 같다: 견인 틱 수가 맵과 스폰에 따라 달라진다.
+        [Fact]
+        public void 견인이_부드럽게_출발하고_부드럽게_도착한다()
+        {
+            var world = ChainWorld.Create();
+
+            world.EmptyMagazine();
+
+            var steps = world.MeasureDragSteps();
+
+            Assert.True(steps.Count >= 3, $"견인이 {steps.Count}틱뿐이라 곡선을 잴 수 없다.");
+
+            var first = steps[0];
+            var last = steps[steps.Count - 1];
+            var peak = 0f;
+            foreach (var step in steps)
+            {
+                if (step > peak)
+                {
+                    peak = step;
+                }
+            }
+
+            Assert.True(peak > first * 1.5f, $"출발 틱({first:F3}m)이 최고 속도({peak:F3}m)와 다르지 않다 — 등속이다.");
+            Assert.True(peak > last * 1.5f, $"도착 틱({last:F3}m)이 최고 속도({peak:F3}m)와 다르지 않다 — 등속이다.");
+        }
+
+        /// 이징을 넣어도 견인은 **뒤로 가지 않는다.** 경로 위의 진행이 단조 증가여야
+        /// 클라이언트 보간이 앞뒤로 출렁이지 않는다.
+        [Fact]
+        public void 견인이_뒤로_가지_않는다()
+        {
+            var world = ChainWorld.Create();
+
+            world.EmptyMagazine();
+
+            var steps = world.MeasureDragSteps();
+
+            foreach (var step in steps)
+            {
+                Assert.True(step >= -0.0001f, $"견인 중에 {-step:F3}m 뒤로 갔다.");
+            }
+        }
+
         /// 격자가 없는 맵에는 제단이 없다. 끌고 갈 곳이 없으면 벌칙을 걸지 않는다 —
         /// 제자리에 3초 묶어 두는 것은 기획서가 정한 벌칙이 아니다.
         [Fact]
@@ -327,6 +376,79 @@ namespace NV.Modules.Tests.Realtime
                 Assert.True(ticks < cap, $"{cap}틱이 지나도 체인이 풀리지 않았다.");
 
                 return ticks;
+            }
+
+            /// 견인 구간의 틱별 진행량(m)을 잰다. 도착(경로 끝)까지 한 틱씩 돌리며,
+            /// 진행은 **경로 위 사영**으로 계산한다 — 경로가 꺾이면 직선거리로는 앞뒤를
+            /// 구분할 수 없다.
+            public System.Collections.Generic.List<float> MeasureDragSteps(int cap = 400)
+            {
+                var route = SeekerChainRoute();
+                Assert.True(route.Count >= 2, "체인 경로가 없다 — 체인에 걸리지 않았다.");
+
+                var target = route[route.Count - 1];
+                var steps = new System.Collections.Generic.List<float>();
+                var previous = ProgressAlongRoute(route, SeekerPosition());
+
+                var ticks = 0;
+                while (Vector3.Distance(SeekerPosition(), target) > 0.001f && ticks < cap)
+                {
+                    Advance(1);
+                    var progress = ProgressAlongRoute(route, SeekerPosition());
+                    steps.Add(progress - previous);
+                    previous = progress;
+                    ticks++;
+                }
+
+                Assert.True(ticks < cap, $"{cap}틱이 지나도 견인이 도착하지 않았다.");
+                return steps;
+            }
+
+            /// 점을 경로에 사영해 시작점부터의 경로 거리로 바꾼다.
+            private static float ProgressAlongRoute(System.Collections.Generic.List<Vector3> route, Vector3 point)
+            {
+                var best = 0f;
+                var bestDistance = float.MaxValue;
+                var arc = 0f;
+
+                for (var index = 1; index < route.Count; index++)
+                {
+                    var from = route[index - 1];
+                    var to = route[index];
+                    var segment = to - from;
+                    var lengthSquared = segment.LengthSquared();
+                    var t = lengthSquared < 1e-8f
+                        ? 0f
+                        : System.Math.Clamp(Vector3.Dot(point - from, segment) / lengthSquared, 0f, 1f);
+
+                    var closest = from + segment * t;
+                    var distance = Vector3.DistanceSquared(point, closest);
+                    var segmentLength = System.MathF.Sqrt(lengthSquared);
+
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        best = arc + segmentLength * t;
+                    }
+
+                    arc += segmentLength;
+                }
+
+                return best;
+            }
+
+            private System.Collections.Generic.List<Vector3> SeekerChainRoute()
+            {
+                foreach (var player in Room.Players)
+                {
+                    if (player.PlayerId == Seeker)
+                    {
+                        return player.ChainRoute;
+                    }
+                }
+
+                Assert.Fail("룸에 Seeker 가 없다.");
+                return null;
             }
 
             /// 지금 이 순간의 탄창. **전문이 아니라 룸에서 읽는다.**
