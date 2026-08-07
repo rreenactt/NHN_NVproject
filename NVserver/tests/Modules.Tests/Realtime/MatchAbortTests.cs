@@ -59,7 +59,7 @@ namespace NV.Modules.Tests.Realtime
         [Fact]
         public void Runner가_모두_나가면_유예_뒤_중단된다()
         {
-            var (room, _, seekerId) = StartedRoom();
+            var (room, transport, seekerId) = StartedRoom();
 
             var runnerId = FirstRunnerId(seekerId, playerCount: 2);
             room.PostCommand(RoomCommand.Leave(runnerId + 1, runnerId));
@@ -70,6 +70,78 @@ namespace NV.Modules.Tests.Realtime
 
             Advance(room, 3);
             Assert.Equal(RoomPhase.Ended, room.Phase);
+
+            // `Ended` 만 보면 시계 종료(결과 0)와 구분되지 않는다 — 이유가 중단이라는
+            // 것은 결과 byte 가 말한다.
+            room.Broadcast(transport);
+            Assert.True(transport.TryLastRoomState(seekerId + 1, out var header, out _));
+            Assert.Equal(Aborted, header.Outcome);
+        }
+
+        /// 역할 공개도 룸 단계는 `Playing` 이다 — 공개 중에 술래가 나가도 같은 판정을
+        /// 받는다. 공개(120틱)가 유예(150틱)보다 짧아 중단은 본편에 걸쳐 일어난다.
+        [Fact]
+        public void 역할_공개_중에_술래가_나가도_유예_뒤_중단된다()
+        {
+            var (room, _, seekerId) = StartedRoom(skipReveal: false);
+
+            room.PostCommand(RoomCommand.Leave(seekerId + 1, seekerId));
+            room.Advance();
+
+            Advance(room, Grace + 2);
+            Assert.Equal(RoomPhase.Ended, room.Phase);
+        }
+
+        /// 유예가 흐르는 동안 방장 클라이언트의 승패 보고는 받지 않는다. 술래가 나간
+        /// 방에서는 남은 전원이 자유롭게 탈출할 수 있고, 그 5초의 승리를 인정하면
+        /// 퇴장이 상대 팀의 무기가 된다 — 예약이 살아 있는 동안 결과는 중단뿐이다.
+        [Fact]
+        public void 유예_중의_승패_보고는_무시된다()
+        {
+            var (room, transport, seekerId) = StartedRoom();
+
+            room.PostCommand(RoomCommand.Leave(seekerId + 1, seekerId));
+            room.Advance();
+
+            // 술래가 방장이었다면 방장은 남은 세션으로 승계되어 있다.
+            var hostSession = seekerId == 0 ? 2 : 1;
+            room.PostCommand(RoomCommand.EndMatch(hostSession, 3));
+            room.Advance();
+
+            Assert.Equal(RoomPhase.Playing, room.Phase);
+
+            Advance(room, Grace + 2);
+            Assert.Equal(RoomPhase.Ended, room.Phase);
+
+            room.Broadcast(transport);
+            Assert.True(transport.TryLastRoomState(hostSession, out var header, out _));
+            Assert.Equal(Aborted, header.Outcome);
+        }
+
+        /// 유예 중에도 방장은 방을 로비로 되돌릴 수 있고, 그 길로 예약도 지워진다.
+        [Fact]
+        public void 유예_중_로비_복귀가_예약을_지운다()
+        {
+            var (room, _, seekerId) = StartedRoom();
+
+            room.PostCommand(RoomCommand.Leave(seekerId + 1, seekerId));
+            room.Advance();
+
+            var hostSession = seekerId == 0 ? 2 : 1;
+            room.PostCommand(RoomCommand.ReturnToLobby(hostSession));
+            room.Advance();
+            Assert.Equal(RoomPhase.Waiting, room.Phase);
+
+            // 남은 사람도 내보내고 처음부터 채운다 — `FillAndStart` 는 세션 1 이
+            // 방장이라고 가정하는데, 승계로 방장이 다른 세션에 가 있다.
+            var runnerId = FirstRunnerId(seekerId, playerCount: 2);
+            room.PostCommand(RoomCommand.Leave(runnerId + 1, runnerId));
+            room.Advance();
+
+            // 다시 채워 시작한 매치가 지난 예약으로 끝나지 않는다.
+            RoomFixture.FillAndStart(room);
+            Advance(room, Grace + 10);
+            Assert.Equal(RoomPhase.Playing, room.Phase);
         }
 
         /// 전원 퇴장은 기존 경로가 우선이다 — 결과 화면 없이 대기로 되돌아간다.
@@ -154,12 +226,14 @@ namespace NV.Modules.Tests.Realtime
             return 0;
         }
 
-        private static (Room room, RecordingTransport transport, byte seekerId) StartedRoom(int count = 2)
+        private static (Room room, RecordingTransport transport, byte seekerId) StartedRoom(
+            int count = 2,
+            bool skipReveal = true)
         {
             var room = RoomFixture.Create();
             var transport = new RecordingTransport();
 
-            RoomFixture.FillAndStart(room, count);
+            RoomFixture.FillAndStart(room, count, skipReveal);
             room.Broadcast(transport);
 
             Assert.True(transport.TryLastMatchState(1, out _, out var participants), "매치 전문이 나가지 않았다.");

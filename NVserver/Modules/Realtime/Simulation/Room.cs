@@ -2572,6 +2572,21 @@ namespace NV.Realtime.Simulation
                 return;
             }
 
+            // 중단이 예약된 매치의 승패 보고는 받지 않는다. 유예 5초는 룸이 `Playing`
+            // 인 채로 흐르므로 방장 클라이언트의 판정도 그 안에서 계속 돈다 — 술래가
+            // 나간 방에서 남은 전원이 자유롭게 탈출하면 Runner 승리가, Runner 전원이
+            // 나간 방에서는 전멸 승리가 유예를 앞질러 도착한다. 퇴장을 상대 팀의
+            // 승리로 치지 않는 것이 이 예약의 내용이므로, 예약이 살아 있는 동안
+            // 결과는 중단뿐이다.
+            if (_abortAtTick != 0u)
+            {
+                _logger.LogInformation(
+                    "룸 {RoomId}: 중단이 예약된 매치의 승패 보고(결과 {Outcome})를 무시했다.",
+                    RoomId,
+                    outcome);
+                return;
+            }
+
             _outcome = outcome;
             _match.ForceEnd();
             Volatile.Write(ref _phase, (int)RoomPhase.Ended);
@@ -2600,36 +2615,40 @@ namespace NV.Realtime.Simulation
         }
 
         /// 명단이 매치를 지탱하는지 매 틱 본다. 지탱하지 못하면 유예를 걸고, 유예가
-        /// 끝나도록 회복되지 않으면 중단한다.
+        /// 끝나면 중단한다.
         ///
         /// **"누가 나갔나"가 아니라 "지금 명단이 성립하는가"를 본다.** 퇴장·강제
-        /// 퇴장·이중 퇴장·매치 중 입장(정적 룸)이 전부 커맨드로 이 틱에 적용되어
-        /// 있으므로, 상태에서 판정하면 그 경우들을 따로 셀 필요가 없다. 같은 이유로
-        /// 유예 중에 명단이 회복되면(나간 술래의 슬롯을 새 참가자가 받는 정적 룸의
-        /// 드문 경우) 예약도 취소된다.
+        /// 퇴장·이중 퇴장이 전부 커맨드로 이 틱에 적용되어 있으므로, 상태에서
+        /// 판정하면 그 경우들을 따로 셀 필요가 없다.
+        ///
+        /// **취소 분기는 없다 — 회복이 불가능하기 때문이다.** 진행 중 합류는 `/ws` 가
+        /// 거절하고(`RealtimeEndpoints`, 역할과 배치가 이미 정해져 있어 규칙이 성립하지
+        /// 않는다) 봇 채우기는 대기 단계에만 돌므로, `Playing` 중에 빠진 자리를 메울
+        /// 길이 없다. 취소를 두면 지금은 죽은 코드이고, 진행 중 합류가 열리는 날에는
+        /// 새 참가자가 술래 표식을 조용히 물려받은 채 매치가 계속되는 길이 된다 —
+        /// 그날의 결정은 그날의 커밋이 한다.
         ///
         /// 전원 퇴장은 여기 오지 않는다 — `Leave` 가 빈 방을 커맨드 적용 시점에
         /// `ResetToWaiting` 으로 되돌리므로, 볼 사람 없는 결과 화면은 생기지 않는다.
         private void TickAbortWatch()
         {
-            var viable = SeekerPresent() && RunnerPresent();
-
-            if (!viable && _abortAtTick == 0u)
+            if (_abortAtTick == 0u)
             {
-                _abortAtTick = _tick + RealtimeConstants.Match.AbortGraceTicks;
+                var seekerPresent = SeekerPresent();
+                var runnerPresent = RunnerPresent();
 
-                _logger.LogInformation(
-                    "룸 {RoomId}: 매치가 정상 진행될 수 없다(술래 {SeekerPresent}, Runner {RunnerPresent}). " +
-                    "틱 {AbortTick} 에 중단한다.",
-                    RoomId,
-                    SeekerPresent(),
-                    RunnerPresent(),
-                    _abortAtTick);
-            }
-            else if (viable && _abortAtTick != 0u)
-            {
-                _abortAtTick = 0u;
-                _logger.LogInformation("룸 {RoomId}: 명단이 회복되어 매치 중단을 취소한다.", RoomId);
+                if (!seekerPresent || !runnerPresent)
+                {
+                    _abortAtTick = _tick + RealtimeConstants.Match.AbortGraceTicks;
+
+                    _logger.LogInformation(
+                        "룸 {RoomId}: 매치가 정상 진행될 수 없다(술래 {SeekerPresent}, Runner {RunnerPresent}). " +
+                        "틱 {AbortTick} 에 중단한다.",
+                        RoomId,
+                        seekerPresent,
+                        runnerPresent,
+                        _abortAtTick);
+                }
             }
 
             if (_abortAtTick != 0u && _tick >= _abortAtTick)

@@ -333,8 +333,11 @@ namespace NV.Client.Net.Session
         /// 게시는 계속 오고, 알림을 게시마다 다시 올리면 화면이 그 문장으로 찬다.
         private void NotifyIfSeekerLeft(byte seekerPlayerId)
         {
+            // `_startedTick` 은 이 게시에서 방금 채워지므로 "시작했는가"의 답이 되지
+            // 못한다 — 매치 레이어가 실제로 열리기 전(몸을 기다리는 동안)은
+            // `_pendingStart` 가 말한다.
             if (_seekerLeaveNotified
-                || _startedTick == 0u
+                || _pendingStart
                 || seekerPlayerId == RoomStateHeader.NoPlayer)
             {
                 return;
