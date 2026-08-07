@@ -138,6 +138,20 @@ namespace NV.Client.Net.Session
                 return;
             }
 
+            // 떠나는 씬이 잠깐만 붙잡을 수 있다(`SceneTransitionHold`). 대기방이 그것을 쓴다 —
+            // 시작하는 순간 줄에 선 사람들이 사라지는 대신 발밑이 꺼지고 아래로 빠져나간다.
+            //
+            // **표식을 세우기 전에 본다.** `_enteredGame` 을 먼저 세우면 이 프레임에 컷을
+            // 미루고도 다시는 여기로 들어오지 않아 매치 씬이 열리지 않는다.
+            //
+            // 붙잡는 쪽이 죽어도 안전하다 — 그 값은 시한이라 저절로 풀린다. 역할 공개가
+            // 4초(`MatchConstants.RoleRevealDuration`)이므로 그 안에 들어오는 지연은
+            // 플레이 시간을 전혀 먹지 않는다.
+            if (SceneTransitionHold.Active)
+            {
+                return;
+            }
+
             var scene = SceneFor(_session.Room.MapName);
 
             if (string.IsNullOrEmpty(scene))
