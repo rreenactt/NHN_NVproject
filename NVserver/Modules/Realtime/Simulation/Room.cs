@@ -159,6 +159,15 @@ namespace NV.Realtime.Simulation
         private uint _startTick;
         private byte _outcome;
 
+        /// 진행 불가로 판정된 매치가 중단되는 틱. 0 = 예약 없음 — `ChainReleaseTick`
+        /// 과 같은 규약으로 별도 bool 을 두지 않는다.
+        private uint _abortAtTick;
+
+        /// 결과 코드 4 — 승패가 아니라 **중단**이다. 클라이언트의 `MatchOutcome.Aborted`
+        /// 와 같은 값이어야 한다. 퇴장을 상대 팀의 승리로 치면 퇴장이 무기가 되므로
+        /// 어느 쪽의 승리도 아니다.
+        private const byte AbortedOutcome = 4;
+
         /// 상태가 바뀐 틱에는 간격을 무시하고 즉시 보낸다.
         private bool _stateDirty = true;
         private uint _lastStateTick;
@@ -382,6 +391,13 @@ namespace NV.Realtime.Simulation
                 if (_match.Phase != phaseBefore)
                 {
                     _matchStateDirty = true;
+                }
+
+                // 명단이 매치를 지탱하는지는 맨 뒤에 본다 — 이 틱의 시뮬레이션은 온전히
+                // 끝났고, 시계 종료가 같은 틱에 났으면 이미 `Ended` 라 건너뛴다.
+                if (Phase == RoomPhase.Playing)
+                {
+                    TickAbortWatch();
                 }
             }
             else
@@ -2374,6 +2390,10 @@ namespace NV.Realtime.Simulation
             _placementSeed = NextPlacementSeed();
             _outcome = 0;
 
+            // 지난 매치의 중단 예약을 끊는다. 남겨 두면 새 매치가 시작 몇 틱 만에
+            // 지난 매치의 데드라인으로 끝난다.
+            _abortAtTick = 0u;
+
             // 지난 매치에서 날아가던 총알을 지운다. 남겨 두면 새 매치의 첫 틱에 아무도
             // 쏘지 않은 총알이 벽에 맞는다.
             for (var index = 0; index < _projectiles.Length; index++)
@@ -2579,6 +2599,90 @@ namespace NV.Realtime.Simulation
                 _tick);
         }
 
+        /// 명단이 매치를 지탱하는지 매 틱 본다. 지탱하지 못하면 유예를 걸고, 유예가
+        /// 끝나도록 회복되지 않으면 중단한다.
+        ///
+        /// **"누가 나갔나"가 아니라 "지금 명단이 성립하는가"를 본다.** 퇴장·강제
+        /// 퇴장·이중 퇴장·매치 중 입장(정적 룸)이 전부 커맨드로 이 틱에 적용되어
+        /// 있으므로, 상태에서 판정하면 그 경우들을 따로 셀 필요가 없다. 같은 이유로
+        /// 유예 중에 명단이 회복되면(나간 술래의 슬롯을 새 참가자가 받는 정적 룸의
+        /// 드문 경우) 예약도 취소된다.
+        ///
+        /// 전원 퇴장은 여기 오지 않는다 — `Leave` 가 빈 방을 커맨드 적용 시점에
+        /// `ResetToWaiting` 으로 되돌리므로, 볼 사람 없는 결과 화면은 생기지 않는다.
+        private void TickAbortWatch()
+        {
+            var viable = SeekerPresent() && RunnerPresent();
+
+            if (!viable && _abortAtTick == 0u)
+            {
+                _abortAtTick = _tick + RealtimeConstants.Match.AbortGraceTicks;
+
+                _logger.LogInformation(
+                    "룸 {RoomId}: 매치가 정상 진행될 수 없다(술래 {SeekerPresent}, Runner {RunnerPresent}). " +
+                    "틱 {AbortTick} 에 중단한다.",
+                    RoomId,
+                    SeekerPresent(),
+                    RunnerPresent(),
+                    _abortAtTick);
+            }
+            else if (viable && _abortAtTick != 0u)
+            {
+                _abortAtTick = 0u;
+                _logger.LogInformation("룸 {RoomId}: 명단이 회복되어 매치 중단을 취소한다.", RoomId);
+            }
+
+            if (_abortAtTick != 0u && _tick >= _abortAtTick)
+            {
+                AbortMatch();
+            }
+        }
+
+        /// 술래가 명단에 있는가. 슬롯 예약이 아니라 명단을 본다 — 예약은 접속의
+        /// 문제고, 매치의 사실은 명단이다.
+        private bool SeekerPresent()
+        {
+            return FindByPlayerId(_seekerPlayerId) != null;
+        }
+
+        /// 술래가 아닌 참가자가 하나라도 있는가. 봇도 참가자다 — 봇 Runner 가 남은
+        /// 정적 룸은 진행 가능으로 본다.
+        private bool RunnerPresent()
+        {
+            foreach (var player in _players.Values)
+            {
+                if (player.PlayerId != _seekerPlayerId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// 매치가 정상 진행 불가로 끝났다. 승패가 아니라 **중단**이다.
+        ///
+        /// 결과 4(`AbortedOutcome`)는 서버가 직접 쓰는 첫 결과 코드다 — 지금까지
+        /// 결과는 방장 클라이언트의 보고(한시적 경로, `EndMatch`)였지만, 명단의
+        /// 사실은 서버만 옳게 안다. 경합은 이미 안전하다: 방장의 늦은 보고는
+        /// `EndMatch` 의 `Playing` 게이트에서 멈추고, 보고가 먼저였으면 이 판정이
+        /// 그 게이트에서 멈춘다.
+        private void AbortMatch()
+        {
+            _outcome = AbortedOutcome;
+            _abortAtTick = 0u;
+            _match.ForceEnd();
+            Volatile.Write(ref _phase, (int)RoomPhase.Ended);
+            _stateDirty = true;
+            _matchStateDirty = true;
+
+            _logger.LogInformation(
+                "룸 {RoomId}: 진행 불가로 매치를 중단했다. 틱 {Tick}, 참가자 {Count}명",
+                RoomId,
+                _tick,
+                _players.Count);
+        }
+
         private void ReturnToLobby(int sessionId)
         {
             if (Phase == RoomPhase.Waiting || !IsAuthorized(sessionId))
@@ -2605,6 +2709,7 @@ namespace NV.Realtime.Simulation
             _placementSeed = 0;
             _startTick = 0;
             _outcome = 0;
+            _abortAtTick = 0u;
             _match.Reset();
             _objectives.Reset();
             _matchStateDirty = true;
