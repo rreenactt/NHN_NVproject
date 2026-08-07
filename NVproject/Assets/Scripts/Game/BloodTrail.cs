@@ -69,7 +69,12 @@ namespace NV.Game
         {
             _running = false;
             for (int i = 0; i < _marks.Count; i++)
+            {
+                // The material is a runtime instance; destroying the GameObject does not
+                // destroy it, and a bleeding Runner mints ~3.6 of them a second.
+                if (_marks[i].material != null) Destroy(_marks[i].material);
                 if (_marks[i].transform != null) Destroy(_marks[i].transform.gameObject);
+            }
             _marks.Clear();
         }
 
@@ -116,11 +121,17 @@ namespace NV.Game
             for (int i = _marks.Count - 1; i >= 0; i--)
             {
                 Mark mark = _marks[i];
-                if (mark.transform == null) { _marks.RemoveAt(i); continue; }
+                if (mark.transform == null)
+                {
+                    if (mark.material != null) Destroy(mark.material);
+                    _marks.RemoveAt(i);
+                    continue;
+                }
 
                 mark.age += dt;
                 if (mark.age >= mark.lifetime)
                 {
+                    Destroy(mark.material);
                     Destroy(mark.transform.gameObject);
                     _marks.RemoveAt(i);
                     continue;
