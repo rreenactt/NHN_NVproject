@@ -301,7 +301,15 @@ namespace NV.Modules.Tests.Realtime
                     }
                 }
 
-                return new ChainWorld(room, transport, seeker);
+                var world = new ChainWorld(room, transport, seeker);
+
+                // Seeker 는 제단 착지점에서 시작한다 — 견인의 도착지가 곧 출발지다. 그대로
+                // 탄창을 비우면 견인 거리가 0 이 되어 곡선·진행 검사가 잴 것이 없어지므로,
+                // 실전에서 그렇듯 먼저 제단을 떠난다. 격자가 없는 맵은 제단이 없어 링
+                // 스폰에서 시작하지만, 걷는 것은 어느 쪽에서든 해가 없다.
+                world.PushForward(30);
+
+                return world;
             }
 
             /// 탄창이 빌 때까지 쏜다. 연사 간격이 있으므로 **사이만** 띄운다.

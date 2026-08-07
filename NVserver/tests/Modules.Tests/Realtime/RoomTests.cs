@@ -25,6 +25,41 @@ namespace NV.Modules.Tests.Realtime
             }
         }
 
+        /// 명단에서 Runner 하나를 집는다. **역할은 무작위이므로 "플레이어 0" 을 가정할 수
+        /// 없다** — Seeker 는 링 스폰이 아니라 제단 착지점에서 시작하므로, 원점 스폰을
+        /// 단언하는 테스트는 Runner 를 물어서 집어야 한다.
+        private static byte RunnerIdOf(Room room, RecordingTransport transport)
+        {
+            room.Broadcast(transport);
+
+            Assert.True(transport.TryLastMatchState(1, out _, out var participants), "매치 전문이 나가지 않았다.");
+
+            foreach (var participant in participants)
+            {
+                if (participant.Role == MatchRole.Runner)
+                {
+                    return participant.PlayerId;
+                }
+            }
+
+            Assert.Fail("Runner 가 배정되지 않았다.");
+            return 0;
+        }
+
+        private static EntityState EntityOf(EntityState[] entities, byte playerId)
+        {
+            foreach (var entity in entities)
+            {
+                if (entity.Id == playerId)
+                {
+                    return entity;
+                }
+            }
+
+            Assert.Fail($"플레이어 {playerId} 가 스냅샷에 없다.");
+            return default;
+        }
+
         [Fact]
         public void 시작하면_스폰_위치에서_출발한다()
         {
@@ -41,10 +76,14 @@ namespace NV.Modules.Tests.Realtime
             // 세부가 바뀔 때마다 이 줄이 깨진다.
             Assert.Equal(room.Tick, header.Tick);
 
-            // 0번 스폰이 원점이고 바닥 위다.
-            Assert.Equal(0, entities[0].Id);
-            Assert.Equal(0, entities[0].X);
-            Assert.Equal(0, entities[0].Z);
+            // 링 스폰은 Runner 의 것이다 — Seeker 는 제단 착지점에서 시작하므로, 링 스폰
+            // 좌표를 단언하려면 Runner 를 집어야 한다. 픽스처의 두 스폰은 z = 0 이고 x 는
+            // 슬롯 번호가 고른다.
+            var runner = EntityOf(entities, RunnerIdOf(room, transport));
+            var spawn = RoomFixture.Map().SpawnPosition(runner.Id);
+
+            Assert.Equal(spawn.X, Quantization.ToMeters(runner.X), 2);
+            Assert.Equal(spawn.Z, Quantization.ToMeters(runner.Z), 2);
         }
 
         [Fact]
@@ -115,17 +154,36 @@ namespace NV.Modules.Tests.Realtime
 
             RoomFixture.FillAndStart(room);
 
+            // +X 로 민다. +Z 로 밀면 플레이어 0 이 Seeker 일 때 제단 착지점(x = -2 계열)에서
+            // 출발해 링 스폰의 Runner 몸에 막힌다 — 이 테스트가 검사하는 것은 "입력이 위치를
+            // 옮긴다" 이지 몸싸움이 아니다. +X 경로는 어느 배치에서도 다른 몸과 겹치지 않고
+            // 벽(x 5~6)까지 4m 이상 열려 있다.
+            var sideways = new InputFrame(
+                ButtonFlags.None,
+                0,
+                127,
+                Quantization.ToFixedYaw(MathF.PI * 0.5f),
+                0);
+
+            var startX = 0f;
             for (var tick = 1u; tick <= 30u; tick++)
             {
-                room.PostInput(1, tick, Forward());
+                if (tick == 1u)
+                {
+                    room.Broadcast(transport);
+                    Assert.True(transport.TryLastSnapshot(1, out _, out var before));
+                    startX = Quantization.ToMeters(before[0].X);
+                }
+
+                room.PostInput(1, tick, sideways);
                 room.Advance();
                 room.Broadcast(transport);
             }
 
             Assert.True(transport.TryLastSnapshot(1, out var header, out var entities));
 
-            var z = Quantization.ToMeters(entities[0].Z);
-            Assert.True(z > 1f, $"Z = {z}");
+            var moved = Quantization.ToMeters(entities[0].X) - startX;
+            Assert.True(moved > 1f, $"+X 로 {moved}m 움직였다.");
             Assert.True(header.AckedInputTick > 0u, $"acked = {header.AckedInputTick}");
         }
 
@@ -283,9 +341,12 @@ namespace NV.Modules.Tests.Realtime
             room.Advance();
 
             // 대기 중에 30틱치를 보낸다. 버려지지 않으면 시작 직후 몰아서 적용된다.
+            // 역할이 무작위이므로 **두 세션 모두** 보낸다 — Runner 가 누가 되든 그 사람의
+            // 입력이 버려졌는지 위치로 확인할 수 있어야 한다.
             for (var tick = 1u; tick <= 30u; tick++)
             {
                 room.PostInput(1, tick, Forward());
+                room.PostInput(2, tick, Forward());
                 room.Advance();
             }
 
@@ -295,7 +356,10 @@ namespace NV.Modules.Tests.Realtime
 
             Assert.True(transport.TryLastSnapshot(1, out var header, out var entities));
             Assert.Equal(0u, header.AckedInputTick);
-            Assert.Equal(0, entities[0].Z);
+
+            // 링 스폰은 z = 0 이다. Seeker 는 제단 착지점에서 시작하므로 Runner 로 본다.
+            var runner = EntityOf(entities, RunnerIdOf(room, transport));
+            Assert.Equal(0, runner.Z);
         }
 
         [Fact]
@@ -490,18 +554,23 @@ namespace NV.Modules.Tests.Realtime
 
             RoomFixture.FillAndStart(room, skipReveal: false);
 
+            // Runner 를 민다. Seeker 는 제단 착지점(z ≠ 0)에서 시작하므로 "원점 그대로" 를
+            // 단언할 수 있는 것은 링 스폰의 Runner 뿐이다.
+            var runnerId = RunnerIdOf(room, transport);
+            var runnerSession = runnerId + 1;
+
             for (var tick = 0; tick < 20; tick++)
             {
-                room.PostInput(1, (uint)tick + 1, Forward());
+                room.PostInput(runnerSession, (uint)tick + 1, Forward());
                 room.Advance();
                 room.Broadcast(transport);
             }
 
             Assert.Equal(MatchPhase.RoleReveal, room.MatchPhase);
-            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+            Assert.True(transport.TryLastSnapshot(runnerSession, out _, out var entities));
 
             // 스폰이 원점이다. 잠금이 새면 +Z 로 밀려 있다.
-            Assert.Equal(0, entities[0].Z);
+            Assert.Equal(0, EntityOf(entities, runnerId).Z);
         }
 
         /// 잠금 중 입력을 **버리지 않고 소비**해야 한다. 버리면 큐에 쌓이고, 리빌이
@@ -514,11 +583,16 @@ namespace NV.Modules.Tests.Realtime
 
             RoomFixture.FillAndStart(room, skipReveal: false);
 
+            // Runner 로 검사한다. Seeker 의 시작 Z 는 제단 착지점이라 0 이 아니므로
+            // "튀었다" 와 "원래 그 자리다" 를 절대값으로는 구분할 수 없다.
+            var runnerId = RunnerIdOf(room, transport);
+            var runnerSession = runnerId + 1;
+
             // 리빌 내내 전진을 보낸다.
             var tick = 1u;
             while (room.MatchPhase == MatchPhase.RoleReveal)
             {
-                room.PostInput(1, tick, Forward());
+                room.PostInput(runnerSession, tick, Forward());
                 room.Advance();
                 tick++;
             }
@@ -529,13 +603,14 @@ namespace NV.Modules.Tests.Realtime
             room.Advance();
             room.Broadcast(transport);
 
-            Assert.True(transport.TryLastSnapshot(1, out _, out var entities));
+            Assert.True(transport.TryLastSnapshot(runnerSession, out _, out var entities));
 
             // 한 틱에 갈 수 있는 거리는 6.5m/s ÷ 30Hz ≈ 0.22m 이고, 1/64m 양자화로
             // 약 14 단위다. 쌓인 입력이 터졌다면 이보다 훨씬 크다.
+            var runner = EntityOf(entities, runnerId);
             Assert.True(
-                entities[0].Z < 32,
-                $"잠금이 풀린 직후 Z 가 {entities[0].Z} 로 튀었다. 입력이 쌓여 있었다는 뜻이다.");
+                runner.Z < 32,
+                $"잠금이 풀린 직후 Z 가 {runner.Z} 로 튀었다. 입력이 쌓여 있었다는 뜻이다.");
         }
 
         /// 시선은 잠그지 않는다. 잠그면 커서가 풀려 게임이 포커스를 잃은 것처럼 보인다.

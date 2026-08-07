@@ -2415,9 +2415,22 @@ namespace NV.Realtime.Simulation
 
             // 배치는 서버가 한다. 이동이 서버 권위이므로 클라이언트가 자기 몸을
             // 옮겨 놓아도 다음 스냅샷이 되돌린다.
+            //
+            // 스폰은 역할의 것이다. Seeker 는 체인이 끝나는 자리(제단 착지점)에서 시작하고,
+            // Runner 는 링 스폰을 PlayerId 로 나눠 갖는다. 착지점이 없는 맵(격자 없음)은
+            // 체인 벌칙도 없는 맵이므로 Seeker 도 링 스폰으로 돌아간다 — 열화의 경계를
+            // 새로 만들지 않는다. 제단이 맵마다 고정이라 이 시작 위치도 예측 가능하다 —
+            // Seeker 는 세 번째 총알이 자기를 어디로 보낼지 알아야 한다는 원칙과 같은 결이다.
             foreach (var player in _players.Values)
             {
-                player.RespawnAt(_map.SpawnPosition(player.PlayerId), _map.SpawnYaw(player.PlayerId));
+                if (player.PlayerId == _seekerPlayerId && _objectives.Placed)
+                {
+                    player.RespawnAt(_objectives.AltarDragPoint, SeekerSpawnYaw());
+                }
+                else
+                {
+                    player.RespawnAt(_map.SpawnPosition(player.PlayerId), _map.SpawnYaw(player.PlayerId));
+                }
 
                 // 지난 매치의 소지 열쇠를 지운다. `RespawnAt` 에 넣지 않는 것은 그 함수가
                 // 피격 순간이동에도 쓰일 예정이기 때문이다(IG-014) — 맞았다고 들고 있던
@@ -2462,6 +2475,27 @@ namespace NV.Realtime.Simulation
                 _players.Count,
                 _seekerPlayerId,
                 _placementSeed);
+        }
+
+        /// Seeker 시작 방향. 제단을 등지고 맵 쪽을 본다 — 착지점은 제단 옆 셀이므로
+        /// 제단에서 착지점으로 나가는 방향이 곧 열린 쪽이다.
+        ///
+        /// `MathF.Atan2` 를 써도 된다. 이 값은 서버가 한 번 정해 스냅샷으로 내려보낼 뿐
+        /// 클라이언트가 같은 계산을 반복하지 않는다 — `DeterministicMath` 가 막는 것은
+        /// 양쪽이 재현해야 하는 연산이다. yaw 규약은 라디안, 0 = +Z.
+        private float SeekerSpawnYaw()
+        {
+            var away = DeterministicMath.Subtract(_objectives.AltarDragPoint, _objectives.AltarPosition);
+
+            if (DeterministicMath.Abs(away.X) < DeterministicMath.Epsilon &&
+                DeterministicMath.Abs(away.Z) < DeterministicMath.Epsilon)
+            {
+                // 착지점과 제단이 같은 XZ 에 있으면 방향이 퇴화한다. 배치 계약상 인접
+                // 셀이라 일어나지 않지만, 0 나눗셈 대신 +Z 를 본다.
+                return 0f;
+            }
+
+            return MathF.Atan2(away.X, away.Z);
         }
 
         /// 요청자를 뺀 모든 **사람**이 준비했는가.
