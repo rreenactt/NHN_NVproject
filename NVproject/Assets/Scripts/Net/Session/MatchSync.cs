@@ -1,4 +1,4 @@
-using NV.Game;
+﻿using NV.Game;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using UnityEngine;
@@ -105,6 +105,11 @@ namespace NV.Client.Net.Session
                 return;
             }
 
+            // **장치 상태는 배치와 달리 매 프레임 넘긴다.** 아래의 "같은 배치면 건너뛴다" 는
+            // 오브젝트를 다시 만들지 않기 위한 것이고, 소진·쿨다운·정지는 배치가 그대로인 채로
+            // 바뀌는 값이라 그 조건에 걸리면 영원히 반영되지 않는다. 적용은 멱등하다.
+            NV.Game.DeviceSystem.Instance?.AcceptServerStates(_client);
+
             // 같은 배치를 매 프레임 다시 만들지 않는다. 전문이 갱신될 때만 적용한다.
             if (_appliedObjectiveKeys == _client.Objectives.Keys.Count
                 && _appliedObjectiveDoor == _client.HasObjectiveDoor
@@ -165,6 +170,11 @@ namespace NV.Client.Net.Session
         {
             var count = _client.ParticipantCount;
 
+            // 문턱에 선 사람의 진행도. **가장 큰 값 하나만 본다** — 화면이 답해야 하는 것은
+            // "누가" 가 아니라 "지금 누군가 나가는 중인가" 이고, 그것이 룰셋이 이 값을
+            // 공개로 둔 이유다(끊을 수 있어야 한다).
+            var escaping = 0f;
+
             for (var index = 0; index < count; index++)
             {
                 var participant = _client.MatchParticipantAt(index);
@@ -175,10 +185,18 @@ namespace NV.Client.Net.Session
                     continue;
                 }
 
+                if (_client.Snapshots != null
+                    && _client.Snapshots.TryLatest(participant.PlayerId, out var live))
+                {
+                    escaping = Mathf.Max(escaping, live.EscapeProgress / 255f);
+                }
+
                 MatchManager.Instance.AcceptCarriedKeys(agent, participant.CarriedKeys);
                 MatchManager.Instance.AcceptAmmo(agent, participant.Ammo);
                 ApplyBody(participant, agent);
             }
+
+            MatchManager.Instance.AcceptEscapeProgress(escaping);
         }
 
         /// 몸에 실리는 서버 판정 — 탈출·출혈·쓰러짐.
@@ -215,9 +233,14 @@ namespace NV.Client.Net.Session
             // 않았다(서버는 끌고 가는데 사슬만 없었다). 서버는 체인과 매치 전체의 이동 잠금을
             // 한 비트에 함께 싣고(`Room` 의 플래그 인코딩), 잠금은 리빌과 종료 단계에만 걸린다 —
             // 그래서 단계로 가른다. 명단 전원에 적용하므로 남이 끌려가는 것도 보인다.
+            //
+            // **전체 정지 장치도 같은 비트를 켠다.** 그 장치가 도는 동안에는 전원이 `Frozen`
+            // 이므로, 빼지 않으면 Seeker 에게 제단까지 사슬이 그려진다 — 못 움직이는 이유가
+            // 체인이 아닌데도. 목표물 전문이 그 장치를 `Active` 로 싣고 있으므로 그것으로 가른다.
             MatchManager.Instance.AcceptChained(
                 agent,
                 MatchManager.Instance.Phase == NV.Game.MatchPhase.Playing
+                && !_client.DeviceFreezeActive
                 && (flags & NV.Shared.Contracts.Enums.EntityFlags.Frozen) != 0);
         }
 

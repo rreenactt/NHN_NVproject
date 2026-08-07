@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -29,6 +29,9 @@ namespace NV.Game
         public FirstPersonController controller;
         public WeaponController weapon;
 
+        [Tooltip("체인이 풀릴 때 팔이 재장전 동작을 하도록 하는 것. 원격 몸에도 붙는다.")]
+        public ProceduralReload reload;
+
         private Transform _chain;       // pool root; the links are its children
         private Vector3 _chainOrigin;   // the ring on the altar, not the point you land on
         private Vector3[] _route;       // corners from the Seeker to the landing spot
@@ -48,6 +51,7 @@ namespace NV.Game
             if (agent == null) agent = GetComponent<PlayerAgent>();
             if (controller == null) controller = GetComponent<FirstPersonController>();
             if (weapon == null) weapon = GetComponent<WeaponController>();
+            if (reload == null) reload = GetComponent<ProceduralReload>();
         }
 
         /// <summary>
@@ -161,6 +165,14 @@ namespace NV.Game
             // 넘긴다. 여기서 `ForceReload` 를 부르면 로컬로 3발이 생겼다가 0.5초 뒤
             // 전문이 그것을 되돌린다.
             if (weapon != null) weapon.FireBlocked = false;
+
+            // **동작은 재생한다.** `ForceReload` 는 동작과 탄창 채우기를 함께 하므로 쓸 수 없고,
+            // 그렇다고 둘 다 건너뛰면 체인이 풀리는 순간 팔이 아무것도 하지 않는다 — 서버가
+            // 탄창을 채운 것이 화면에서는 아무 일도 없는 것으로 보인다.
+            //
+            // 원격 몸도 같은 코루틴을 돌리므로(`RemotePlayerPuppet` 이 이 컴포넌트를 갖는다)
+            // 남이 재장전하는 것도 이 한 줄로 함께 보인다.
+            if (reload != null) reload.Play(config.chainReloadTime);
 
             // `_serverChained` is left alone on purpose: it mirrors the server, not this loop. If we
             // got here on the deadline rather than on the release, it is still true and must stay

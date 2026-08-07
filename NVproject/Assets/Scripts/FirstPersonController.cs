@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
@@ -400,6 +400,7 @@ public class FirstPersonController : MonoBehaviour
 
         SneakHeld = sneaking;
         SprintHeld = sprinting;
+
 
         // The trigger is deliberately *not* sampled here. It is the weapon that decides whether a
         // press becomes a round, and only that decision goes on the wire — see ConsumeFire.

@@ -40,6 +40,7 @@ namespace NV.Game
         private readonly List<MapDevice> _devices = new List<MapDevice>();
         private float _teleportReadyTime;
         private Coroutine _freeze;
+        private bool _serverFreeze;
 
         private GameConfig Config => MatchManager.Instance != null ? MatchManager.Instance.Config : null;
 
@@ -82,6 +83,10 @@ namespace NV.Game
                 if (_devices[i] != null) Destroy(_devices[i].gameObject);
             _devices.Clear();
             _teleportReadyTime = 0f;
+
+            // 다음 배치의 첫 전문이 정지 없음으로 오면 그것이 곧 모서리여야 한다. 남겨 두면
+            // 지난 매치에서 켜진 채로 끝난 투시가 새 매치에서 꺼지지 않는다.
+            _serverFreeze = false;
         }
 
         /// <summary>Whatever lockout applies to this device right now, in seconds.</summary>
@@ -119,6 +124,26 @@ namespace NV.Game
             if (device.type == DeviceType.StopBleeding && !user.Bleeding)
                 return Refuse(match, "you are not bleeding");
 
+            // **서버가 판정하는 매치에서는 여기서 효과를 걸지 않는다.** E 는 이미 입력 프레임의
+            // Interact 비트로 나가 있고(`FirstPersonController.ConsumeInteract`), 서버가 같은
+            // 검사를 다시 한 뒤 `Room.TryUseDevice` 에서 효과를 건다. 여기서 함께 걸면 서버가
+            // 소유한 것을 로컬로 바꾸는 셈이라 다음 전문이 그대로 되돌린다 — 순간이동은 제자리로
+            // 튕기고, 지혈은 한 프레임 뒤 다시 피가 흐르고, 시계는 원래 값으로 돌아간다.
+            //
+            // 소진·쿨다운도 서버가 보낸다(`AcceptServerState`). 여기서 미리 표시하면 서버가
+            // 거절한 사용이 화면에서만 소진된 것으로 남는다.
+            if (match.ServerOwnsObjectives)
+            {
+                // 화면에만 사는 둘은 예외다. 서버에는 옮길 상태가 없고 — 이 지도를 본 사람이
+                // 누구인지는 아무 규칙도 바꾸지 않는다 — 누른 프레임에 열리지 않으면 왕복
+                // 지연만큼 늦게 열린다. 위의 검사가 서버가 볼 조건과 같은 것을 이미 다 봤으므로
+                // 예측이 틀리는 경우는 전문 하나만큼의 창이다.
+                if (device.type == DeviceType.FullMapView || device.type == DeviceType.SeekerCameraView)
+                    EffectFired?.Invoke(device.type, user, Apply(device.type, user, match, config));
+
+                return true;
+            }
+
             float duration = Apply(device.type, user, match, config);
 
             float until = Time.time + (device.IsOneShot ? 0f : config.repeatableDeviceCooldown);
@@ -128,6 +153,54 @@ namespace NV.Game
             device.MarkUsed(until);
             EffectFired?.Invoke(device.type, user, duration);
             return true;
+        }
+
+        /// <summary>
+        /// The server's device states, straight off the bulletin (IG-013). Indexed the same as the
+        /// objective placement, which is the order the devices were spawned in.
+        ///
+        /// The freeze is applied here too, because it is the one device effect that is *world*
+        /// state on every client rather than the user's own screen: the walls go transparent and
+        /// everybody stops. Which client pressed the button does not enter into it.
+        /// </summary>
+        public void AcceptServerStates(NV.Client.Net.NetworkClient client)
+        {
+            if (client == null) return;
+
+            for (int i = 0; i < _devices.Count && i < client.DeviceStateCount; i++)
+            {
+                if (_devices[i] == null) continue;
+
+                var state = client.DeviceStateAt(i);
+                _devices[i].AcceptServerState(
+                    (state & NV.Shared.Contracts.Enums.MatchDeviceState.Spent) != 0,
+                    (state & NV.Shared.Contracts.Enums.MatchDeviceState.Cooling) != 0,
+                    (state & NV.Shared.Contracts.Enums.MatchDeviceState.Destroyed) != 0,
+                    NV.Shared.Contracts.Enums.MatchDeviceHits.Of(state));
+            }
+
+            ApplyServerFreeze(client.DeviceFreezeActive);
+        }
+
+        /// <summary>
+        /// The freeze device, driven by the server rather than by a local coroutine.
+        ///
+        /// Idempotent on purpose — it is called every frame off a polled bulletin, and
+        /// <c>SetWallTransparency</c> walks every wall material. Only the edges do anything.
+        /// </summary>
+        private void ApplyServerFreeze(bool active)
+        {
+            if (active == _serverFreeze) return;
+            _serverFreeze = active;
+
+            MatchManager match = MatchManager.Instance;
+            GameConfig config = Config;
+            if (match == null || config == null) return;
+
+            if (active) match.Notify("EVERYTHING STOPS");
+
+            match.SetGlobalFreeze(active);
+            match.Map?.SetWallTransparency(active ? config.xrayWallAlpha : 1f);
         }
 
         private static bool Refuse(MatchManager match, string reason)

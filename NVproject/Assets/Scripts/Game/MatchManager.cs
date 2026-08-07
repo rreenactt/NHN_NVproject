@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using NV.Client.Map;
 using UnityEngine;
@@ -88,6 +88,18 @@ namespace NV.Game
         private float _phaseTimer;
         private bool _globalFreeze;
         private int _runnersAtStart;
+
+        /// <summary>
+        /// How many escapes actually win this match — the ruleset's number, capped at how many
+        /// Runners there were to begin with.
+        ///
+        /// A two-player match has one Runner, and asking two of them to leave is asking for
+        /// something the room cannot produce. Everything that shows or judges the target reads
+        /// this rather than the constant, so the HUD, the escape notice and the win check cannot
+        /// disagree about what the goal is.
+        /// </summary>
+        public int EscapesNeeded =>
+            NV.Shared.Simulation.MatchConstants.EscapesToWinWith(_runnersAtStart);
 
         public GameConfig Config => config;
         /// <summary>
@@ -304,7 +316,7 @@ namespace NV.Game
 
             RolesAssigned?.Invoke();
             KeysChanged?.Invoke(KeysInserted, config.keysRequired);
-            EscapesChanged?.Invoke(Escapes, config.escapesToWin);
+            EscapesChanged?.Invoke(Escapes, EscapesNeeded);
 
             SetPhase(MatchPhase.RoleReveal);
             _phaseTimer = config.roleRevealDuration;
@@ -406,8 +418,8 @@ namespace NV.Game
 
             agent.MarkEscaped();
             Escapes++;
-            EscapesChanged?.Invoke(Escapes, config.escapesToWin);
-            Notify($"{agent.displayName} ESCAPED  ({Escapes}/{config.escapesToWin})");
+            EscapesChanged?.Invoke(Escapes, EscapesNeeded);
+            Notify($"{agent.displayName} ESCAPED  ({Escapes}/{EscapesNeeded})");
 
             EvaluateWinConditions();
         }
@@ -416,20 +428,32 @@ namespace NV.Game
         {
             if (Phase != MatchPhase.Playing || !ResolvesOutcome) return;
 
-            if (Escapes >= config.escapesToWin) { EndMatch(MatchOutcome.RunnersEscaped); return; }
+            if (Escapes >= EscapesNeeded) { EndMatch(MatchOutcome.RunnersEscaped); return; }
 
             // A match that never had a Runner in it cannot have had them wiped out. This also
             // fails safe after a domain reload, which empties the roster for a moment: the count
             // it is compared against is gone too, so the wipe check simply does not fire.
             if (!config.seekerWinsOnWipe || _runnersAtStart <= 0) return;
 
-            int runnersLeft = 0;
+            // **탈출은 전멸이 아니다.** `InPlay` 는 죽은 것과 나간 것을 함께 거짓으로 만드는데,
+            // 그것으로 세면 마지막 Runner 가 **문으로 걸어 나간 순간** 남은 수가 0 이 되어
+            // "술래가 전멸시켰다" 가 뜬다. 2인 매치에서는 그것이 유일한 결말이 된다 —
+            // 나간 사람이 진 것으로 적히고, 그것도 나가자마자 즉시.
+            //
+            // 전멸은 **전원이 쓰러진 것**이다. 한 명이라도 나갔으면 그 판은 다른 이야기다.
+            int standing = 0;
+            int escaped = 0;
+
             for (int i = 0; i < _agents.Count; i++)
             {
                 PlayerAgent agent = _agents[i];
-                if (agent != null && agent.Role == Role.Runner && agent.InPlay) runnersLeft++;
+                if (agent == null || agent.Role != Role.Runner) continue;
+
+                if (agent.Escaped) escaped++;
+                else if (agent.InPlay) standing++;
             }
-            if (runnersLeft == 0) EndMatch(MatchOutcome.SeekerWipedRunners);
+
+            if (standing == 0 && escaped == 0) EndMatch(MatchOutcome.SeekerWipedRunners);
         }
 
         /// <summary>
@@ -585,6 +609,10 @@ namespace NV.Game
                 agent.Kill();
                 Notify($"{agent.displayName} DOWN");
                 AgentHit?.Invoke(agent, true);
+
+                // 쓰러뜨린 탄에도 마커를 띄운다. 이 갈래가 먼저 돌아가므로 아래의 부상
+                // 갈래에만 두면 **마지막 한 발만 아무 반응이 없다** — 가장 중요한 한 발이다.
+                MarkHitForSeeker(agent);
                 return;
             }
 
@@ -592,6 +620,35 @@ namespace NV.Game
 
             Notify(agent.isLocalPlayer ? "HIT — BLEEDING. KEEP MOVING" : $"{agent.displayName} HIT");
             AgentHit?.Invoke(agent, false);
+
+            MarkHitForSeeker(agent);
+        }
+
+        /// <summary>
+        /// Tells the Seeker their round connected, from the server's count rather than from their
+        /// own bullet.
+        ///
+        /// **The local round cannot answer this.** It flies on the shooter's machine and remote
+        /// bodies carry nothing for it to hit — the `CharacterController` is disabled so it does not
+        /// shove the local player, and the blocks never had colliders. So a shot that hits somebody
+        /// actually stops on the wall behind them, and the marker fired either way. A marker that
+        /// fires on every shot is not feedback.
+        ///
+        /// The cost is the bulletin's half second. That is the right trade here: with three rounds
+        /// and a chain waiting at the end of them, *whether* you hit is worth much more than knowing
+        /// it 300 ms sooner. It goes away on its own once the server's own bullets are drawn.
+        /// </summary>
+        private void MarkHitForSeeker(PlayerAgent victim)
+        {
+            if (!ServerOwnsCombat) return;
+
+            PlayerAgent local = LocalAgent;
+
+            // 맞은 사람에게는 띄우지 않는다. 자기가 맞은 것은 상처 비네트가 이미 말한다.
+            if (local == null || local == victim || local.Role != Role.Seeker) return;
+
+            var crosshair = local.GetComponent<Crosshair>();
+            if (crosshair != null) crosshair.ShowHitMarker();
         }
 
         /// <summary>
@@ -752,13 +809,31 @@ namespace NV.Game
         /// The server's escape count. **Both roles receive the real number** — unlike the key
         /// progress, this one is not filtered: it is what the Seeker has to stop.
         /// </summary>
+        /// <summary>
+        /// Somebody is standing in the doorway right now, and how far along they are (0..1).
+        ///
+        /// **Everyone gets this, the Seeker included** — the ruleset says so. The door's position
+        /// stays hidden from the Seeker, but the fact that a Runner is leaving *this second* is the
+        /// only thing that makes the hold interruptible; a hold nobody can see is not a rule, it is
+        /// a delay. It rides the per-tick snapshot rather than the 2 Hz bulletin because the hold is
+        /// 0.8 s long and two samples cannot draw a bar you are meant to react to.
+        ///
+        /// The highest of everyone's, because what matters is whether *anybody* is about to get out.
+        /// </summary>
+        public float EscapeProgress { get; private set; }
+
+        public void AcceptEscapeProgress(float progress)
+        {
+            EscapeProgress = Mathf.Clamp01(progress);
+        }
+
         public void AcceptEscapes(int escapes)
         {
             int clamped = Mathf.Max(0, escapes);
             if (clamped == Escapes) return;
 
             Escapes = clamped;
-            EscapesChanged?.Invoke(Escapes, config.escapesToWin);
+            EscapesChanged?.Invoke(Escapes, EscapesNeeded);
         }
 
         /// <summary>

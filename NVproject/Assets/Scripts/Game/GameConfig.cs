@@ -1,4 +1,4 @@
-using NV.Shared.Simulation;
+﻿using NV.Shared.Simulation;
 using UnityEngine;
 
 namespace NV.Game
@@ -97,14 +97,16 @@ namespace NV.Game
         //                                always teleports (design doc §4.1), so these only steer the
         //                                offline path now. Deleting them would remove offline knobs
         //                                that cost nothing to keep.
-        //   seekerWinsOnWipe           → IG-007 (win conditions, blocked on OQ-2)
+        //   seekerWinsOnWipe           → IG-007 (win conditions). OQ-2 is answered: a wipe
+        //                                is a Seeker win. The switch stays as the offline knob until
+        //                                the server judges outcomes.
         //   seekerCanActivateDevices   → IG-013 (devices, blocked on OQ-1)
         //   chainAnchorRange           → IG-016 (chain drag, blocked on OQ-4)
 
         [Header("Match (moves to the server)")]
-        [Tooltip("End the match the moment no Runner is left standing. Off, the Seeker has to " +
-                 "sit out the rest of the clock. The design doc does not list a wipe win at all — " +
-                 "see OQ-2.")]
+        [Tooltip("End the match the moment every Runner has gone down. Off, the Seeker has to " +
+                 "sit out the rest of the clock. The design doc never listed a wipe win, and the " +
+                 "ruleset now settles it: a wipe wins. Escaping does not count as going down.")]
         public bool seekerWinsOnWipe = true;
 
         [Header("Objective (moves to the server)")]

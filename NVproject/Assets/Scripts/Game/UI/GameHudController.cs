@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using NV.Client.Map;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -31,6 +31,10 @@ namespace NV.Game.UI
         // --- shared
         private VisualElement _root, _scanlines, _vignette;
         private Label _clock, _roleLabel, _escapeLabel, _notice, _prompt;
+
+        // 칩에 함께 그리는 값들. 탈출 수는 이벤트로, 진행도는 매 프레임 온다.
+        private int _escapedCount;
+        private int _escapesNeeded;
         private VisualElement _roleChip;
 
         // --- runner
@@ -57,6 +61,10 @@ namespace NV.Game.UI
 
         private readonly List<string> _pendingNotices = new List<string>();
         private readonly List<ActiveEffect> _effects = new List<ActiveEffect>();
+        /// 매치가 끝나고 결과 카드가 올라오기까지의 시간(초).
+        private const float EndCardDelaySeconds = 1.6f;
+
+        private float _endCardDelay;
         private float _noticeTimer;
         private float _mapTimer, _feedTimer, _freezeTimer;
         private int _scanlineHeight;
@@ -235,7 +243,7 @@ namespace NV.Game.UI
 
             ApplyAtmosphereTextures();
             OnKeysChanged(_match.KeysInserted, _match.Config.keysRequired);
-            OnEscapesChanged(_match.Escapes, _match.Config.escapesToWin);
+            OnEscapesChanged(_match.Escapes, _match.EscapesNeeded);
 
             _effects.Clear();
         }
@@ -294,6 +302,11 @@ namespace NV.Game.UI
             }
 
             UpdateClock();
+
+            // 탈출 진행도는 매 틱 바뀌므로 이벤트가 아니라 여기서 그린다. 유지 시간이 0.8초라
+            // 이벤트로 받으면 바가 두 번 튀고 끝난다.
+            DrawEscapeChip();
+
             UpdatePrompt();
             UpdateNotice();
             UpdateCards();
@@ -615,6 +628,13 @@ namespace NV.Game.UI
 
         private void UpdateCards()
         {
+            // 결과 카드는 끝난 뒤 한 박자 뒤에 올라온다. 그 사이에 마지막 장면이 보인다.
+            if (_endCardDelay > 0f)
+            {
+                _endCardDelay -= Time.deltaTime;
+                if (_endCardDelay <= 0f) _endCard.style.display = DisplayStyle.Flex;
+            }
+
             if (_match.Phase != MatchPhase.RoleReveal) return;
             _revealCount.text = Mathf.CeilToInt(_match.RevealRemaining) + "…";
         }
@@ -649,7 +669,11 @@ namespace NV.Game.UI
 
             _endTitle.EnableInClassList("card__title--win", localWon);
             _endTitle.EnableInClassList("card__title--lose", !localWon);
-            _endCard.style.display = DisplayStyle.Flex;
+
+            // **한 박자 두고 띄운다.** 매치가 끝나는 순간은 대개 화면에서 무슨 일이 벌어지는
+            // 순간이다 — 마지막 한 명이 문으로 걸어 나가거나, 쓰러지거나, 시계가 0 이 된다.
+            // 그 프레임에 카드가 덮으면 결과는 읽히는데 **왜 그렇게 됐는지를 못 본다.**
+            _endCardDelay = EndCardDelaySeconds;
             _revealCard.style.display = DisplayStyle.None;
 
             _mapOverlay.style.display = DisplayStyle.None;
@@ -665,7 +689,37 @@ namespace NV.Game.UI
 
         private void OnEscapesChanged(int escaped, int needed)
         {
-            if (_escapeLabel != null) _escapeLabel.text = "ESCAPED " + escaped + " / " + needed;
+            _escapedCount = escaped;
+            _escapesNeeded = needed;
+            DrawEscapeChip();
+        }
+
+        /// <summary>
+        /// The escape chip: how many are out, and — while somebody is standing in the doorway —
+        /// how far along they are.
+        ///
+        /// **Both roles see the progress.** The ruleset makes it public: the door's position stays
+        /// hidden from the Seeker, but the hold exists so the last step can be interrupted, and a
+        /// hold nobody can see is a delay rather than a rule. It is drawn on the chip that already
+        /// carries the escape count, so it needed no new element and lands in a panel both roles
+        /// already have.
+        /// </summary>
+        private void DrawEscapeChip()
+        {
+            if (_escapeLabel == null) return;
+
+            var text = "ESCAPED " + _escapedCount + " / " + _escapesNeeded;
+
+            float progress = _match != null ? _match.EscapeProgress : 0f;
+
+            // 0 은 "아무도 안 하고 있다" 이므로 아예 적지 않는다. 늘 붙어 있는 0% 는 눈이
+            // 걸러 내게 되고, 그러면 진짜로 누가 나갈 때도 함께 걸러진다.
+            if (progress > 0.01f)
+            {
+                text += "  ·  ESCAPING " + Mathf.RoundToInt(progress * 100f) + "%";
+            }
+
+            _escapeLabel.text = text;
         }
 
         private void OnAgentHit(PlayerAgent victim, bool fatal)

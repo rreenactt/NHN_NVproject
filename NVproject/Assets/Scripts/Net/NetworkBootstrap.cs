@@ -1,4 +1,4 @@
-using NV.Client.Net.Session;
+﻿using NV.Client.Net.Session;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
@@ -274,6 +274,26 @@ namespace NV.Client.Net
                 0f,
                 ~(1 << 8),
                 MatchConstants.BulletLifetime);
+
+            // **총성이 예광탄보다 중요하다.** 예광탄은 보고 있어야 보이지만 총소리는 건물
+            // 반대편에도 닿는다 — 발소리가 20m 에서 0 인 데 비해 총성은 60m 까지 간다. 기획서가
+            // 발사에 물린 값이 체인만이 아니라 **위치를 알린다는 것**이고, 그 채널이 멀티에서만
+            // 통째로 비어 있었다. 몸에 `WeaponAudio` 는 붙어 있었고 부르는 사람이 없었다.
+            //
+            // 소리와 반동은 **몸에서** 낸다. 알림에 실린 좌표가 아니라 지금 그려지고 있는 몸의
+            // 자리에서 나야 하기 때문이다 — 원격 몸은 보간 때문에 100ms 과거에 있고, 소리만
+            // 현재로 당기면 총구와 소리가 갈라진다. 예광탄이 같은 이유로 알림의 틱을 쓰지 않는다.
+            if (!TryGetPuppet(fire.ShooterId, out var shooter))
+            {
+                return;
+            }
+
+            var audio = shooter.GetComponent<WeaponAudio>();
+            if (audio != null) audio.PlayShot();
+
+            // 팔이 함께 튀어야 쏜 사람이 누구인지 보인다. 소리는 방향을 주고 반동은 사람을 준다.
+            var animator = shooter.GetComponent<BlockCharacterAnimator>();
+            if (animator != null) animator.AddRecoil();
         }
 
         private void Update()
@@ -596,6 +616,16 @@ namespace NV.Client.Net
             // 그냥 읽으면 절반쯤 사라진다.
             if (_controller.ConsumeJump()) buttons |= ButtonFlags.Jump;
             if (_controller.SprintHeld) buttons |= ButtonFlags.Sprint;
+
+            // **`Crouch` 를 보내지 않는다.** Ctrl 은 웅크림이 아니라 살금걸음이고, 그 둘은
+            // 자세가 다르다 — 서버의 웅크림은 속도와 함께 **몸 높이도** 줄이므로(1.8 → 1.2)
+            // 보내는 순간 히트박스가 낮아진다. 이 게임의 Ctrl 은 천천히 걸어 소리를 내지
+            // 않는 것이고 자세는 그대로다.
+            //
+            // **대가는 아직 남아 있다.** 서버는 이 비트 없이 전속력으로 몸을 옮기므로,
+            // 네트워크 매치에서 살금걸음은 조용하기만 하고 느리지는 않다 — "침묵은 값을
+            // 치러야 한다" 는 설계가 멀티에서만 공짜다. 닫으려면 속도만 줄이는 신호가
+            // 따로 있어야 하고, 서버의 웅크림을 그대로 쓰면 높이가 함께 바뀐다.
 
             // 발사도 래치를 소비한다. **누르고 있는 상태를 싣지 않는다** — 서버는 새 입력이
             // 없으면 마지막 프레임을 최대 3틱 반복하므로, 100ms 짜리 클릭 한 번이 연사
