@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace NV.Game
@@ -22,32 +21,39 @@ namespace NV.Game
     /// lasting several times longer. Hiding while wounded therefore paints a sign over the hiding
     /// place, which costs the Runner more than the running trail ever does.
     ///
+    /// The marks are particles in one ParticleSystem per trail, not GameObjects. A bleeding
+    /// Runner lays ~3.6 marks a second for 25 s each, so a GameObject per mark was ~90 objects,
+    /// ~90 one-off materials and ~90 draw calls per Runner at steady state — and the materials
+    /// outlived their marks, since destroying a GameObject does not destroy a runtime Material.
+    /// One system per trail keeps Stop() meaning "this Runner's marks only" (<c>Clear()</c>),
+    /// per-mark lifetimes ride <c>EmitParams.startLifetime</c>, and the flat-then-last-quarter
+    /// fade is the Color over Lifetime curve, which the system normalises per particle — so the
+    /// 25 s running mark and the 62 s pool fade on their own clocks with no per-frame code here.
+    ///
     /// Added and driven by <see cref="PlayerAgent"/>; nothing else should touch it.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class BloodTrail : MonoBehaviour
     {
+        /// <summary>
+        /// Hard cap per trail. Steady state is ~90 marks moving and ~90 pooling, so this is
+        /// headroom, not a number play should ever reach; past it Emit drops the new mark.
+        /// </summary>
+        private const int MaxMarks = 256;
+
         private static Material _sharedMaterial;
         private static UnityEngine.Mesh _quad;
 
-        private readonly List<Mark> _marks = new List<Mark>();
         private PlayerAgent _agent;
         private GameConfig _config;
         private bool _running;
         private int _markLayer = MatchLayers.SeekerVision;
 
+        private ParticleSystem _system;
+
         private Vector3 _lastMark;
         private float _stillTime;
         private float _poolTimer;
-
-        private struct Mark
-        {
-            public Transform transform;
-            public Material material;
-            public float age;
-            public float lifetime;
-            public float size;
-        }
 
         public void Begin(PlayerAgent agent)
         {
@@ -57,6 +63,8 @@ namespace NV.Game
             // Resolved once, here, rather than per mark: the body this trail belongs to does not
             // change, and a mark that picked its own layer could disagree with the one before it.
             _markLayer = MatchLayers.BloodLayer(agent != null && agent.isLocalPlayer);
+
+            EnsureSystem();
 
             _running = true;
             _lastMark = transform.position;
@@ -68,23 +76,18 @@ namespace NV.Game
         public void Stop()
         {
             _running = false;
-            for (int i = 0; i < _marks.Count; i++)
-            {
-                // The material is a runtime instance; destroying the GameObject does not
-                // destroy it, and a bleeding Runner mints ~3.6 of them a second.
-                if (_marks[i].material != null) Destroy(_marks[i].material);
-                if (_marks[i].transform != null) Destroy(_marks[i].transform.gameObject);
-            }
-            _marks.Clear();
+            if (_system != null) _system.Clear();
         }
 
         private void Update()
         {
-            float dt = Time.deltaTime;
-            FadeMarks(dt);
-
             if (!_running || _config == null || _agent == null || !_agent.InPlay) return;
 
+            // The system is a UnityEngine.Object field, so it survives a domain reload; this
+            // guard is for its child GameObject being destroyed out from under us.
+            if (_system == null) EnsureSystem();
+
+            float dt = Time.deltaTime;
             Vector3 here = transform.position;
             float moved = Vector3.Distance(here, _lastMark);
 
@@ -116,40 +119,6 @@ namespace NV.Game
             Drop(here, _config.bloodLifetime * _config.bleedPoolLifetimeScale, grown, 1f);
         }
 
-        private void FadeMarks(float dt)
-        {
-            for (int i = _marks.Count - 1; i >= 0; i--)
-            {
-                Mark mark = _marks[i];
-                if (mark.transform == null)
-                {
-                    if (mark.material != null) Destroy(mark.material);
-                    _marks.RemoveAt(i);
-                    continue;
-                }
-
-                mark.age += dt;
-                if (mark.age >= mark.lifetime)
-                {
-                    Destroy(mark.material);
-                    Destroy(mark.transform.gameObject);
-                    _marks.RemoveAt(i);
-                    continue;
-                }
-
-                // Flat for most of its life, then goes in the last quarter. A mark that starts
-                // fading immediately reads as a rendering glitch rather than as evidence.
-                float remaining = 1f - mark.age / mark.lifetime;
-                float alpha = Mathf.Clamp01(remaining * 4f);
-                Color c = mark.material.color;
-                c.a = alpha * 0.85f;
-                mark.material.color = c;
-                if (mark.material.HasProperty("_BaseColor")) mark.material.SetColor("_BaseColor", c);
-
-                _marks[i] = mark;
-            }
-        }
-
         private void Drop(Vector3 position, float lifetime, float size, float strength)
         {
             // A mark on the floor, not at the hip: cast down so it lands on stairs and on the
@@ -160,43 +129,92 @@ namespace NV.Game
                                 ~0, QueryTriggerInteraction.Ignore))
                 y = hit.point.y + 0.02f;
 
-            var go = new GameObject("Blood");
-            go.layer = _markLayer;
-            go.transform.position = new Vector3(position.x, y, position.z);
-            go.transform.rotation = Quaternion.Euler(90f, Random.value * 360f, 0f);
-            go.transform.localScale = Vector3.one * size;
+            var emit = new ParticleSystem.EmitParams
+            {
+                position = new Vector3(position.x, y, position.z),
+                // The quad is authored flat, so only yaw is needed — one axis, immune to
+                // whatever order the particle system applies Euler angles in.
+                rotation3D = new Vector3(0f, Random.value * 360f, 0f),
+                startSize = size,
+                startLifetime = lifetime,
+                startColor = new Color(0.42f * strength, 0.03f, 0.04f, 0.85f),
+                velocity = Vector3.zero,
+            };
+            _system.Emit(emit, 1);
+        }
 
-            var filter = go.AddComponent<MeshFilter>();
-            filter.sharedMesh = QuadMesh();
+        private void EnsureSystem()
+        {
+            if (_system != null)
+            {
+                _system.gameObject.layer = _markLayer;
+                return;
+            }
 
-            var renderer = go.AddComponent<MeshRenderer>();
+            var go = new GameObject("Blood Marks") { layer = _markLayer };
+            go.transform.SetParent(transform, false);
+
+            _system = go.AddComponent<ParticleSystem>();
+            _system.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            ParticleSystem.MainModule main = _system.main;
+            main.playOnAwake = false;
+            main.loop = true;
+            main.startSpeed = 0f;
+            main.gravityModifier = 0f;
+            main.startRotation3D = true;
+            main.maxParticles = MaxMarks;
+            // World space: the marks stay where they were bled, however the body moves on.
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+
+            // Emission is manual (Drop → Emit); the default module would spray from birth.
+            ParticleSystem.EmissionModule emission = _system.emission;
+            emission.enabled = false;
+            ParticleSystem.ShapeModule shape = _system.shape;
+            shape.enabled = false;
+
+            // Flat for most of its life, then goes in the last quarter. A mark that starts
+            // fading immediately reads as a rendering glitch rather than as evidence. The curve
+            // is normalised per particle, so running marks and pools fade on their own clocks.
+            ParticleSystem.ColorOverLifetimeModule fade = _system.colorOverLifetime;
+            fade.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f) },
+                new[]
+                {
+                    new GradientAlphaKey(1f, 0f),
+                    new GradientAlphaKey(1f, 0.75f),
+                    new GradientAlphaKey(0f, 1f),
+                });
+            fade.color = new ParticleSystem.MinMaxGradient(gradient);
+
+            var renderer = go.GetComponent<ParticleSystemRenderer>();
+            renderer.renderMode = ParticleSystemRenderMode.Mesh;
+            renderer.mesh = QuadMesh();
+            renderer.sharedMaterial = SharedMaterial();
+            renderer.alignment = ParticleSystemRenderSpace.World;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
 
-            // One material per mark: they fade independently, and sharing would fade the lot at
-            // the rate of whichever was laid last.
-            var material = new Material(SharedMaterial());
-            var colour = new Color(0.42f * strength, 0.03f, 0.04f, 0.85f);
-            material.color = colour;
-            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", colour);
-            renderer.material = material;
-
-            _marks.Add(new Mark
-            {
-                transform = go.transform,
-                material = material,
-                age = 0f,
-                lifetime = lifetime,
-                size = size,
-            });
+            _system.Play();
         }
 
+        /// <summary>A 1×1 quad lying flat (XZ plane, facing up) — built here rather than taken
+        /// from the Quad primitive, which stands upright and would need a second rotation axis.</summary>
         private static UnityEngine.Mesh QuadMesh()
         {
             if (_quad != null) return _quad;
-            var temp = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            _quad = temp.GetComponent<MeshFilter>().sharedMesh;
-            Destroy(temp);
+            _quad = new UnityEngine.Mesh { name = "Blood Mark Quad" };
+            _quad.vertices = new[]
+            {
+                new Vector3(-0.5f, 0f, -0.5f),
+                new Vector3(-0.5f, 0f, 0.5f),
+                new Vector3(0.5f, 0f, 0.5f),
+                new Vector3(0.5f, 0f, -0.5f),
+            };
+            _quad.normals = new[] { Vector3.up, Vector3.up, Vector3.up, Vector3.up };
+            _quad.triangles = new[] { 0, 1, 2, 0, 2, 3 };
             return _quad;
         }
 
@@ -204,16 +222,12 @@ namespace NV.Game
         {
             if (_sharedMaterial != null) return _sharedMaterial;
 
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
+            // NV/Blood Mark lives under Resources/ so a build cannot strip it: the particle's
+            // colour and fade arrive as vertex colour, which the stock URP Unlit ignores and
+            // the URP particle shaders — referenced by no material here — would not survive
+            // a build's shader stripping to read.
+            Shader shader = Shader.Find("NV/Blood Mark");
             _sharedMaterial = new Material(shader) { name = "Blood Mark" };
-
-            // Transparent, and it must not write depth or the marks z-fight with the carpet.
-            _sharedMaterial.SetFloat("_Surface", 1f);
-            _sharedMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            _sharedMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            _sharedMaterial.SetInt("_ZWrite", 0);
-            _sharedMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            _sharedMaterial.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 10;
             return _sharedMaterial;
         }
     }
