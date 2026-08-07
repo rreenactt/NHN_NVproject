@@ -68,18 +68,24 @@ namespace NV.Modules.Tests.Realtime
             Assert.Empty(transport.Disconnected);
         }
 
-        /// 정적 룸은 시작 권한만 전원에게 열려 있다. 쫓아내는 권한은 아니다.
+        /// 정적 룸에서도 **방장이 아니면** 내보낼 수 없다.
+        ///
+        /// 예전에는 정적 룸에 방장이 아예 없어서 "아무도 못 내보낸다" 였다. 그 방이 로비
+        /// 목록에도 뜨는 이상 방장 없는 방을 유지할 이유가 없어졌고, 이제 먼저 들어온
+        /// 사람이 방장이다 — 여기서 지켜야 하는 것은 "정적 룸이라고 아무나 쫓아낼 수는
+        /// 없다" 쪽이다. 시작 권한이 전원에게 열려 있는 것(`IsAuthorized`)과는 다른 이야기다.
         [Fact]
-        public void 정적_룸에서는_아무도_내보낼_수_없다()
+        public void 정적_룸에서도_방장이_아니면_내보낼_수_없다()
         {
             var room = RoomFixture.Create(isStatic: true);
             var transport = new RecordingTransport();
 
-            RoomFixture.JoinHuman(room, 1);
+            var first = RoomFixture.JoinHuman(room, 1);
             RoomFixture.JoinHuman(room, 2);
             room.Advance();
 
-            room.PostCommand(RoomCommand.Kick(1, 1));
+            // 세션 2 는 방장이 아니다(먼저 들어온 것은 세션 1 이다).
+            room.PostCommand(RoomCommand.Kick(2, first));
             room.Advance();
             room.Broadcast(transport);
 

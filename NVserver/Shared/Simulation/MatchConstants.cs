@@ -1,4 +1,4 @@
-using NV.Shared.Contracts.Enums;
+﻿using NV.Shared.Contracts.Enums;
 
 namespace NV.Shared.Simulation
 {
@@ -37,6 +37,25 @@ namespace NV.Shared.Simulation
 
         /// 기획서 §3 — 이만큼의 Runner 가 탈출하면 Runner 승리.
         public const int EscapesToWin = 2;
+
+        /// 이 인원으로 시작한 매치에서 Runner 가 이기는 데 필요한 탈출 수.
+        ///
+        /// **`EscapesToWin` 을 그대로 쓰지 않는다.** Runner 가 한 명뿐인 방에서 2 는 도달할 수
+        /// 없는 수이고, 도달할 수 없는 승리 조건은 어려운 매치가 아니라 **잘해도 이길 수 없는
+        /// 매치**다 — 그 방은 아무도 남지 않은 채로 시계만 끝까지 돈다. 그래서 목표는 시작할 때
+        /// 있던 Runner 수를 넘지 않는다.
+        ///
+        /// 여기 있는 이유는 판정이 아직 클라이언트에 있기 때문이다(방장이 판정한다). 서버가
+        /// 결과를 정하게 되면 같은 함수를 그쪽이 부르고, 두 곳에 같은 식이 적히지 않는다.
+        public static int EscapesToWinWith(int runnersAtStart)
+        {
+            if (runnersAtStart <= 0)
+            {
+                return EscapesToWin;
+            }
+
+            return runnersAtStart < EscapesToWin ? runnersAtStart : EscapesToWin;
+        }
 
         // ================================================================ 열쇠와 문
 
@@ -164,6 +183,21 @@ namespace NV.Shared.Simulation
 
         /// 장치를 쓸 수 있는 거리(m).
         public const float DeviceUseRadius = 2.2f;
+
+        /// 기획서 §5 — 장치를 부수는 데 필요한 탄 수. Seeker 의 유일한 반격 수단이다.
+        public const int DeviceDestroyHits = 4;
+
+        /// 장치 콘솔의 판정 상자(m). 클라이언트가 세우는 몸통과 같은 치수다
+        /// (`MapDevice.Build` 가 이 값으로 만든다).
+        ///
+        /// **여기 있는 이유는 총알이 맞는 것과 화면에 보이는 것이 같아야 하기 때문이다.**
+        /// 서버가 판정하고 클라이언트가 그리므로, 치수가 두 곳에 적히면 "보이는데 안 맞는"
+        /// 상자가 생긴다. 배치는 서버가 정하지만 크기는 규칙이라 여기 있다.
+        public const float DeviceWidth = 0.7f;
+
+        public const float DeviceHeight = 1f;
+
+        public const float DeviceDepth = 0.45f;
 
         /// 기획서 §5.2 — 순간이동 장치를 쓴 뒤의 전역 락아웃(초).
         public const float TeleportSharedCooldown = 12f;

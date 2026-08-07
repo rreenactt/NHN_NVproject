@@ -422,6 +422,35 @@ namespace NV.Modules.Tests.Realtime
             return true;
         }
 
+        /// 이 세션이 마지막으로 받은 장치 목록. 상태 바이트를 보려면 이쪽을 쓴다(IG-013).
+        public bool TryLastDevices(int sessionId, out ObjectiveDevice[] devices)
+        {
+            devices = Array.Empty<ObjectiveDevice>();
+
+            if (!TryLastEvent(sessionId, EventKind.ObjectiveState, out var payload))
+            {
+                return false;
+            }
+
+            var keyBuffer = new ObjectivePoint[64];
+            var deviceBuffer = new ObjectiveDevice[16];
+
+            MessageCodec.ReadObjectiveState(
+                payload,
+                out var header,
+                out _,
+                out _,
+                out _,
+                out _,
+                out _,
+                keyBuffer,
+                deviceBuffer);
+
+            devices = new ObjectiveDevice[header.DeviceCount];
+            Array.Copy(deviceBuffer, devices, header.DeviceCount);
+            return true;
+        }
+
         /// 이 세션에 마지막으로 간 그 종류의 전문.
         public bool TryLastEvent(int sessionId, EventKind kind, out byte[] payload)
         {

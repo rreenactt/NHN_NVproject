@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using NV.Realtime.Simulation;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
@@ -22,6 +22,44 @@ namespace NV.Modules.Tests.Realtime
             world.Advance(Match.EscapeHoldTicks);
 
             Assert.Equal(1, world.Room.Match.Escapes);
+        }
+
+        /// 유지 진행도가 **스냅샷에 실린다.** 룰셋이 이 값을 전원 공개로 정했고(끊을 수 있어야
+        /// 하니까), 유지 시간이 0.8초라 2Hz 전문으로는 한두 점밖에 못 찍는다 — 매 틱 오는
+        /// 스냅샷이어야 한다.
+        ///
+        /// 자리는 예전 `Health` 바이트다. 이 게임은 체력을 깎지 않아 스폰의 100 이 그대로
+        /// 실려 나가고 아무도 읽지 않았다 — 크기를 늘리지 않았으므로 프로토콜 버전도 그대로다.
+        [Fact]
+        public void 유지_진행도가_스냅샷에_실린다()
+        {
+            var world = AtOpenDoor();
+
+            Assert.Equal(0, world.EscapeProgress());
+
+            world.Advance(Match.EscapeHoldTicks / 2);
+
+            var half = world.EscapeProgress();
+            Assert.InRange(half, 100, 155);
+
+            world.Advance(Match.EscapeHoldTicks / 2 - 1);
+            Assert.True(world.EscapeProgress() > half, "진행도가 늘지 않았다.");
+        }
+
+        /// 문간을 벗어나면 0 으로 돌아간다. 유지가 연속이어야 한다는 규칙이 화면에도 보여야
+        /// 하고, 남아 있는 게이지는 "누가 곧 나간다" 는 거짓말이 된다.
+        [Fact]
+        public void 문간을_벗어나면_진행도가_0이_된다()
+        {
+            var world = AtOpenDoor();
+
+            world.Advance(Match.EscapeHoldTicks / 2);
+            Assert.True(world.EscapeProgress() > 0);
+
+            world.StepAway();
+            world.Advance(1);
+
+            Assert.Equal(0, world.EscapeProgress());
         }
 
         /// 유지 시간이 목표의 마지막 한 걸음을 Seeker 가 끊을 수 있는 순간으로 만든다.
@@ -302,6 +340,46 @@ namespace NV.Modules.Tests.Realtime
                 {
                     Room.Advance();
                 }
+            }
+
+            /// 문간 밖으로 한 걸음. 유지가 끊긴다.
+            public void StepAway()
+            {
+                var player = PlayerOf(Actor);
+                player.State.Position += new Vector3(MatchConstants.DoorUseRadius + 2f, 0f, 0f);
+            }
+
+            /// 마지막 스냅샷에 실린 이 몸의 탈출 진행도(0~255).
+            public int EscapeProgress()
+            {
+                Room.Broadcast(Transport);
+
+                Assert.True(Transport.TryLastSnapshot(Session, out _, out var entities));
+
+                foreach (var entity in entities)
+                {
+                    if (entity.Id == Actor)
+                    {
+                        return entity.EscapeProgress;
+                    }
+                }
+
+                Assert.Fail("스냅샷에 그 몸이 없다.");
+                return -1;
+            }
+
+            private PlayerEntity PlayerOf(byte playerId)
+            {
+                foreach (var player in Room.Players)
+                {
+                    if (player.PlayerId == playerId)
+                    {
+                        return player;
+                    }
+                }
+
+                Assert.Fail("룸에 그 플레이어가 없다.");
+                return null;
             }
 
             /// 마지막 스냅샷에서 이 플레이어의 `Escaped` 비트.

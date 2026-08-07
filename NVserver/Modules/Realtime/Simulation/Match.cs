@@ -1,4 +1,4 @@
-using NV.Shared.Contracts.Enums;
+﻿using NV.Shared.Contracts.Enums;
 using NV.Shared.Simulation;
 
 namespace NV.Realtime.Simulation
@@ -61,6 +61,7 @@ namespace NV.Realtime.Simulation
         public const int HitImmunityTicks = 23;
 
         private MatchPhase _phase = MatchPhase.Lobby;
+        private int _freezeTicksRemaining;
         private int _revealTicksRemaining;
         private int _matchTicksRemaining;
 
@@ -108,7 +109,39 @@ namespace NV.Realtime.Simulation
         /// `Ended` 도 잠근다. 룸이 `Ended` 로 가면 시뮬레이션 자체가 멈추므로 실질적으로는
         /// 닿지 않는 경로지만, 두 단계가 한 틱 어긋나는 순간에도 결과 화면에서 걸어다니지
         /// 않게 한다.
-        public bool MovementLocked => _phase == MatchPhase.RoleReveal || _phase == MatchPhase.Ended;
+        ///
+        /// **전체 정지 장치도 여기로 들어온다**(기획서 §5.1). 잠그는 이유가 다를 뿐 잠그는
+        /// 방식은 같아야 한다 — 갈라 두면 "리빌 중에는 멈추는데 정지 장치에는 걸어다닌다"
+        /// 같은 반쪽 규칙이 생긴다. 체인이 같은 이유로 같은 자리를 쓰고 있다(`Room.ApplyFrame`).
+        public bool MovementLocked =>
+            _phase == MatchPhase.RoleReveal || _phase == MatchPhase.Ended || DevicesFrozen;
+
+        /// 전체 정지 장치가 도는 중인가.
+        public bool DevicesFrozen => _freezeTicksRemaining > 0;
+
+        /// 전체 정지를 건다(기획서 §5.1). 이미 돌고 있으면 **다시 채운다** — 두 대를 잇달아
+        /// 쓰면 겹치는 것이 아니라 이어지는 것이 맞다.
+        public void FreezeDevices(int ticks)
+        {
+            if (ticks > _freezeTicksRemaining)
+            {
+                _freezeTicksRemaining = ticks;
+            }
+        }
+
+        /// 시계에 더한다(기획서 §5.1 "시간 증가").
+        ///
+        /// **`Playing` 에서만 더한다.** 리빌 중에 더하면 아직 시작하지 않은 매치의 시계가
+        /// 늘어나고, 끝난 뒤에 더하면 0 이어야 할 시계가 되살아나 결과 화면이 카운트다운을 그린다.
+        public void AddTicks(int ticks)
+        {
+            if (_phase != MatchPhase.Playing || ticks <= 0)
+            {
+                return;
+            }
+
+            _matchTicksRemaining += ticks;
+        }
 
         /// 매치를 시작한다. 역할 공개부터다.
         ///
@@ -119,6 +152,7 @@ namespace NV.Realtime.Simulation
             _phase = MatchPhase.RoleReveal;
             _revealTicksRemaining = RevealTicks;
             _matchTicksRemaining = MatchTicks;
+            _freezeTicksRemaining = 0;
             KeysInserted = 0;
             Escapes = 0;
         }
@@ -142,9 +176,12 @@ namespace NV.Realtime.Simulation
 
         /// Runner 한 명이 빠져나갔다.
         ///
-        /// **승리 판정은 하지 않는다.** 기획서 §3 은 `EscapesToWin` 명이 탈출하면 Runner 승리라고
-        /// 하지만, 2인 매치에서는 그 수를 만들 수 없고(OQ-6) 전멸 승리의 유무도 정해지지
-        /// 않았다(OQ-2). 세는 것과 이기는 것을 나눠 두면 그 답이 왔을 때 IG-007 이 이 값을 읽는다.
+        /// **승리 판정은 여기서 하지 않는다.** 세는 것과 이기는 것이 갈라져 있고, 이기는 쪽은
+        /// 아직 방장이 판정한다(`MatchManager.EvaluateWinConditions`).
+        ///
+        /// 그것을 막고 있던 질문 둘은 이제 답이 있다 — 전멸은 술래 승리이고(OQ-2), 탈출 목표는
+        /// 시작 인원을 넘지 않는다(OQ-6, `MatchConstants.EscapesToWinWith`). 그래서 IG-007 은
+        /// 더 이상 막혀 있지 않고, 이 값을 읽어 결과 코드를 채우는 일만 남았다.
         public void RegisterEscape()
         {
             Escapes++;
@@ -170,6 +207,13 @@ namespace NV.Realtime.Simulation
                     return false;
 
                 case MatchPhase.Playing:
+                    // 정지 장치는 매치 시계를 멈추지 않는다. 멈추면 정지가 곧 시간 연장이 되어
+                    // 기획서에 없는 두 번째 효과가 붙는다.
+                    if (_freezeTicksRemaining > 0)
+                    {
+                        _freezeTicksRemaining--;
+                    }
+
                     _matchTicksRemaining--;
 
                     if (_matchTicksRemaining <= 0)
@@ -196,6 +240,7 @@ namespace NV.Realtime.Simulation
             _phase = MatchPhase.Ended;
             _matchTicksRemaining = 0;
             _revealTicksRemaining = 0;
+            _freezeTicksRemaining = 0;
         }
 
         public void Reset()
@@ -203,6 +248,7 @@ namespace NV.Realtime.Simulation
             _phase = MatchPhase.Lobby;
             _revealTicksRemaining = 0;
             _matchTicksRemaining = 0;
+            _freezeTicksRemaining = 0;
             KeysInserted = 0;
             Escapes = 0;
         }

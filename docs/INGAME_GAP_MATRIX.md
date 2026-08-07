@@ -106,7 +106,7 @@
 | R-6.3 | §6 문은 랜덤 위치 생성 | **`DONE`** (IG-011a·b·c2) — 서버가 배치하고 좌표를 역할별로 걸러 내려보내며 클라이언트가 그것을 받아 그린다 | `ObjectivePlacement`, `WriteObjectiveState`, `MatchManager.AcceptObjectiveState` | 필요 ✅ | 필요 ✅ |
 | R-6.4 | §6 플레이어만 볼 수 있음 | **`DONE`** (IG-011b·c3) — R-2.3 과 같은 경로로 닫혔다 | `WriteObjectiveState`, `RoomStateMessage` | 필요 ✅ | 필요 ✅ |
 | R-6.5 | §6 열쇠 10개 삽입 시 개방 | **`DONE`** (IG-012b2·b3) | `Match.DoorOpen`(삽입 수에서 유도), `WriteObjectiveState` 의 `doorOpen` — **문 블록 안에 있어 Seeker 사본에는 실리지 않는다**; 클라이언트는 `NetworkClient.ObjectiveDoorOpen` → `AcceptObjectiveProgress` 로 매 프레임 멱등하게 적용한다 | **서버** ✅ | ✅ `ObjectiveState` 의 문 블록 |
-| R-6.6 | §3 2명 이상 탈출 시 승리 | **탈출 감지 `DONE`** (IG-012c1·c2); **승리 판정은 BLOCKED** (IG-007 ← OQ-2·OQ-6) | `Room.TickEscapes`, `Match.Escapes`·`EscapeHoldTicks`, `EntityFlags.Escaped`; 클라이언트는 `AcceptEscapes`(수, 전문) + `AcceptEscaped`(대상, 스냅샷 플래그)로 받고 로컬 `TickEscapes` 는 거부한다 | **서버** ✅ (세는 것) | ✅ `MatchState.escapes` — **Seeker 도 받는다** |
+| R-6.6 | §3 2명 이상 탈출 시 승리 | **탈출 감지 `DONE`** (IG-012c1·c2); **승리 판정은 UNBLOCKED, 미이관** (IG-007 — 막던 OQ-2·OQ-6 은 답이 나왔다: 전멸=술래 승, 목표=`min(2, 시작 Runner 수)`) | `Room.TickEscapes`, `Match.Escapes`·`EscapeHoldTicks`, `EntityFlags.Escaped`; 클라이언트는 `AcceptEscapes`(수, 전문) + `AcceptEscaped`(대상, 스냅샷 플래그)로 받고 로컬 `TickEscapes` 는 거부한다 | **서버** ✅ (세는 것) | ✅ `MatchState.escapes` — **Seeker 도 받는다** |
 | R-6.7 | (룰셋) 사망 시 소지 열쇠 흘리기 | **`DONE`** (IG-014b + IG-027) | `Room.DownRunner` → `ScatterKeys` — 사망 지점 0.7m 원 위에 **균등 배분**(시작 각도만 무작위). 겹침이 불가능하고, 습득 반경(1.4m)이 더 크므로 격자 스냅 없이도 전부 회수 가능하다 | **서버** ✅ | ✅ `ObjectiveState` 열쇠 목록 |
 
 ## 7. 맵 이벤트 (장치)
@@ -209,7 +209,7 @@ R-7.1(장치 배치)이 이제 기술적으로 가능하다.
 
 **위 문장은 부트스트랩 시점의 진단이고 지금은 뒤집혔다.** 서버 권위가 필요한 항목 중 **판정이
 아직 클라이언트에 남은 것은 하나(승리 조건)뿐**이며, 그것은 기획서와 구현이 충돌해 답을 기다리는
-중이다(OQ-2·OQ-6).
+중이다 — OQ-2·OQ-6 은 답이 나왔고(전멸=술래 승, 목표=`min(2, 시작 Runner 수)`) 이관만 남았다.
 
 ## 재검증 방법
 
@@ -240,7 +240,7 @@ R-7.1(장치 배치)이 이제 기술적으로 가능하다.
 
 | 항목 | 상태 | 사유 |
 |---|---|---|
-| 승리 조건 (R-1.5) | **BLOCKED** | OQ-2·OQ-6. 서버가 탈출·피격·열쇠를 다 세지만 **결과 코드를 정하지 않는다** — 방장이 판정해 `Control(EndMatch)` 로 중계하는 한시적 경로가 남아 있다 |
+| 승리 조건 (R-1.5) | **UNBLOCKED, 미이관** | OQ-2·OQ-6 **답 나옴** — 전멸은 술래 승리, 탈출 목표는 `min(2, 시작 Runner 수)`(`MatchConstants.EscapesToWinWith`). 서버는 여전히 결과 코드를 0 으로 두고 방장이 판정해 `Control(EndMatch)` 로 중계한다. 막던 질문이 사라졌으므로 남은 것은 IG-007 의 이관 작업뿐이다 |
 | 재장전 (R-3.7) | **미완** | 기획서 §4.3 의 재장전은 체인이 놓아준 뒤다. 체인 경로가 OQ-4 로 막혀 순서를 임의로 정하지 않았다 — **탄창 3발을 비우면 그 매치에서 더 쏠 수 없다** |
 | 장치 6종 (R-7.2~7.8) | **BLOCKED** | OQ-1. 기획서 §5.2 와 룰셋·구현이 순간이동 장치의 소유자를 다르게 말한다 |
 | 근접 보이스 (R-8.1~8.3) | **BLOCKED** | OQ-3. 전체 미구현 영역이고 §7.4 는 기획서가 옵션으로 표시 |

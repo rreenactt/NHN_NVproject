@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NV.Realtime;
 using NV.Realtime.Simulation;
 using NV.Shared.Contracts.Enums;
@@ -603,7 +603,8 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(MatchPhase.Ended, room.MatchPhase);
             Assert.Equal(0f, room.MatchSecondsRemaining);
 
-            // 결과 코드는 아직 서버가 정하지 않는다 — OQ-2·OQ-6 이 풀리면 IG-007 이 채운다.
+            // 결과 코드는 아직 서버가 정하지 않는다 — 규칙은 정해졌고(전멸=술래 승,
+            // 목표=min(2, 시작 Runner 수)) IG-007 이 그것을 여기로 옮기면 채워진다.
             Assert.True(OutcomeIsUnset(room));
         }
 

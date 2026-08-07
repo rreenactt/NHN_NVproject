@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 
@@ -92,7 +92,7 @@ namespace NV.Shared.Serialization
                 writer.WriteUInt16(entity.Yaw);
                 writer.WriteInt16(entity.Pitch);
                 writer.WriteByte((byte)entity.Flags);
-                writer.WriteByte(entity.Health);
+                writer.WriteByte(entity.EscapeProgress);
             }
 
             return writer.BytesWritten;
@@ -585,7 +585,7 @@ namespace NV.Shared.Serialization
                 writer.WriteInt16(device.Z);
                 writer.WriteUInt16(device.Yaw);
                 writer.WriteByte((byte)device.Type);
-                writer.WriteByte(device.State);
+                writer.WriteByte((byte)device.State);
             }
 
             return writer.BytesWritten;
@@ -663,7 +663,7 @@ namespace NV.Shared.Serialization
                 var z = reader.ReadInt16();
                 var yaw = reader.ReadUInt16();
                 var type = (MatchDeviceType)reader.ReadByte();
-                var state = reader.ReadByte();
+                var state = (MatchDeviceState)reader.ReadByte();
 
                 devices[index] = new ObjectiveDevice(type, x, y, z, yaw, state);
             }

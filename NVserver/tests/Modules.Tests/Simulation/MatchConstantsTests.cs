@@ -1,4 +1,4 @@
-using NV.Shared.Simulation;
+﻿using NV.Shared.Simulation;
 using Xunit;
 
 namespace NV.Modules.Tests.Simulation
@@ -122,6 +122,24 @@ namespace NV.Modules.Tests.Simulation
         public void 역할_공개가_매치_길이의_일부에_그친다()
         {
             Assert.True(MatchConstants.RoleRevealDuration < MatchConstants.MatchDuration * 0.1f);
+        }
+
+        /// **도달할 수 없는 승리 조건을 만들지 않는다.** Runner 가 한 명뿐인 방에서 2 를
+        /// 요구하면 그 Runner 는 잘해도 이길 수 없고, 그 방은 아무도 남지 않은 채 시계만
+        /// 끝까지 돈다 — 2인 매치가 정확히 그 경우다.
+        [Fact]
+        public void 탈출_목표는_Runner_수를_넘지_않는다()
+        {
+            Assert.Equal(1, MatchConstants.EscapesToWinWith(1));
+            Assert.Equal(2, MatchConstants.EscapesToWinWith(2));
+            Assert.Equal(2, MatchConstants.EscapesToWinWith(4));
+        }
+
+        /// 아직 아무도 없는 순간에는 기본값으로 답한다. 0 을 돌려주면 "이미 이겼다" 가 된다.
+        [Fact]
+        public void 인원을_모르면_기본_목표를_쓴다()
+        {
+            Assert.Equal(MatchConstants.EscapesToWin, MatchConstants.EscapesToWinWith(0));
         }
     }
 }

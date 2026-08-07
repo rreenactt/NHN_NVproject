@@ -98,7 +98,18 @@ namespace NV.Realtime.Simulation
         /// 따로 필드를 두면 "1방 맞았는데 피가 안 난다" 가 표현 가능한 상태가 된다.
         /// 쓰러진 뒤에는 출혈이 의미가 없으므로 함께 내린다(기획서 §4.2 의 흔적은 도망치는
         /// Runner 를 쫓는 장치다).
-        public bool Bleeding => Hits > 0 && !Downed;
+        ///
+        /// **그 상태를 딱 하나가 만든다 — 지혈 장치다**(기획서 §5.1, 룰셋 "Bleeding cleared:
+        /// only by the Stop Bleeding device"). 그래서 유도는 그대로 두고 예외를 명시적인
+        /// 필드로 둔다. 피격 수를 0 으로 되돌리는 것으로 대신하면 지혈이 **부활**이 된다 —
+        /// 두 번째 탄을 맞아도 죽지 않게 되어 장치 하나가 목숨 하나가 된다.
+        public bool Bleeding => Hits > 0 && !Downed && !BleedingCleared;
+
+        /// 지혈 장치로 출혈을 멈췄는가. 피격 수는 그대로 남는다.
+        ///
+        /// 다시 맞으면 풀린다. `RunnerHitsToDie` 가 2 인 지금은 그 탄이 곧 죽음이라 닿지 않는
+        /// 갈래지만, 그 숫자가 늘면 "지혈한 뒤로는 영원히 피가 안 난다" 가 된다.
+        public bool BleedingCleared { get; set; }
 
         /// 이 틱까지는 피격이 무시된다. 3연사가 순간이동을 관통해 죽이는 것을 막는다.
         public uint ImmuneUntilTick { get; set; }
