@@ -16,10 +16,9 @@ MonoBehaviour:
   - mapId: backrooms-v2
     asset: {fileID: 11400000, guid: ff5ba93d1758cdd449dffd6c8f5f6bf0, type: 2}
     prefab: {fileID: 1676762635958154636, guid: ccc49a5ab11cc4143a127696840ea34c, type: 3}
-    displayName: "\uBC31\uB8F8 V2"
-    description: "\uBB3C \uBE60\uC9C4 \uC124\uBE44\uCE35 \u2014 \uCF58\uD06C\uB9AC\uD2B8
-      \uD640\uACFC \uAE30\uB465 \uBC2D, \uB2E8\uCE35."
-    bakedHash: -163892180
+    displayName: backrooms-v2
+    description: 
+    bakedHash: 546792703
     sceneOverride: 
   - mapId: test-room
     asset: {fileID: 11400000, guid: 4ee55f98c3d3bb64f991368d48c5d424, type: 2}
