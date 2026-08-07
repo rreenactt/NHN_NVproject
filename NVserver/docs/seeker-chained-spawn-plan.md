@@ -191,6 +191,21 @@ UI/게임 플로우 관점의 실질 변화는 하나다: **Runner 가 시작 �
 
 `MapSpawn.Team` (§2.4 2단계): exporter + validator + 서버 판정 우선순위. `ExportedMapTests.cs:55` 의 `Assert.Equal(8, ...)` 은 이때 "역할 무관 스폰 N개 + seeker 스폰 유무" 형태로 재정의한다.
 
+**구현 결과 (2026-08-07).** 와이어스루(스키마 → 조회 → 판정)를 구현했다.
+
+- `MapSpawn.Team` (0 = 역할 무관, 1 = Seeker 전용, 2 = Runner 전용). 없으면 0 으로 읽혀
+  기존 파일이 그대로 로드되고, 스폰은 해시 밖이라 재-export 도 없다 — 세 맵 파일 모두 무변경.
+- `WorldMap` 이 팀별 목록을 캐시하고 `SeekerSpawn*` / `RunnerSpawn*` 조회를 낸다. team 이
+  없는 맵에서 Runner 조회는 전체 조회와 **같다**(`MapSpawnTeamTests` 가 고정) — 도입만으로
+  기존 배치가 바뀌지 않는다.
+- `Room` 의 세 지점: `Join`/`JoinBot` 은 Runner 조회로(대기 중에는 역할이 없다), `Start` 의
+  Seeker 판정은 **authored(team 1) → 제단 착지점 → 링 스폰** 순.
+- `MapDataValidator.TryValidateSchema` 가 모르는 team 값과 "전부 Seeker 전용"(Runner 가
+  설 곳 없음)을 거절한다.
+- **exporter 는 이번에 손대지 않았다.** 클라이언트 생성기에 Seeker 스폰을 authoring 하는
+  소스가 아직 없어 적을 값이 없다 — `map-generator-tool-plan.md` §8.4 의 도구 작업과 함께
+  간다. `ExportedMapTests.cs:55` 의 8개 단언도 그때까지 그대로 유효하다.
+
 ### 범위 밖 (별도 과제로 기록)
 
 - 스폰 선택을 `PlayerId` 에서 분리 (대기방 슬롯 이동의 선행 조건, `docs/game-lobby-plan.md:370,467`)

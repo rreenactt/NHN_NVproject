@@ -1935,11 +1935,13 @@ namespace NV.Realtime.Simulation
             }
 
             // 어느 스폰을 고를지는 판정이다. PlayerId 로 갈라 같은 룸에서 겹치지 않게 한다.
+            // 대기 중에는 역할이 없으므로 전원이 Runner 스폰을 쓴다 — Seeker 전용 스폰은
+            // 매치가 시작되어 술래가 정해진 뒤에만 뜻이 있다.
             var joined = new PlayerEntity(
                 sessionId,
                 playerId,
-                _map.SpawnPosition(playerId),
-                _map.SpawnYaw(playerId),
+                _map.RunnerSpawnPosition(playerId),
+                _map.RunnerSpawnYaw(playerId),
                 name);
 
             // 아무것도 입지 않은 참가자를 만들지 않는다. 정원 8 · 캐릭터 8 이므로 자리가
@@ -2042,8 +2044,8 @@ namespace NV.Realtime.Simulation
             var bot = new PlayerEntity(
                 sessionId,
                 playerId,
-                _map.SpawnPosition(playerId),
-                _map.SpawnYaw(playerId),
+                _map.RunnerSpawnPosition(playerId),
+                _map.RunnerSpawnYaw(playerId),
                 name);
 
             // 봇도 캐릭터를 입는다. 사람과 같은 명단 줄을 그리므로, 비워 두면 개발용 방의
@@ -2416,20 +2418,26 @@ namespace NV.Realtime.Simulation
             // 배치는 서버가 한다. 이동이 서버 권위이므로 클라이언트가 자기 몸을
             // 옮겨 놓아도 다음 스냅샷이 되돌린다.
             //
-            // 스폰은 역할의 것이다. Seeker 는 체인이 끝나는 자리(제단 착지점)에서 시작하고,
-            // Runner 는 링 스폰을 PlayerId 로 나눠 갖는다. 착지점이 없는 맵(격자 없음)은
-            // 체인 벌칙도 없는 맵이므로 Seeker 도 링 스폰으로 돌아간다 — 열화의 경계를
-            // 새로 만들지 않는다. 제단이 맵마다 고정이라 이 시작 위치도 예측 가능하다 —
-            // Seeker 는 세 번째 총알이 자기를 어디로 보낼지 알아야 한다는 원칙과 같은 결이다.
+            // 스폰은 역할의 것이다. Seeker 는 체인이 끝나는 자리에서 시작하고, Runner 는
+            // 링 스폰(team ≠ 1)을 PlayerId 로 나눠 갖는다. Seeker 의 자리는 맵이 적었으면
+            // (team 1 스폰) 그것이 먼저고, 없으면 제단 착지점을 파생시킨다. 착지점도 없는
+            // 맵(격자 없음)은 체인 벌칙도 없는 맵이므로 Seeker 도 링 스폰으로 돌아간다 —
+            // 열화의 경계를 새로 만들지 않는다. 제단이 맵마다 고정이라 이 시작 위치도
+            // 예측 가능하다 — Seeker 는 세 번째 총알이 자기를 어디로 보낼지 알아야 한다는
+            // 원칙과 같은 결이다.
             foreach (var player in _players.Values)
             {
-                if (player.PlayerId == _seekerPlayerId && _objectives.Placed)
+                if (player.PlayerId == _seekerPlayerId && _map.SeekerSpawnCount > 0)
+                {
+                    player.RespawnAt(_map.SeekerSpawnPosition(0), _map.SeekerSpawnYaw(0));
+                }
+                else if (player.PlayerId == _seekerPlayerId && _objectives.Placed)
                 {
                     player.RespawnAt(_objectives.AltarDragPoint, SeekerSpawnYaw());
                 }
                 else
                 {
-                    player.RespawnAt(_map.SpawnPosition(player.PlayerId), _map.SpawnYaw(player.PlayerId));
+                    player.RespawnAt(_map.RunnerSpawnPosition(player.PlayerId), _map.RunnerSpawnYaw(player.PlayerId));
                 }
 
                 // 지난 매치의 소지 열쇠를 지운다. `RespawnAt` 에 넣지 않는 것은 그 함수가

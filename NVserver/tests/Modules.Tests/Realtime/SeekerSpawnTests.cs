@@ -90,6 +90,70 @@ namespace NV.Modules.Tests.Realtime
                 $"시작 방향(yaw {seeker.State.Yaw:F3})이 제단에서 나가는 쪽({away})을 보지 않는다.");
         }
 
+        /// 맵이 Seeker 전용 스폰(team 1)을 적었으면 그것이 제단 착지점보다 먼저다.
+        [Fact]
+        public void 맵이_적은_Seeker_스폰이_제단보다_먼저다()
+        {
+            var room = AuthoredRoom();
+            RoomFixture.FillAndStart(room);
+
+            var seeker = FindByRole(room, MatchRole.Seeker);
+
+            Assert.True(
+                DistanceXZ(seeker.State.Position, AuthoredSeekerSpawn) < 0.05f,
+                $"Seeker 가 맵이 적은 자리({AuthoredSeekerSpawn})가 아니라 {seeker.State.Position} 에서 시작했다.");
+        }
+
+        /// Runner 는 Seeker 전용 스폰에 배정되지 않는다 — 링 스폰 목록은 team ≠ 1 만 감는다.
+        [Fact]
+        public void Runner는_Seeker_전용_스폰에_서지_않는다()
+        {
+            var room = AuthoredRoom();
+            RoomFixture.FillAndStart(room);
+
+            var runner = FindByRole(room, MatchRole.Runner);
+
+            Assert.True(
+                DistanceXZ(runner.State.Position, AuthoredSeekerSpawn) > 0.5f,
+                $"Runner {runner.PlayerId} 가 Seeker 전용 스폰({AuthoredSeekerSpawn})에 서 있다.");
+        }
+
+        private static readonly Vector3 AuthoredSeekerSpawn = new Vector3(4f, 0f, -4f);
+
+        /// 픽스처 맵에 Seeker 전용 스폰 하나를 얹은 룸. 나머지는 `RoomFixture.Map()` 과 같다.
+        private static Room AuthoredRoom()
+        {
+            var data = new NV.Shared.Collision.MapData
+            {
+                Name = "test",
+                Boxes = new[]
+                {
+                    new NV.Shared.Collision.MapBox { MinX = -20f, MinY = -1f, MinZ = -20f, MaxX = 20f, MaxY = 0f, MaxZ = 20f },
+                    new NV.Shared.Collision.MapBox { MinX = 5f, MinY = 0f, MinZ = -20f, MaxX = 6f, MaxY = 4f, MaxZ = 20f },
+                },
+                Spawns = new[]
+                {
+                    new NV.Shared.Collision.MapSpawn { X = 0f, Y = 0f, Z = 0f, Yaw = 0f },
+                    new NV.Shared.Collision.MapSpawn { X = -2f, Y = 0f, Z = 0f, Yaw = 0f },
+                    new NV.Shared.Collision.MapSpawn
+                    {
+                        X = AuthoredSeekerSpawn.X,
+                        Y = AuthoredSeekerSpawn.Y,
+                        Z = AuthoredSeekerSpawn.Z,
+                        Yaw = 0f,
+                        Team = 1,
+                    },
+                },
+            };
+
+            return new Room(
+                "test",
+                new NV.Shared.Collision.WorldMap(data),
+                RoomFixture.NoConditions(),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance,
+                isStatic: false);
+        }
+
         /// 역할을 전문에서 읽고 그 몸을 룸에서 집는다. 역할은 무작위이므로 전문이 말하는
         /// 것을 따르고(`ChainWorld.Create` 와 같은 이유), 위치·탄창은 룸의 판정을 본다.
         private static PlayerEntity FindByRole(Room room, MatchRole role)
