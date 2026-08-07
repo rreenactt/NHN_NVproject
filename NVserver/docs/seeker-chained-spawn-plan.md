@@ -170,6 +170,23 @@ UI/게임 플로우 관점의 실질 변화는 하나다: **Runner 가 시작 �
 2. `HeldBannerUI` / `ChainVisualController` 오인 트리거 확인 (§3 표).
 3. 탄창을 비워 실제 체인 벌칙이 시작 위치와 같은 자리로 끌고 오는지 확인 (서사 일관성 검증).
 
+**검증 결과 (정적 분석, 2026-08-07).** 클라이언트 코드 변경 불필요가 확인되었다. 실제 파일명은
+분석 보고서와 달리 `ChainDrag.cs` / `GameHudController.cs` / `MatchSync.cs` 다.
+
+- **체인 오인 트리거 없음.** 체인 신호는 `EntityFlags.Frozen` 이지만 세 겹으로 걸러진다 —
+  `MatchSync.ApplyBody` 가 클라이언트 `MatchPhase.Playing` 으로 가르고(리빌의 Frozen 은
+  페이즈가 아직 `RoleReveal` 이라 통과하지 못한다), `MatchManager.AcceptChained` 가 Seeker
+  역할로 가르고, `ChainDrag.SetServerChained` 는 값의 **변화**에만 반응한다. Seeker 는 제단
+  *위치* 에서 시작할 뿐 `Chained` 상태가 아니므로 어느 겹에도 걸리지 않는다.
+- **HELD 배너**는 `GameHudController` 가 `ChainDrag.Remaining` 을 읽어 그리므로 체인이 실제로
+  걸려야만 나타난다. 시작 위치와 무관하다.
+- **시작 텔레포트는 리빌이 가린다.** 초기 배치는 룸이 `Playing` 이 된 첫 틱의 스냅샷으로
+  도착하고, 그 4초 동안 화면은 역할 공개다. `ServerPlacesAgents` 가 로컬 배치를 억제하므로
+  이중 순간이동도 없다.
+- **오프라인 연습 모드는 영향 밖이다** — 배치 판정이 서버(`Room.Start`)에 있으므로 세션 없는
+  Play 는 기존 로컬 배치를 그대로 쓴다.
+- 남은 것: 두 클라이언트 실플레이 육안 확인(3번 항목 포함). 에디터에서만 가능하다.
+
 ### Phase 3 — authored 오버라이드 (선택, 필요 시)
 
 `MapSpawn.Team` (§2.4 2단계): exporter + validator + 서버 판정 우선순위. `ExportedMapTests.cs:55` 의 `Assert.Equal(8, ...)` 은 이때 "역할 무관 스폰 N개 + seeker 스폰 유무" 형태로 재정의한다.
