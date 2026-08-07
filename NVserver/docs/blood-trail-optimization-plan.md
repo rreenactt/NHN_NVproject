@@ -150,7 +150,38 @@ GameObject만 파괴하고 머티리얼을 `Destroy`하지 않으므로, 러너�
 
 - `SeekerFeed` 카메라의 컬링 마스크에서 혈흔이 이중 렌더되는 비용은 파티클화로 러너당
   1드로우×2로 줄어든 상태 — 추가 조치 불필요하면 종료.
-- `conventions.md`에 "런타임 `new Material`은 만든 쪽이 Destroy한다" 트랩 기록.
+- "런타임 `new Material`은 만든 쪽이 Destroy한다" 트랩 기록 — 클라이언트 함정이므로
+  `conventions.md`(서버 함정 목록)가 아니라 `NVproject/CLAUDE.md`에 적는다.
+
+## 6. Phase 2 검증 결과 (2026-08-07)
+
+### 컴파일
+
+- `dotnet build Assembly-CSharp.csproj` — 오류 0 (기존 경고만)
+- `dotnet build Assembly-CSharp-Editor.csproj` — 오류 0. `ClientApplyTests`는 공개
+  API(`SetBleeding`/`Bleeding`)만 사용하므로 내부 교체의 영향 없음
+- 에디터 임포트 후 콘솔 에러 0, `Shader.Find("NV/Blood Mark")` 성립 (`isSupported=True`)
+
+### 런타임 구성 (에디트 모드 프로브 — 임시 GO에 `Begin()` 실행 후 파괴)
+
+| 항목 | 기대 | 측정 |
+|---|---|---|
+| 자식 "Blood Marks" 레이어 (비로컬) | SeekerVision | SeekerVision |
+| `maxParticles` | 256 | 256 |
+| 시뮬레이션 공간 | World | World |
+| 이미션 모듈 | off (수동 Emit 전용) | False |
+| Color over Lifetime | on | True |
+| 렌더 모드 / 메시 / 셰이더 | Mesh / 수평 쿼드 / NV/Blood Mark | Mesh / Blood Mark Quad / NV/Blood Mark |
+| renderQueue | 3010 (Transparent+10) | 3010 |
+| `Emit` 1회 후 파티클 수 | 1 | 1 |
+| `Stop()` 후 파티클 수 | 0 (Clear) | 0 |
+
+### 남은 검증 — 사용자 플레이 필요
+
+에디터 명령으로는 프레임 단위 모션을 진행시킬 수 없으므로(리포 규칙), 다음은 실제
+플레이로 확인해야 한다: 달리는 점선 간격, 정지 고임의 성장, 마지막 25% 페이드의
+시각 품질, Stop Bleeding 장치의 즉시 삭제, Seeker/Runner 가시성 규칙 4가지,
+2클라이언트에서 원격 러너 트레일과 Seeker 카메라 피드 노출.
 
 ## 5. 예상 개선 효과 (출혈 러너 4명, 정상 상태 ~360마크 기준)
 
