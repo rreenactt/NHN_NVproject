@@ -627,11 +627,16 @@ namespace NV.Game.UI
             bool runnersWon = outcome == MatchOutcome.RunnersEscaped;
             bool localWon = seeker ? !runnersWon : runnersWon;
 
+            // An abandoned match has no winner — counting a walkout as a victory would make
+            // leaving a weapon, so neither the win nor the lose styling applies.
+            bool aborted = outcome == MatchOutcome.Aborted;
+
             _endTitle.text = outcome switch
             {
                 MatchOutcome.RunnersEscaped => "THEY GOT OUT",
                 MatchOutcome.SeekerTimeout => "THE HOUR CLOSED",
                 MatchOutcome.SeekerWipedRunners => "NOBODY LEFT TO RUN",
+                MatchOutcome.Aborted => "MATCH ABANDONED",
                 _ => "MATCH OVER",
             };
 
@@ -644,11 +649,13 @@ namespace NV.Game.UI
                     _match.Config.keysRequired + " KEYS IN THE DOOR.",
                 MatchOutcome.SeekerWipedRunners =>
                     "EVERY RUNNER WENT DOWN BEFORE TWO COULD LEAVE.",
+                MatchOutcome.Aborted =>
+                    "TOO FEW PLAYERS LEFT TO KEEP THE HUNT GOING. NOBODY WINS.",
                 _ => string.Empty,
             };
 
-            _endTitle.EnableInClassList("card__title--win", localWon);
-            _endTitle.EnableInClassList("card__title--lose", !localWon);
+            _endTitle.EnableInClassList("card__title--win", !aborted && localWon);
+            _endTitle.EnableInClassList("card__title--lose", !aborted && !localWon);
             _endCard.style.display = DisplayStyle.Flex;
             _revealCard.style.display = DisplayStyle.None;
 

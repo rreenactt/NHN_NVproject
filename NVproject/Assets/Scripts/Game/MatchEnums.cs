@@ -33,6 +33,14 @@ namespace NV.Game
 
         /// <summary>Every Runner was killed before two of them escaped.</summary>
         SeekerWipedRunners = 3,
+
+        /// <summary>
+        /// The match could no longer be played — the Seeker left, or every Runner did — and the
+        /// server ended it after a short grace. Nobody wins: counting a walkout as the other
+        /// side's victory would make leaving a weapon. This is the first outcome the server
+        /// writes itself (the byte must match <c>Room.AbortedOutcome</c> on the server).
+        /// </summary>
+        Aborted = 4,
     }
 
     /// <summary>
