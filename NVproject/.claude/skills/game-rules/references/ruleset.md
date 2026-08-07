@@ -16,11 +16,26 @@ change it here first, then update `GameConfig` and the systems.
 ## Win conditions
 | Side   | Wins when |
 |--------|-----------|
-| Runner | **2 or more** Runners have escaped through the opened door. |
-| Seeker | Timer reaches 0 with **fewer than 2** escapes (time attack), i.e. the Seeker keeps escapes below 2 for the whole match. |
+| Runner | **2 or more** Runners have escaped through the opened door — but never more than there *are* Runners (see below). |
+| Seeker | Timer reaches 0 below that number of escapes (time attack), or **every** Runner goes down without a single one getting out. |
 
-Evaluate on every escape and every timer tick. The 2nd escape ends the match
+Evaluate on every escape and every timer tick. Reaching the number ends the match
 immediately as a Runner win; timer-zero ends it as a Seeker win.
+
+**The target never exceeds the number of Runners the match started with.** With
+one Runner, one escape wins. A target of 2 in a two-player match is unreachable,
+and an unreachable win condition is not a hard match — it is a match the Runner
+cannot win by playing well, which then runs its clock out with nobody left in it.
+So the number needed is `min(2, runners at start)`.
+
+**A wipe is a Seeker win — decided, not implied.** The design doc never listed
+one, so it sat open for a while; it is settled now. If every Runner goes down the
+match ends there rather than making the Seeker sit out the rest of the clock in an
+empty building.
+
+Escaping is not being wiped out. The wipe win requires every Runner to have gone
+**down**; a Runner who walked out through the door has not been eliminated, and
+counting them as such hands the Seeker a win for losing.
 
 ## Objective: keys & door
 - **10 keys** scattered at valid walkable locations. Runners pick them up and
@@ -28,6 +43,13 @@ immediately as a Runner win; timer-zero ends it as a Seeker win.
 - The **door** spawns at a **random valid location each match**. **Visible to
   Runners only** — never rendered/highlighted for the Seeker.
 - Inserting the **10th** key opens the door; Runners escape through it.
+- Escaping is **standing in the open doorway for a hold time**, not touching it.
+  The hold exists so the Seeker has a moment to interrupt the last step.
+- **The hold's progress is public.** Everyone sees how far along the escaping
+  Runner is, the Seeker included. That is deliberate even though the Seeker
+  cannot see the door: the door's *position* stays hidden, but the fact that
+  somebody is leaving right now is the one cue that makes the hold interruptible
+  at all. A hold nobody can see is a delay, not a rule.
 - Distinguish **carried keys** (on a Runner) from **inserted keys** (in the door).
   Total inserted is global progress toward 10.
 
@@ -49,6 +71,21 @@ penalty for standing still *is* the pool on the floor, and a Runner who cannot
 see it has no way to learn the rule or to judge how much they are giving away.
 The trail stays hidden from **other** Runners — it is the Seeker's evidence and
 the bleeder's own problem.
+
+## Movement
+| Input | Effect |
+|-------|--------|
+| Ctrl (hold) | **Sneak** — walk slowly, silent footsteps. Stance and body height do not change. |
+
+Sneaking is the only way to move without feeding the Seeker's main sensor, so it
+costs speed. **It is not a crouch**: no change of stance, no change of hitbox
+height. The cost is the speed alone, which keeps "cross this open room quietly"
+a decision about time rather than about a second body shape.
+
+Known gap: the server only slows a player when it is told they are crouching, and
+this deliberately never sends that. So in a networked match sneaking is silent but
+not slow — the cost above is not being charged. Closing it needs a signal that
+means "slow" without also meaning "shorter".
 
 ## Seeker gun & chain-drag
 | Rule | Value |
@@ -103,7 +140,7 @@ Each placed device provides ONE effect. Uses: **1x** = single use per match,
 |-----|---------|
 | Match duration | 8:00 (tune) |
 | Keys required | 10 |
-| Escapes to win | 2 |
+| Escapes to win | 2, capped at the number of Runners |
 | Runner hits to die | 2 |
 | Seeker magazine | 3 |
 | Chain-drag wait | 3s |
