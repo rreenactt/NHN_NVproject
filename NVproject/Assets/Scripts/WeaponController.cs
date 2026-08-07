@@ -68,6 +68,7 @@ public class WeaponController : MonoBehaviour
     private int _ammo;
     private float _nextFireTime;
     private bool _reloading;
+    private FirstPersonController _playerController;
 
     public int Ammo => _ammo;
     public bool IsReloading => _reloading;
@@ -113,6 +114,8 @@ public class WeaponController : MonoBehaviour
         if (weaponAudio == null) weaponAudio = GetComponent<WeaponAudio>();
         if (weaponAudio == null) weaponAudio = gameObject.AddComponent<WeaponAudio>();
 
+        _playerController = GetComponent<FirstPersonController>();
+
         _ammo = magazineSize;
     }
 
@@ -134,6 +137,13 @@ public class WeaponController : MonoBehaviour
         UpdateAim();
 
         if (!Armed) return;
+
+        // The ESC menu (and anything else that frees the cursor) turns input off at the
+        // controller, and the weapon must honour the same flag: the click that presses a menu
+        // button must not also leave the barrel. Deliberately not FireBlocked — that flag is
+        // the chain's, and a menu that borrowed it would hand a chained Seeker a loaded gun
+        // on close.
+        if (_playerController != null && !_playerController.InputEnabled) return;
 
         var mouse = Mouse.current;
         var keyboard = Keyboard.current;
@@ -250,7 +260,16 @@ public class WeaponController : MonoBehaviour
     /// </summary>
     public void AcceptAmmo(int rounds)
     {
+        int had = _ammo;
         _ammo = Mathf.Clamp(rounds, 0, magazineSize);
+
+        // The server can empty the magazine while the local counter still shows rounds: it fires
+        // on *held* at its own interval (`Room.FireWeapons`), the local `Fire` only on the click
+        // edge, so one held click can spend three server rounds against one local one. The chain
+        // then starts server-side (the body is dragged by snapshots) with `ChainDrag.Trigger`
+        // never called — no chain drawn, no HELD banner, and the drag interpolates through walls.
+        // The falling edge here is the missed signal; `Trigger` guards itself against repeats.
+        if (had > 0 && _ammo == 0 && onMagazineEmpty != null) onMagazineEmpty();
     }
 
     /// <summary>

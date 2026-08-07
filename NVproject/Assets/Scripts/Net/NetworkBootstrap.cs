@@ -21,6 +21,7 @@ namespace NV.Client.Net
     /// - 원격: 100ms 보간 버퍼. 30Hz 스냅샷을 렌더 프레임레이트로 펴는 표준 수단이다.
     /// - 로컬: 최신 스냅샷으로 짧게 감쇠. 자기 캐릭터에 보간 지연을 얹으면 왕복 지연
     ///   위에 100ms 가 더 붙어 조작이 무거워진다. 예측(M5)이 들어오면 이 경로가 대체된다.
+    ///   단 Frozen(체인 견인 등) 동안만은 원격과 같은 보간을 쓴다 — `ApplyLocal` 주석 참고.
     ///
     /// 실행 순서를 NetSession(-120)·NetworkClient(-100) 뒤, FirstPersonController(0)
     /// 앞에 둔다. 트랜스폼을 옮긴 다음 컨트롤러가 변위를 재야 걸음 속도가 한 프레임
@@ -50,6 +51,10 @@ namespace NV.Client.Net
 
         private Vector3 _localVelocity;
         private bool _localPlaced;
+        private Game.ChainDrag _localChain;
+        private float _dragArc;
+        private float _dragArcVelocity;
+        private bool _dragFollowing;
         private float _offlineWalkSpeed;
         private float _offlineSprintSpeed;
         private uint _clientMapHash;
@@ -345,6 +350,7 @@ namespace NV.Client.Net
 
             _localPlaced = false;
             _localVelocity = Vector3.zero;
+            _dragFollowing = false;
             _mapHashChecked = false;
             _mapHashStatus = "미확인";
 
@@ -352,6 +358,13 @@ namespace NV.Client.Net
         }
 
         /// 로컬 플레이어는 최신 스냅샷을 향해 짧게 감쇠한다.
+        ///
+        /// **Frozen 동안만 예외로 원격과 같은 보간 버퍼를 쓴다.** 최신 스냅샷을 쫓는 평소
+        /// 경로는 조작 지연을 얹지 않기 위한 것인데, Frozen(체인 견인·역할 공개) 동안은
+        /// 서버가 입력을 무력화하므로 보간 지연 100ms 를 얹어도 잃는 조작감이 없다. 잃지
+        /// 않던 것의 비용은 체인에서 드러났다 — 45 m/s 견인은 틱당 1.5 m 라 30Hz 계단이
+        /// 화면에 그대로 남고, 스냅샷 하나만 늦어도 스냅 임계(2 m)를 넘어 순간이동한다.
+        /// 모드 전환의 이음새는 아래 SmoothDamp 가 그대로 흡수한다.
         private void ApplyLocal()
         {
             if (!_client.Snapshots.TryLatest(_client.LocalPlayerId, out var sample))
@@ -359,11 +372,61 @@ namespace NV.Client.Net
                 return;
             }
 
+            var frozen = (sample.Flags & EntityFlags.Frozen) != 0;
+            if (frozen && _client.Snapshots.TrySample(_client.LocalPlayerId, Time.unscaledTime, out var interpolated))
+            {
+                sample = interpolated;
+            }
+
             var offset = _localRig != null ? _localRig.GroundOffset : 0f;
             var current = _localPlayer.transform.position - new Vector3(0f, offset, 0f);
 
+            // **견인 중에는 경로 위에서만 움직인다.** 서버는 걸어갈 수 있는 경로 위의 점을
+            // 틱마다 보내지만, 그 점들 사이를 직선으로 이으면 — 스냅샷 보간도 SmoothDamp 도
+            // 그렇게 한다 — 45 m/s 에서는 현이 틱당 1.5 m 를 넘어 코너 옆의 벽을 그대로
+            // 가로지른다. 체인이 계산해 둔 경로에 서버 위치를 사영하고, 3D 위치가 아니라
+            // **경로 위 거리(스칼라)를 감쇠**한다. 스칼라가 어디에 있든 그 점은 경로 위다.
+            if (frozen)
+            {
+                if (_localChain == null)
+                {
+                    _localChain = _localPlayer.GetComponent<Game.ChainDrag>();
+                }
+
+                if (_localChain != null && _localChain.HasRoute)
+                {
+                    if (!_dragFollowing)
+                    {
+                        _dragArc = _localChain.ProjectOntoRoute(current);
+                        _dragArcVelocity = 0f;
+                        _dragFollowing = true;
+                    }
+
+                    // 서버의 진행은 단조 증가다(테스트가 그것을 박아 둔다). 사영은 경로가
+                    // 자기 옆을 지날 때 뒤로 튈 수 있으므로, 뒤로 가는 값은 버린다.
+                    var targetArc = Mathf.Max(_dragArc, _localChain.ProjectOntoRoute(sample.Position));
+                    _dragArc = Mathf.SmoothDamp(_dragArc, targetArc, ref _dragArcVelocity, localSmoothing);
+
+                    _localPlayer.ApplyNetworkState(
+                        _localChain.PointOnRoute(_dragArc), sample.IsGrounded, sample.Velocity.y);
+
+                    _localPlaced = true;
+                    _localVelocity = Vector3.zero;
+                    return;
+                }
+            }
+
+            _dragFollowing = false;
+
+            // Frozen 동안은 스냅 임계를 견인 기준으로 올린다. 견인 최고 속도 × (보간 지연
+            // + 두 틱 여유) — 평시 임계(2 m)는 견인 한 틱 반이면 넘어서, 견인 내내 스냅
+            // 분기를 때리는 것이 "끌려가다 순간 튄다" 의 정체였다.
+            var snapDistance = frozen
+                ? MatchConstants.ChainDragSpeed * (_client.Snapshots.Delay + 2f * SimConstants.TickDelta)
+                : localSnapDistance;
+
             Vector3 target;
-            if (!_localPlaced || Vector3.Distance(current, sample.Position) > localSnapDistance)
+            if (!_localPlaced || Vector3.Distance(current, sample.Position) > snapDistance)
             {
                 // 스폰·리스폰·큰 보정. 감쇠로 끌면 벽을 통과해 미끄러져 들어간다.
                 target = sample.Position;

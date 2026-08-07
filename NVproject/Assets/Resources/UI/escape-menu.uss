@@ -1,0 +1,72 @@
+/* ESC system menu — the one overlay that is meant to be clicked.
+   Same worn-signage mood as the HUD: dark field, yellowed stencil text. */
+
+.esc-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(8, 7, 4, 0.72);
+}
+
+.esc-panel {
+    min-width: 340px;
+    padding: 28px 36px 20px 36px;
+    background-color: rgba(22, 19, 11, 0.96);
+    border-width: 1px;
+    border-color: rgba(196, 172, 100, 0.55);
+}
+
+.esc-title {
+    -unity-font-style: bold;
+    font-size: 22px;
+    letter-spacing: 14px;
+    color: rgb(226, 205, 138);
+    -unity-text-align: middle-center;
+    margin-bottom: 10px;
+}
+
+.esc-rule {
+    height: 1px;
+    background-color: rgba(196, 172, 100, 0.35);
+    margin-bottom: 18px;
+}
+
+.esc-button {
+    height: 42px;
+    margin: 4px 0;
+    font-size: 15px;
+    letter-spacing: 2px;
+    color: rgb(222, 210, 172);
+    background-color: rgba(52, 46, 28, 0.9);
+    border-width: 1px;
+    border-color: rgba(196, 172, 100, 0.4);
+}
+
+.esc-button:hover {
+    background-color: rgba(88, 77, 44, 0.95);
+    border-color: rgb(226, 205, 138);
+    color: rgb(255, 244, 205);
+}
+
+.esc-button--danger {
+    color: rgb(228, 170, 140);
+    border-color: rgba(212, 130, 96, 0.45);
+}
+
+.esc-button--danger:hover {
+    background-color: rgba(96, 52, 34, 0.95);
+    border-color: rgb(235, 156, 116);
+    color: rgb(255, 222, 200);
+}
+
+.esc-hint {
+    margin-top: 14px;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: rgba(206, 190, 148, 0.55);
+    -unity-text-align: middle-center;
+}

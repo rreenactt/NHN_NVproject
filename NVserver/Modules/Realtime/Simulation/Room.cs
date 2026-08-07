@@ -1401,7 +1401,14 @@ namespace NV.Realtime.Simulation
                 // 지수 감쇠가 되어 정해진 시간에 도착하지 못한다.
                 var dragTicks = player.ChainDragUntilTick - player.ChainStartTick;
                 var elapsed = _tick - player.ChainStartTick;
-                var t = dragTicks == 0u ? 1f : (float)elapsed / dragTicks;
+                var linear = dragTicks == 0u ? 1f : (float)elapsed / dragTicks;
+
+                // SmoothStep 이징 — 오프라인 견인(`ChainDrag`)과 같은 곡선이다. 등속은 출발이
+                // 홱 당겨지고 도착이 뚝 멈춘다. 이 계산은 서버 전용이고 클라이언트가 예측하지
+                // 않으므로 `DeterministicMath` 의 제약과 무관하다. 순간 최고 속도는 평균의
+                // 1.5배 — 클라이언트의 로컬 스냅 임계가 그것을 감안해 잡혀 있다
+                // (`NetworkBootstrap.ApplyLocal`).
+                var t = linear * linear * (3f - 2f * linear);
 
                 var state = player.State;
                 state.Position = GridRoute.PointAlong(player.ChainRoute, t * player.ChainRouteLength);

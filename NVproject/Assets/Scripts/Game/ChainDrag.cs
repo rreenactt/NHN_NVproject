@@ -35,6 +35,8 @@ namespace NV.Game
         private float _routeLength;
         private Coroutine _routine;
         private bool _serverChained;    // the server's answer, polled out of the snapshot flags
+        private bool _serverDriven;     // true while the server is doing the hauling, not this loop
+        private bool _routeWalkable;    // true only when the NavMesh solved it; never the fallback
 
         public bool Active { get; private set; }
 
@@ -117,6 +119,12 @@ namespace NV.Game
             }
 
             Active = true;
+
+            // 몸을 옮기는 것은 서버다. `NetworkBootstrap` 이 이 플래그(와 `HasRoute`)를 보고
+            // 서버 위치를 이 경로 위로 투영한다 — 그러지 않으면 틱마다 오는 점을 직선으로
+            // 이어 꺾이는 자리마다 벽을 스치고 지나간다.
+            _serverDriven = true;
+
             agent?.SetChained(true);
             if (weapon != null) weapon.FireBlocked = true;
 
@@ -157,6 +165,11 @@ namespace NV.Game
             // `_serverChained` is left alone on purpose: it mirrors the server, not this loop. If we
             // got here on the deadline rather than on the release, it is still true and must stay
             // true, or the next poll reads a change that never happened and chains the body again.
+            //
+            // `_serverDriven` is the opposite — it describes this loop, so it ends with it. Left
+            // standing, `HasRoute` keeps pointing at a finished route and the body is projected
+            // onto it long after the chain let go.
+            _serverDriven = false;
             Active = false;
             _routine = null;
         }
@@ -166,6 +179,12 @@ namespace NV.Game
             MatchManager match = MatchManager.Instance;
             GameConfig config = match != null ? match.Config : null;
             if (config == null) yield break;
+
+            // **누가 몸을 옮기는가.** 이 갈래는 오프라인이므로 옮기는 것은 여기다. 서버가 전투를
+            // 판정하는 매치에서는 `Trigger` 가 아예 물러나고 `RunServer` 가 대신 도는데, 그것이
+            // `_serverDriven` 을 세우는 유일한 곳이다 — 여기서 `Teleport` 를 부르면 다음 스냅샷이
+            // 그것을 되돌리고, 증상은 Seeker 가 제단 쪽으로 끌리다 말고 튕겨 돌아오는 것이다.
+            _serverDriven = false;
 
             Active = true;
             agent?.SetChained(true);
@@ -315,6 +334,7 @@ namespace NV.Game
         {
             _route = null;
             _routeLength = 0f;
+            _routeWalkable = false;
 
             // 1.5 m, not 4. The bake leaves a walkable strip along the *tops of the top-floor
             // walls*, 3.1 m above the upper floor, and a generous sample radius snaps a Seeker
@@ -330,6 +350,7 @@ namespace NV.Game
                     && path.corners.Length >= 2)
                 {
                     _route = path.corners;
+                    _routeWalkable = true;
 
                     // Both ends are pinned to the real thing rather than to the navmesh's nearest
                     // point, so the chain starts at the Seeker and finishes on the landing spot.
@@ -374,6 +395,63 @@ namespace NV.Game
 
             return best;
         }
+
+        /// <summary>
+        /// Whether the body being dragged should be *drawn on this route* rather than at the raw
+        /// server position. Server-driven only: the server sends one on-route point per tick, and
+        /// anything that connects those points with straight lines — snapshot interpolation,
+        /// SmoothDamp — turns each corner into a chord that passes through the wall beside it.
+        /// <see cref="NetworkBootstrap"/> projects the server position onto this route instead.
+        ///
+        /// The straight-line fallback is deliberately excluded. The server hauls along its own
+        /// grid A* — walls respected — and projecting those positions onto a two-point chord
+        /// *forces* the body through every wall between here and the altar: worse than doing
+        /// nothing. No walkable route, no projection.
+        /// </summary>
+        public bool HasRoute => Active && _serverDriven && _routeWalkable
+            && _route != null && _route.Length >= 2;
+
+        public float RouteLength => _routeLength;
+
+        /// <summary>
+        /// Projects a position onto the route and returns how far along it that is, in metres.
+        /// Nearest-segment, like <see cref="NearestSegment"/>, and for the same reason: the body
+        /// arrives as a stream of positions with no route index attached.
+        /// </summary>
+        public float ProjectOntoRoute(Vector3 position)
+        {
+            if (_route == null || _route.Length < 2) return 0f;
+
+            float best = 0f;
+            float bestDistance = float.MaxValue;
+            float arc = 0f;
+
+            for (int i = 1; i < _route.Length; i++)
+            {
+                Vector3 from = _route[i - 1];
+                Vector3 segment = _route[i] - from;
+                float lengthSq = segment.sqrMagnitude;
+                float t = lengthSq < 1e-8f
+                    ? 0f
+                    : Mathf.Clamp01(Vector3.Dot(position - from, segment) / lengthSq);
+
+                float distance = (position - (from + segment * t)).sqrMagnitude;
+                float segmentLength = Mathf.Sqrt(lengthSq);
+
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = arc + segmentLength * t;
+                }
+
+                arc += segmentLength;
+            }
+
+            return best;
+        }
+
+        /// <summary>The point a given distance along the route.</summary>
+        public Vector3 PointOnRoute(float distance) => PointAlongRoute(distance, out _);
 
         /// <summary>Walks the route to find the point a given distance along it.</summary>
         private Vector3 PointAlongRoute(float distance, out int segment)
@@ -486,6 +564,7 @@ namespace NV.Game
             Remaining = 0f;
             Active = false;
             _serverChained = false;
+            _serverDriven = false;
             agent?.SetChained(false);
             if (weapon != null) weapon.FireBlocked = false;
         }
