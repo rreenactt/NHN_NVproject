@@ -86,6 +86,20 @@ namespace NV.Realtime.Simulation
 
         private void LogMap(string mapId, WorldMap map)
         {
+            // Runner 조회는 목록을 감으므로 정원보다 스폰이 적으면 두 사람이 같은 자리에
+            // 겹친다. 스키마 검증은 정원을 모르고(Shared 는 모듈 상수를 못 본다) 정원은
+            // 이 모듈의 것이므로 비교도 여기서 한다. team 필드가 스폰을 Seeker 전용으로
+            // 빼 가면 "스폰 8개 ≥ 정원 5" 가 조용히 무너질 수 있는 값이 된다.
+            if (map.RunnerSpawnCount < RealtimeConstants.Rooms.MaxPlayers)
+            {
+                _logger.LogWarning(
+                    "맵 {MapId}: Runner 가 설 수 있는 스폰이 {RunnerSpawnCount}개로 정원 {MaxPlayers}명보다 적다. " +
+                    "가득 찬 방에서 두 참가자가 같은 자리에 스폰된다.",
+                    mapId,
+                    map.RunnerSpawnCount,
+                    RealtimeConstants.Rooms.MaxPlayers);
+            }
+
             _logger.LogInformation(
                 "맵 {MapId}: {MapName} 해시 {MapHash:X8} 박스 {BoxCount}개 스폰 {SpawnCount}개",
                 mapId,

@@ -172,7 +172,7 @@ namespace NV.Modules.Tests.Realtime
                 {
                     room.Broadcast(transport);
                     Assert.True(transport.TryLastSnapshot(1, out _, out var before));
-                    startX = Quantization.ToMeters(before[0].X);
+                    startX = Quantization.ToMeters(EntityOf(before, 0).X);
                 }
 
                 room.PostInput(1, tick, sideways);
@@ -182,7 +182,7 @@ namespace NV.Modules.Tests.Realtime
 
             Assert.True(transport.TryLastSnapshot(1, out var header, out var entities));
 
-            var moved = Quantization.ToMeters(entities[0].X) - startX;
+            var moved = Quantization.ToMeters(EntityOf(entities, 0).X) - startX;
             Assert.True(moved > 1f, $"+X 로 {moved}m 움직였다.");
             Assert.True(header.AckedInputTick > 0u, $"acked = {header.AckedInputTick}");
         }

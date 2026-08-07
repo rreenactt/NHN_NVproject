@@ -205,6 +205,13 @@ UI/게임 플로우 관점의 실질 변화는 하나다: **Runner 가 시작 �
 - **exporter 는 이번에 손대지 않았다.** 클라이언트 생성기에 Seeker 스폰을 authoring 하는
   소스가 아직 없어 적을 값이 없다 — `map-generator-tool-plan.md` §8.4 의 도구 작업과 함께
   간다. `ExportedMapTests.cs:55` 의 8개 단언도 그때까지 그대로 유효하다.
+- **exporter 가 team 을 쓰는 커밋은 `MapSchema.Current` 를 3 으로 올려야 한다.** 스폰은
+  해시 밖이라 team 이 든 파일이 옛 서버에서도 그대로 로드되고, 옛 서버는 team 을 0 으로
+  읽어 **Seeker 전용 스폰에 Runner 를 세운다** — `MapSchema` 의 주석이 경고하는 "새 필드를
+  조용히 기본값으로 읽는" 바로 그 경우다. 버전을 올리면 옛 서버가 새 파일을 거절한다.
+- `team = 2`(Runner 전용)는 아직 선언일 뿐이다 — 판정은 "1 인가 아닌가" 만 본다
+  (`MapSpawn.Team` 주석 참조). Runner 스폰 수 < 정원인 맵은 기동 로그가 경고한다
+  (`GameLoopService.LogMap`).
 
 ### 범위 밖 (별도 과제로 기록)
 

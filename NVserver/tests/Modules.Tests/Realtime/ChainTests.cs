@@ -309,6 +309,16 @@ namespace NV.Modules.Tests.Realtime
                 // 스폰에서 시작하지만, 걷는 것은 어느 쪽에서든 해가 없다.
                 world.PushForward(30);
 
+                // 떠났다는 것을 단언한다. 이 걸음이 막히면(픽스처 지형이 바뀌거나 다른
+                // 몸이 길을 막으면) 견인 거리가 도로 0 이 되고, 실패는 곡선 검사의
+                // 엉뚱한 메시지로 나타난다 — 원인을 여기서 말하게 한다.
+                if (room.Objectives.Placed)
+                {
+                    Assert.True(
+                        Vector3.Distance(world.SeekerPosition(), room.Objectives.AltarDragPoint) > 1f,
+                        "Seeker 가 제단을 떠나지 못했다 — 견인 거리가 0 이라 곡선 검사가 무의미하다.");
+                }
+
                 return world;
             }
 

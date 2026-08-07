@@ -11,6 +11,8 @@ namespace NV.Shared.Collision
     {
         private static readonly Vector3 FallbackSpawn = new Vector3(0f, 0f, 0f);
 
+        // 생성 시점에 갈라 둔 캐시다. `MapData.Spawns` 를 생성 뒤에 바꾸면 이 목록과
+        // 조용히 어긋난다 — 격자의 후보 목록과 같은 규약이다(`RoomFixture.Map` 참조).
         private readonly int[] _seekerSpawns;
         private readonly int[] _runnerSpawns;
 
@@ -119,6 +121,11 @@ namespace NV.Shared.Collision
         /// Seeker 전용(team 1) 스폰의 개수. 0 이면 이 맵은 Seeker 시작점을 적지 않았고,
         /// 모듈이 파생값(제단 착지점)으로 판정한다.
         public int SeekerSpawnCount => _seekerSpawns.Length;
+
+        /// Runner 가 설 수 있는 스폰(team ≠ 1)의 개수. **정원과 비교해야 하는 값이다** —
+        /// 이보다 참가자가 많으면 조회가 감아서 두 사람이 같은 자리에 겹친다. 정원은
+        /// 모듈의 것이므로 비교도 모듈(기동 로그)이 한다.
+        public int RunnerSpawnCount => _runnerSpawns.Length;
 
         public Vector3 SeekerSpawnPosition(int index)
         {

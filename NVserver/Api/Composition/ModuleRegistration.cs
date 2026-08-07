@@ -238,11 +238,13 @@ namespace NV.Api.Composition
                     : "격자 없음";
 
                 app.Logger.LogInformation(
-                    "맵 로드: id={MapId}{Aliases} 박스={BoxCount} 스폰={SpawnCount} {Grid} 해시={MapHash:X8}",
+                    "맵 로드: id={MapId}{Aliases} 박스={BoxCount} 스폰={SpawnCount}(Runner {RunnerSpawnCount}, Seeker 전용 {SeekerSpawnCount}) {Grid} 해시={MapHash:X8}",
                     pair.Key,
                     DescribeAliases(maps, pair.Key),
                     map.Collision.BoxCount,
                     map.SpawnCount,
+                    map.RunnerSpawnCount,
+                    map.SeekerSpawnCount,
                     grid,
                     map.Hash);
             }
