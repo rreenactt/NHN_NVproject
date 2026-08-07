@@ -81,15 +81,32 @@ namespace NV.Game
             SetWeaponVisible(seeker);
         }
 
-        private void SetWeaponVisible(bool visible)
+        private void SetWeaponVisible(bool visible) => ShowWeapon(gameObject, visible);
+
+        /// <summary>
+        /// What being armed looks like: the pistol in the hand and the arm pose that holds it.
+        ///
+        /// **Static because a remote body needs the same answer and must not get a second copy of
+        /// it.** This component is the local player's — it also owns the camera's culling mask, the
+        /// weapon switcher and the chain, none of which a puppet has any business with. Only the
+        /// *appearance* is common, so only the appearance is shared; `RemotePlayerPuppet` calls this
+        /// when the server tells it what role that body is.
+        ///
+        /// Without it every remote body kept the rig's default — armed — so Runners walked around
+        /// holding pistols and the one thing that identifies the Seeker across a foggy room was
+        /// carried by everybody.
+        /// </summary>
+        public static void ShowWeapon(GameObject body, bool visible)
         {
-            var rig = GetComponent<BlockRig>();
+            if (body == null) return;
+
+            var rig = body.GetComponent<BlockRig>();
             if (rig == null) return;
 
             if (rig.BodyWeapon != null) rig.BodyWeapon.gameObject.SetActive(visible);
             if (rig.ViewWeapon != null) rig.ViewWeapon.gameObject.SetActive(visible);
 
-            var animator = GetComponent<BlockCharacterAnimator>();
+            var animator = body.GetComponent<BlockCharacterAnimator>();
             if (animator != null) animator.Armed = visible;
         }
     }

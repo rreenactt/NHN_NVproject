@@ -69,6 +69,9 @@ namespace NV.Client.Net
         private readonly ObjectivePoint[] _keyPoints = new ObjectivePoint[64];
         private readonly ObjectiveDevice[] _devicePoints = new ObjectiveDevice[16];
 
+        /// 장치별 상태. `Objectives.Devices` 와 같은 순서다.
+        private readonly MatchDeviceState[] _deviceStates = new MatchDeviceState[16];
+
         /// 최근 입력 프레임. 손실 대비로 매 메시지에 여러 틱치를 함께 싣는다.
         private readonly InputFrame[] _history = new InputFrame[ProtocolInfo.MaxInputFramesPerMessage];
         private int _historyCount;
@@ -188,6 +191,36 @@ namespace NV.Client.Net
         public Objectives Objectives => _objectives;
 
         public bool HasObjectiveState { get; private set; }
+
+        /// 마지막 전문이 실어 온 장치 수. `DeviceStateAt` 의 유효 범위다.
+        public int DeviceStateCount { get; private set; }
+
+        /// 서버가 판정한 이 장치의 상태(IG-013). 범위를 벗어나면 `None` 이다.
+        public MatchDeviceState DeviceStateAt(int index)
+        {
+            return index >= 0 && index < DeviceStateCount ? _deviceStates[index] : MatchDeviceState.None;
+        }
+
+        /// 전체 정지 장치가 지금 돌고 있는가.
+        ///
+        /// **왜 이것을 여기서 답하는가.** 정지는 스냅샷의 `EntityFlags.Frozen` 으로 오지만 그
+        /// 비트는 체인 견인과 한 자리를 나눠 쓴다. 어느 쪽인지 가르는 근거가 이 플래그뿐이고,
+        /// 그것을 묻는 곳이 둘(`MatchSync` 의 체인 판정과 벽 투명화)이라 한 곳에 둔다.
+        public bool DeviceFreezeActive
+        {
+            get
+            {
+                for (var index = 0; index < DeviceStateCount; index++)
+                {
+                    if ((_deviceStates[index] & MatchDeviceState.Active) != 0)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
 
         /// <summary>문 좌표가 이 사본에 실려 왔는가. Seeker 에게는 false 다.</summary>
         public bool HasObjectiveDoor { get; private set; }
@@ -619,7 +652,14 @@ namespace NV.Client.Net
                             Quantization.ToMeters(device.Y),
                             Quantization.ToMeters(device.Z)),
                         Quantization.ToYawRadians(device.Yaw)));
+
+                    // 상태는 `Objectives` 에 넣을 수 없다 — 그쪽은 **어디에 놓였는가**이고
+                    // 서버와 공유하는 배치 타입이다(ADR 0002). 사용·쿨다운은 서버만의 판정이라
+                    // 나란한 배열로 따로 들고, `MatchSync` 가 그것을 장치에 옮긴다.
+                    _deviceStates[index] = device.State;
                 }
+
+                DeviceStateCount = header.DeviceCount;
 
                 _objectives.MarkPlaced();
             }

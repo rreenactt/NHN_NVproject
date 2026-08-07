@@ -1,4 +1,4 @@
-using NV.Shared.Contracts.Enums;
+﻿using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
 using UnityEngine;
@@ -14,7 +14,8 @@ namespace NV.Client.Net
         public float YawDegrees;
         public float PitchDegrees;
         public EntityFlags Flags;
-        public byte Health;
+        /// 탈출 유지 진행도(0~255). 서버가 매 틱 채운다 — 룰셋상 전원에게 공개다.
+        public byte EscapeProgress;
 
         public bool IsGrounded => (Flags & EntityFlags.OnGround) != 0;
     }
@@ -214,7 +215,7 @@ namespace NV.Client.Net
             sample.YawDegrees = Quantization.ToYawRadians(state.Yaw) * Mathf.Rad2Deg;
             sample.PitchDegrees = Quantization.ToPitchRadians(state.Pitch) * Mathf.Rad2Deg;
             sample.Flags = state.Flags;
-            sample.Health = state.Health;
+            sample.EscapeProgress = state.EscapeProgress;
             return sample;
         }
 

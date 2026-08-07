@@ -1,4 +1,4 @@
-namespace NV.Shared.Simulation
+﻿namespace NV.Shared.Simulation
 {
     /// 시뮬레이션 고정 파라미터. 이 값들이 유일한 출처다.
     /// Time.deltaTime 이나 실제 경과 시간을 쓰지 않는다. 재적용 결과가 달라진다.
@@ -56,6 +56,11 @@ namespace NV.Shared.Simulation
 
         /// 착지 판정용 하향 탐침 거리.
         public const float GroundProbeDistance = 0.05f;
+
+        /// 스폰 시 체력. **이 게임은 체력을 깎지 않는다** — 피격 수로 판정한다
+        /// (`MatchConstants.RunnerHitsToDie`). `PlayerState` 가 그 필드를 들고 있고
+        /// `StateHash` 가 그것을 해시하므로 값이 있어야 하며, 언제나 이 값이다.
+        public const byte SpawnHealth = 100;
 
         /// 걸어서 올라갈 수 있는 턱의 높이(m).
         ///

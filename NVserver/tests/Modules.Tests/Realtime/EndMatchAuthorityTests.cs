@@ -1,4 +1,4 @@
-using NV.Realtime.Simulation;
+﻿using NV.Realtime.Simulation;
 using NV.Shared.Contracts.Enums;
 using Xunit;
 
@@ -7,7 +7,8 @@ namespace NV.Modules.Tests.Realtime
     /// 매치를 끝낼 수 있는 사람은 누구인가.
     ///
     /// **`Control(EndMatch)` 는 클라이언트에 남은 마지막 권위 경로다.** 서버는 탈출·피격·열쇠를
-    /// 다 세지만 결과 코드를 정하지 않는다(OQ-2·OQ-6 → IG-007). 그동안 방장이 판정해 보고하고
+    /// 다 세지만 결과 코드를 정하지 않는다(IG-007 미이관 — 막던 OQ-2·OQ-6 은 답이 나왔다).
+    /// 그동안 방장이 판정해 보고하고
     /// 서버는 중계한다 — 즉 **이 경로의 인증이 곧 "클라이언트가 게임 결과를 결정하지 못한다"(§9)를
     /// 지키는 유일한 장치다.**
     ///

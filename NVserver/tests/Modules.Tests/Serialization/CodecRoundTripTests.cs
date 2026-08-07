@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
@@ -65,7 +65,7 @@ namespace NV.Modules.Tests.Serialization
                 Assert.Equal(entities[index].Yaw, decodedEntities[index].Yaw);
                 Assert.Equal(entities[index].Pitch, decodedEntities[index].Pitch);
                 Assert.Equal(entities[index].Flags, decodedEntities[index].Flags);
-                Assert.Equal(entities[index].Health, decodedEntities[index].Health);
+                Assert.Equal(entities[index].EscapeProgress, decodedEntities[index].EscapeProgress);
             }
         }
 

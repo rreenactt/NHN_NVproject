@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 /// <summary>
 /// Animates the block character entirely in code — there is no Animator, no clip and no

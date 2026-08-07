@@ -29,27 +29,38 @@
             <ui:Label name="room-subtitle" text="WAIT HERE" class="clock__caption" />
         </ui:VisualElement>
 
-        <!-- 초대 코드는 남이 받아 적는 값이다. 크게, 자간을 넓게. -->
-        <ui:VisualElement name="invite-panel" class="panel lobby-invite">
-            <ui:Label name="invite-caption" text="INVITE CODE" class="panel__caption" />
-            <ui:Label name="invite-code" text="------" class="lobby-invite__code" />
-            <ui:VisualElement name="invite-buttons" class="lobby-invite__buttons">
-                <ui:Button name="copy-code" text="코드 복사" class="lobby-button lobby-button--small" />
-                <ui:Button name="copy-link" text="링크 복사" class="lobby-button lobby-button--small" />
-            </ui:VisualElement>
-            <ui:Label name="invite-result" class="panel__line" />
-            <ui:Label name="room-map" class="panel__line" />
-            <ui:Label name="room-visibility" class="panel__line" />
-        </ui:VisualElement>
-
         <ui:Label name="notice" text="" class="notice" picking-mode="Ignore" />
 
-        <!-- ============================================================ 명단 -->
-        <ui:VisualElement name="roster-panel" class="panel lobby-roster">
-            <ui:Label name="roster-caption" text="IN THE ROOM" class="panel__caption" />
-            <ui:VisualElement name="roster" class="lobby-roster__list" />
-            <ui:Label name="roster-count" text="0 / 8" class="panel__line" />
-            <ui:Label name="ready-count" class="panel__line" />
+        <!--
+            왼쪽 기둥 — 초대 코드 위, 명단 아래.
+
+            **둘을 각자 절대 좌표로 두지 않는다.** 그렇게 두면 위 패널이 자라는 만큼 아래
+            패널을 덮는데, 초대 패널의 높이는 실행 중에 정해진다 — 복사 결과 한 줄, 맵 이름,
+            공개 여부가 내용에 따라 늘거나 줄바꿈되기 때문이다. 명단의 높이도 정원만큼
+            (여덟 줄) 고정이 아니라 방마다 다르다. 기둥 하나가 흐름으로 쌓으면 그 둘 중
+            무엇이 자라도 겹치지 않는다.
+        -->
+        <ui:VisualElement name="left-column" class="lobby-column">
+            <!-- 초대 코드는 남이 받아 적는 값이다. 크게, 자간을 넓게. -->
+            <ui:VisualElement name="invite-panel" class="panel lobby-invite">
+                <ui:Label name="invite-caption" text="INVITE CODE" class="panel__caption" />
+                <ui:Label name="invite-code" text="------" class="lobby-invite__code" />
+                <ui:VisualElement name="invite-buttons" class="lobby-invite__buttons">
+                    <ui:Button name="copy-code" text="코드 복사" class="lobby-button lobby-button--small" />
+                    <ui:Button name="copy-link" text="링크 복사" class="lobby-button lobby-button--small" />
+                </ui:VisualElement>
+                <ui:Label name="invite-result" class="panel__line" />
+                <ui:Label name="room-map" class="panel__line" />
+                <ui:Label name="room-visibility" class="panel__line" />
+            </ui:VisualElement>
+
+            <!-- ============================================================ 명단 -->
+            <ui:VisualElement name="roster-panel" class="panel lobby-roster">
+                <ui:Label name="roster-caption" text="IN THE ROOM" class="panel__caption" />
+                <ui:VisualElement name="roster" class="lobby-roster__list" />
+                <ui:Label name="roster-count" text="0 / 8" class="panel__line" />
+                <ui:Label name="ready-count" class="panel__line" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
         <!-- ============================================================ 캐릭터 -->

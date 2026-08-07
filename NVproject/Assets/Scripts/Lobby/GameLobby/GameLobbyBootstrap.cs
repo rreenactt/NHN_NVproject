@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using NV.Client.Lobby.Models;
 using NV.Client.Net.Session;
 using NV.Lobby;
@@ -34,6 +34,12 @@ namespace NV.Client.Lobby.GameLobby
         [Range(2, 16)] public int fallbackCapacity = 5;
 
         private readonly List<LobbySlot> _slots = new List<LobbySlot>();
+
+        /// 줄이 내려가는 중인가. 한 번 서면 이 씬이 끝날 때까지 내려가지 않는다.
+        private bool _departing;
+
+        /// 퇴장이 시작된 뒤 흐른 시간(초). 연출이 어긋나도 컷이 나게 하는 보증이다.
+        private float _departureClock;
         private readonly RoomMember[] _members = new RoomMember[16];
 
         private NetSession _session;
@@ -95,6 +101,12 @@ namespace NV.Client.Lobby.GameLobby
             // `OnEnable` 은 이미 지나갔으므로 `StateChanged` 가 붙지 않은 채 필드만 채워지고,
             // 명단이 와도 줄이 그려지지 않는 방이 된다.
 
+            // 매치가 시작됐으면 방을 다시 그릴 것이 없다. 줄을 내보내는 것이 남은 일이다.
+            if (StepDeparture())
+            {
+                return;
+            }
+
             // 정원은 참가 전 조회로 오므로 씬이 열린 뒤에 정해질 수 있다. 바뀌면 줄을 다시 세운다.
             var capacity = Capacity();
             var rebuilt = false;
@@ -132,6 +144,84 @@ namespace NV.Client.Lobby.GameLobby
             var capacity = _session.Room.Capacity;
 
             return capacity > 0 ? capacity : fallbackCapacity;
+        }
+
+        // ==================================================== 퇴장
+
+        /// <summary>
+        /// 매치가 시작되는 순간의 방. 발밑의 판이 꺼지고, 줄에 선 사람들이 잠깐 허우적거리다
+        /// 바닥 아래로 빨려 들어간 뒤에 씬이 바뀐다.
+        ///
+        /// **컷을 붙잡는 것이 이 함수의 절반이다.** 라우터는 세션이 `InGame` 이 되는 프레임에
+        /// 씬을 바꾸므로(그것이 맞다 — 단계는 서버의 것이다) 그대로 두면 줄이 idle 자세인 채로
+        /// 사라진다. `SceneTransitionHold` 로 잠깐만 미룬다. 그 값은 **시한**이라 이 컴포넌트가
+        /// 죽어도 컷이 막히지 않는다.
+        ///
+        /// 미루는 시간은 역할 공개(`MatchConstants.RoleRevealDuration` 4초) 안에 들어간다.
+        /// 그 동안 게임 씬에서는 역할만 보여 주고 있으므로 플레이 시간을 먹지 않는다.
+        ///
+        /// 실행 순서가 라우터(-70 대 0)보다 앞이라, 상태가 바뀐 **그 프레임에** 붙잡을 수 있다.
+        /// </summary>
+        /// <returns>퇴장 중이면 true — 부르는 쪽은 방을 더 그리지 않는다.</returns>
+        private bool StepDeparture()
+        {
+            if (_session.State != SessionState.InGame)
+            {
+                return false;
+            }
+
+            if (!_departing)
+            {
+                _departing = true;
+                _departureClock = 0f;
+
+                for (var index = 0; index < _slots.Count; index++)
+                {
+                    if (_slots[index] != null)
+                    {
+                        _slots[index].BeginDeparture();
+                    }
+                }
+            }
+
+            _departureClock += Time.unscaledDeltaTime;
+
+            // **끝나는 조건이 둘이다. 시계 쪽이 보증이다.**
+            //
+            // 인형이 다 내려갔는지 묻는 것만으로는 부족하다. 이 함수는 붙잡는 창을 매 프레임
+            // 다시 채우므로, 어떤 인형 하나가 끝났다고 말하지 않으면 그 창은 영영 만료되지
+            // 않는다 — `SceneTransitionHold` 의 시한은 이 컴포넌트가 죽는 경우를 막을 뿐,
+            // 살아서 계속 붙잡는 경우는 막지 못한다. 그 결과는 매치는 돌아가는데 플레이어만
+            // 대기방에 남는 것이고, 그것이 이 연출이 만들 수 있는 최악이다.
+            //
+            // 그래서 벽시계로도 끊는다. 연출이 어긋나면 컷이 조금 이를 뿐이다.
+            var finished = DepartureFinished()
+                || _departureClock >= LobbyMannequin.DepartureSeconds + 0.5f;
+
+            if (finished)
+            {
+                // 다 내려갔다. 라우터가 다음 프레임에 컷한다.
+                SceneTransitionHold.Release();
+                return true;
+            }
+
+            // 한 프레임보다 조금 긴 창으로 매 프레임 다시 잡는다. 전체 길이를 한 번에 잡으면
+            // 애니메이션이 일찍 끝나도 그만큼 검은 화면을 보게 된다.
+            SceneTransitionHold.Hold(0.3f);
+            return true;
+        }
+
+        private bool DepartureFinished()
+        {
+            for (var index = 0; index < _slots.Count; index++)
+            {
+                if (_slots[index] != null && !_slots[index].DepartureFinished)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         // ==================================================== 만들기

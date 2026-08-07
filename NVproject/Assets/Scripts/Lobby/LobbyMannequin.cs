@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace NV.Client.Lobby
 {
@@ -23,6 +23,64 @@ namespace NV.Client.Lobby
         private Transform _root, _head, _torso, _armL, _armR, _legL, _legR, _hat;
         private Material _suit, _trim, _accent;
         private LobbyCharacterCatalog.Character _character;
+
+        // ============================================================ 퇴장
+        //
+        // 매치가 시작될 때 줄에 선 사람들이 사라지는 대신 **끌려 내려간다.** 발밑의 판이
+        // 꺼지고, 잠깐 허공에서 허우적거리다가, 바닥 아래로 빨려 들어간다.
+        //
+        // 시간은 전부 여기 있다. 스탠드도 부트스트랩도 "얼마나 걸리는가" 를 다시 적지 않고
+        // `DepartureFinished` 만 본다 — 두 곳에 적히면 한쪽만 고쳐져 컷이 애니메이션보다
+        // 먼저 나거나 한참 뒤에 난다.
+
+        /// 허우적거리는 시간(초).
+        private const float FlailSeconds = 1f;
+
+        /// 빨려 들어가는 시간(초). 짧아야 "쏙" 으로 읽힌다 — 길면 그냥 가라앉는 것이다.
+        private const float DropSeconds = 0.45f;
+
+        /// 들어 올려지는 높이(m). 발이 판에서 떨어져야 허우적거림이 뜻을 갖는다.
+        private const float HoverHeight = 0.32f;
+
+        /// 내려가는 거리(m). 카메라 화각 밖으로 확실히 빠지는 깊이다.
+        private const float DropDistance = 3.4f;
+
+        /// 허우적거릴 때 팔이 머무는 각도(도). **0 은 아래로 늘어뜨린 자세이고, 90 이 앞으로
+        /// 수평, 180 이 머리 위다** — 어깨 관절이 X 로 도는 규약이 그렇다.
+        ///
+        /// 0 을 중심으로 흔들면 팔이 도는 구간의 절반을 몸 아래에서 쓴다. 그것은 허우적거림이
+        /// 아니라 풍차이고, 무엇보다 아래쪽 절반은 몸통에 가려 보이지도 않는다. 중심을 머리
+        /// 쪽으로 올리면 같은 진폭이 전부 화면에 남는다.
+        private const float ArmRaise = 115f;
+
+        /// 팔이 그 각도 둘레로 흔들리는 폭(도).
+        private const float ArmSwing = 88f;
+
+        /// 다리·머리·상체의 흔들림 폭(도).
+        private const float LegSwing = 46f;
+        private const float HeadSwing = 12f;
+
+        /// 떨어지는 시각이 인형마다 어긋나는 최대 폭(초).
+        ///
+        /// **아주 작아야 한다.** 여섯이 정확히 같은 프레임에 떨어지면 줄이 아니라 한 덩어리로
+        /// 보이고, 그렇다고 크게 벌리면 순서를 기다리는 줄이 된다. 0.16초는 눈에 "동시에
+        /// 떨어졌다" 로 남으면서 칼같이 맞지는 않는 폭이다.
+        private const float StaggerMax = 0.16f;
+
+        /// 이 연출이 걸릴 수 있는 **가장 긴** 시간(초). 어긋남까지 포함한 상한이며,
+        /// 전환을 붙잡는 쪽(`GameLobbyBootstrap`)이 이 값으로 벽시계 상한을 잡는다.
+        public const float DepartureSeconds = FlailSeconds + StaggerMax + DropSeconds;
+
+        private bool _departing;
+        private float _departureTime;
+
+        // 이 인형만의 값. `BeginDeparture` 에서 한 번 정한다.
+        private float _dropAt;
+        private float _departureLength;
+        private float _flailRate;
+        private float _hoverHeight;
+        private float _limbPhase;
+        private float _armRaise;
 
         private float _phase;
         private bool _ready;
@@ -178,10 +236,122 @@ namespace NV.Client.Lobby
             _gestureTimer = 2f + Mathf.Abs(Mathf.Sin(_phase)) * 4f;
         }
 
+        // ============================================================ 퇴장
+
+        /// <summary>
+        /// 매치가 시작됐다. 허우적거리다 바닥으로 빨려 들어간다.
+        ///
+        /// 두 번 불러도 처음 것이 이어진다 — 명단은 전문으로 폴링되므로 시작 전문이 여러 번
+        /// 올 수 있고, 그때마다 다시 시작하면 아무도 내려가지 않는다.
+        /// </summary>
+        public void BeginDeparture()
+        {
+            if (_departing) return;
+
+            _departing = true;
+            _departureTime = 0f;
+
+            // 인형마다 조금씩 다르게. **`_phase` 에서 뽑는다** — 스탠드 번호에서 나온 값이라
+            // 모든 클라이언트가 같은 것을 보고 매치마다 달라지지도 않는다. `Random` 을 쓰면
+            // 같은 방을 보는 두 사람이 서로 다른 연출을 보게 되고, 그것은 이 방에서 유일하게
+            // 어긋나는 것이 된다.
+            _dropAt = FlailSeconds + Vary(1.7f) * StaggerMax;
+            _departureLength = _dropAt + DropSeconds;
+
+            // 허우적거리는 속도와 높이도 조금. 속도만 바꾸면 같은 동작을 배속으로 돌린 것처럼
+            // 보이므로 팔다리의 위상도 함께 어긋낸다.
+            _flailRate = 19f + Vary(3.1f) * 4f;
+            _hoverHeight = HoverHeight * (0.88f + Vary(5.3f) * 0.24f);
+            _limbPhase = Vary(7.9f) * Mathf.PI * 2f;
+
+            // 팔을 올리는 각도도 조금씩 다르다. 여섯이 똑같은 높이로 만세하면 한 사람의
+            // 동작을 복사한 것으로 보인다.
+            _armRaise = ArmRaise + (Vary(11.3f) - 0.5f) * 16f;
+        }
+
+        /// <summary>
+        /// 이 인형만의 0..1 값. 같은 `salt` 에는 늘 같은 답이고, 다른 `salt` 끼리는 무관해 보인다.
+        /// </summary>
+        private float Vary(float salt)
+        {
+            float v = Mathf.Sin((_phase + salt) * 12.9898f) * 43758.5453f;
+            return v - Mathf.Floor(v);
+        }
+
+        public bool Departing => _departing;
+
+        public bool DepartureFinished => _departing && _departureTime >= _departureLength;
+
+        /// <summary>
+        /// 퇴장 한 프레임. idle 을 **대신한다** — 섞으면 숨쉬기와 흔들림이 허우적거림 위에
+        /// 겹쳐 보이고, 그 둘은 같은 관절을 쓴다.
+        /// </summary>
+        private void StepDeparture(float deltaTime)
+        {
+            // **시계가 먼저다.** 아래에서 리그가 없다고 돌아가더라도 이 값은 진행해야 하고,
+            // 그래야 `DepartureFinished` 가 언젠가 참이 된다.
+            _departureTime += deltaTime;
+
+            if (_root == null) return;
+
+            float t = _departureTime;
+
+            // 들어 올려진다. 발이 판에서 떨어지는 것이 먼저다.
+            float height = Mathf.SmoothStep(0f, _hoverHeight, Mathf.Clamp01(t / 0.22f));
+
+            if (t > _dropAt)
+            {
+                // **가속해서 떨어진다.** 등속으로 내리면 가라앉는 것으로 보인다.
+                float fall = Mathf.Clamp01((t - _dropAt) / DropSeconds);
+                height -= fall * fall * DropDistance;
+            }
+
+            // 떨어지기 시작하면 허우적거림이 잦아든다. 끝까지 팔을 젓고 있으면 빨려 들어가는
+            // 것이 아니라 스스로 내려가는 것처럼 보인다.
+            float energy = t <= _dropAt
+                ? Mathf.Clamp01(t / 0.15f)
+                : Mathf.Clamp01(1f - (t - _dropAt) / (DropSeconds * 0.8f));
+
+            // 관절마다 주기를 어긋나게 둔다. 같은 주기로 흔들면 헤엄치는 것으로 보인다.
+            // 시작 위상도 인형마다 다르다 — 속도만 다르면 같은 동작의 배속으로 보인다.
+            float fast = _limbPhase + t * _flailRate;
+
+            _root.localPosition = new Vector3(Mathf.Sin(fast * 0.7f) * 0.022f * energy, height, 0f);
+            _root.localRotation = Quaternion.Euler(
+                Mathf.Sin(fast * 0.53f) * 6f * energy,
+                Mathf.Sin(fast * 0.31f) * 8f * energy,
+                Mathf.Sin(fast * 0.87f) * 5f * energy);
+
+            _head.localRotation = Quaternion.Euler(Mathf.Sin(fast * 1.13f) * HeadSwing * energy, 0f, 0f);
+
+            // 팔은 머리 언저리에서 흔들린다. **올리는 각도까지 `energy` 를 곱한다** — 곱하지
+            // 않으면 다 내려가는 순간에도 팔만 만세를 한 채로 굳는다. 잦아들면서 자연히
+            // 늘어뜨린 자세로 돌아와야 한다.
+            _armR.localRotation = Quaternion.Euler(
+                (_armRaise + Mathf.Sin(fast) * ArmSwing) * energy, 0f, 3f + 20f * energy);
+            _armL.localRotation = Quaternion.Euler(
+                (_armRaise + Mathf.Sin(fast + 2.2f) * ArmSwing) * energy, 0f, -(3f + 20f * energy));
+
+            _legR.localRotation = Quaternion.Euler(Mathf.Sin(fast * 1.27f + 0.8f) * LegSwing * energy, 0f, 0f);
+            _legL.localRotation = Quaternion.Euler(Mathf.Sin(fast * 1.27f + 3.4f) * LegSwing * energy, 0f, 0f);
+        }
+
         // ============================================================ the idles
 
         private void Update()
         {
+            // **퇴장이 리그 검사보다 앞이다.** 아래의 `_root == null` 로 먼저 걸러 내면 리그가
+            // 사라진 인형은 퇴장 시계가 멈추고, `DepartureFinished` 가 영영 참이 되지 않는다 —
+            // 그것을 기다리는 씬 전환이 함께 멈춰 매치는 시작됐는데 플레이어만 대기방에 남는다.
+            //
+            // 리그가 사라지는 길은 실제로 있다. 이 필드들은 `[SerializeField]` 가 아니라
+            // **도메인 리로드를 넘기지 못하고**, 플레이 중 스크립트 편집이 그것을 부른다.
+            if (_departing)
+            {
+                StepDeparture(Time.deltaTime);
+                return;
+            }
+
             if (_root == null) return;
 
             float t = Time.time + _phase;

@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
@@ -30,7 +30,7 @@ namespace NV.Shared.Simulation
         /// 결정적 시뮬레이션 상태이고 `StateHash` 에 들어가는데, 클라이언트가 예측할 수
         /// 없는 비트가 섞이면 리컨실리에이션의 해시 비교가 영구히 어긋난다. 합치는 것은
         /// 인코딩 순간뿐이고, 그러면 이동 계산은 매치를 모른 채로 남는다.
-        public static EntityState ToEntityState(byte id, in PlayerState state, EntityFlags matchFlags)
+        public static EntityState ToEntityState(byte id, in PlayerState state, EntityFlags matchFlags, byte escapeProgress = 0)
         {
             return new EntityState(
                 id,
@@ -40,7 +40,7 @@ namespace NV.Shared.Simulation
                 Quantization.ToFixedYaw(state.Yaw),
                 Quantization.ToFixedPitch(state.Pitch),
                 state.Flags | matchFlags,
-                state.Health);
+                escapeProgress);
         }
 
         /// 이동이 소유하는 비트만 남긴다.
@@ -72,7 +72,10 @@ namespace NV.Shared.Simulation
             state.Yaw = Quantization.ToYawRadians(entity.Yaw);
             state.Pitch = Quantization.ToPitchRadians(entity.Pitch);
             state.Flags = entity.Flags;
-            state.Health = entity.Health;
+
+            // 체력은 와이어에 없다. 그 바이트는 탈출 진행도가 쓰고 있고, 시뮬레이션의
+            // `Health` 는 스폰값 그대로다 — 이 게임은 체력을 깎지 않는다.
+            state.Health = NV.Shared.Simulation.SimConstants.SpawnHealth;
 
             return state;
         }

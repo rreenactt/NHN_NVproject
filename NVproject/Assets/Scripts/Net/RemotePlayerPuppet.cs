@@ -1,4 +1,4 @@
-using NV.Game;
+﻿using NV.Game;
 using UnityEngine;
 
 namespace NV.Client.Net
@@ -22,6 +22,44 @@ namespace NV.Client.Net
 
         /// 매치 레이어에서 이 몸에 해당하는 참가자. 매치 레이어가 없는 씬에서는 null 이다.
         public PlayerAgent Agent { get; private set; }
+
+        /// 이 몸에 이미 반영한 역할과, 한 번이라도 반영했는가.
+        ///
+        /// **플래그가 따로 있어야 한다.** 역할의 초기값도 `Unassigned` 라, 값만 비교하면
+        /// "아직 역할이 없다" 와 "역할이 없다고 이미 반영했다" 가 구별되지 않는다 — 첫 적용이
+        /// 통째로 건너뛰어지고 몸은 리그의 기본값(무장)을 든 채로 남는다.
+        private Role _appliedRole;
+        private bool _roleApplied;
+
+        /// <summary>
+        /// 서버가 정한 역할을 몸에 입힌다 — 지금은 **총을 들었는가** 하나다.
+        ///
+        /// **폴링이다.** 역할은 `MatchManager.RolesAssigned` 로 한 번 오지만, 원격 몸은 첫
+        /// 스냅샷이 와야 생기므로 그 이벤트보다 늦게 태어나는 몸이 있다 — 늦게 온 사람은
+        /// 그 한 번을 영영 놓친다. 명단은 계속 오므로 매 프레임 확인하는 편이 싸고 안전하다.
+        /// 바뀌었을 때만 적용하므로 `SetActive` 가 프레임마다 돌지는 않는다.
+        ///
+        /// 이것이 없던 동안 원격 몸은 리그의 기본값(무장)을 그대로 들고 있었다. 그래서
+        /// **Runner 도 권총을 들고 서 있었고**, 안개 너머로 술래를 알아보는 단서가 사라졌다.
+        /// 역할은 이미 클라이언트가 알고 있었다(`RoomState.SeekerPlayerId`) — 몸에 옮기는
+        /// 곳만 없었다.
+        /// </summary>
+        private void Update()
+        {
+            // 매치 레이어가 없는 씬(`MultiplayerTest`)에는 역할이라는 것이 없다. 그 씬의 몸은
+            // 만들어진 그대로 둔다 — 규칙이 없는 곳에서 무장 여부를 정할 근거가 없다.
+            if (Agent == null || (_roleApplied && Agent.Role == _appliedRole))
+            {
+                return;
+            }
+
+            _roleApplied = true;
+            _appliedRole = Agent.Role;
+
+            // 역할이 정해지기 전에는 아무도 무장하지 않는다. 로비에서 총을 든 채로 서 있는
+            // 몸이 없어야 하고, 그것이 `PlayerRoleLoadout` 의 기본값과도 같다.
+            PlayerRoleLoadout.ShowWeapon(gameObject, _appliedRole == Role.Seeker);
+        }
 
         /// 몸을 만든다. 컴포넌트의 Awake 가 필드보다 먼저 도는 것을 막기 위해
         /// 비활성 상태로 조립한 뒤 마지막에 활성화한다. 이 순서를 어기면
@@ -88,6 +126,10 @@ namespace NV.Client.Net
                 // 걸리는 일이 없고, 서버의 `Frozen` 비트를 `MatchSync` 가 넘겨 준다.
                 // 몸은 스냅샷이 옮기고 이 컴포넌트는 사슬만 그린다.
                 go.AddComponent<ChainDrag>();
+
+                // 체인이 풀릴 때 팔이 재장전 동작을 한다. `BlockCharacterAnimator` 가
+                // `GetComponent` 로 집어 가므로 붙이는 것만으로 팔에 반영된다.
+                go.AddComponent<ProceduralReload>();
 
                 puppet.Agent = agent;
             }

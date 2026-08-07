@@ -74,7 +74,7 @@ namespace NV.Shared.Contracts.Messages
             short y,
             short z,
             ushort yaw,
-            byte state)
+            MatchDeviceState state)
         {
             Type = type;
             X = x;
@@ -94,12 +94,11 @@ namespace NV.Shared.Contracts.Messages
 
         public ushort Yaw { get; }
 
-        /// 소진·파괴·쿨다운 상태.
+        /// 소진·쿨다운·진행 중 상태(IG-013).
         ///
-        /// 아직 서버가 판정하지 않아 0 이 나간다. 자리를 잡아 두는 이유는 프로토콜 버전을
-        /// 한 번만 올리기 위해서다 — 장치 사용(IG-013)과 파괴(IG-015)가 이 바이트를 채운다.
-        /// 열거형을 만들지 않은 것도 같은 이유다(채울 값이 없는 열거형은 진행 상황을 감춘다).
-        public byte State { get; }
+        /// 자리를 미리 잡아 둔 바이트였고, 이제 채워진다. 파괴(IG-015)는 아직 클라이언트가
+        /// 세므로 `Spent` 로 올라오지 않는다.
+        public MatchDeviceState State { get; }
     }
 
     /// 양자화된 위치 하나. 열쇠 목록과 제단이 쓴다.

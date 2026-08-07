@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
@@ -66,6 +66,36 @@ namespace NV.Realtime.Simulation
 
         private readonly ObjectiveDevice[] _deviceBuffer =
             new ObjectiveDevice[MatchConstants.DeviceMix.Length];
+
+        /// 놓인 장치의 **판정 상태**. `_objectives.Devices` 와 같은 순서로 나란히 둔다.
+        ///
+        /// `Objectives`(Shared) 에 넣지 않는다. 그쪽은 어디에 놓였는지이고 이쪽은 누가 언제
+        /// 썼는지 — 배치는 클라이언트도 계산할 수 있지만(ADR 0002) 사용 판정은 서버만의 것이다.
+        private readonly DeviceRuntime[] _deviceRuntime =
+            new DeviceRuntime[MatchConstants.DeviceMix.Length];
+
+        /// 순간이동의 **전역** 락아웃이 풀리는 틱(기획서 §5.2). 장치별이 아니라 룸 하나에 하나다.
+        private uint _teleportReadyTick;
+
+        /// 지난 틱의 전체 정지 상태. 시작·종료 **양쪽 모서리**에 전문을 보내야 한다 —
+        /// 끝나는 것을 보내지 않으면 클라이언트의 벽이 투명한 채로 남는다.
+        private bool _devicesFrozen;
+
+        /// 장치 한 대의 판정 상태.
+        private struct DeviceRuntime
+        {
+            /// 1회용을 다 썼는가. 되돌아오지 않는다.
+            public bool Spent;
+
+            /// Seeker 가 부쉈는가. 되돌아오지 않는다.
+            public bool Destroyed;
+
+            /// 맞은 탄 수. `DeviceDestroyHits` 에서 부서진다.
+            public int Hits;
+
+            /// 다회용이 다시 켜지는 틱.
+            public uint ReadyTick;
+        }
 
         private readonly byte[] _objectiveStateBuffer = new byte[MessageCodec.ObjectiveStateMaxWireSize(
             MatchConstants.KeysPlaced + RealtimeConstants.Rooms.MaxPlayers,
@@ -368,6 +398,15 @@ namespace NV.Realtime.Simulation
                     ProjectWire(player);
                 }
 
+                // 전체 정지가 켜지고 꺼지는 **양쪽 모서리**에 목표물 전문을 보낸다. 끄는 쪽을
+                // 빼면 클라이언트의 벽이 투명한 채로 최대 5초 남는다 — 정지 자체는 스냅샷의
+                // `Frozen` 으로 즉시 풀리므로, 화면만 투시인 채로 걸어다니게 된다.
+                if (_devicesFrozen != _match.DevicesFrozen)
+                {
+                    _devicesFrozen = _match.DevicesFrozen;
+                    _objectiveStateDirty = true;
+                }
+
                 // 매치 시계는 이동을 처리한 뒤에 올린다. 먼저 올리면 시간이 0 이 된 틱의
                 // 입력이 버려지고, 그 한 틱이 마지막 탈출을 판정하는 틱일 수 있다.
                 var phaseBefore = _match.Phase;
@@ -531,8 +570,13 @@ namespace NV.Realtime.Simulation
             var roster = new ReadOnlySpan<RoomPlayerEntry>(_rosterBuffer, 0, count);
             var hostPlayerId = (byte)Volatile.Read(ref _hostPlayerId);
 
-            // 정적 룸이 아니면 본문이 수신자와 무관하므로 한 번만 인코딩한다.
-            if (!_isStatic)
+            // **본문은 수신자와 무관하다. 한 번만 인코딩한다.**
+            //
+            // 한동안 정적 룸만 세션별로 인코딩해 **받는 사람에게 자기 id 를 방장으로** 실어
+            // 보냈다. 토큰을 받을 사람이 없는 개발용 룸에서 시작 버튼을 살리려던 것이었는데,
+            // 그 방이 공개라 로비 목록으로도 들어올 수 있다는 것이 문제였다 — 그렇게 들어온
+            // 두 사람은 서로 자기가 방장인 방에 있게 된다. 지금은 정적 룸도 먼저 들어온
+            // 사람이 진짜 방장이 되므로(`OnJoin`) 갈라 쓸 이유가 없다.
             {
                 var shared = WriteRoomState(hostPlayerId, roster, count);
 
@@ -550,33 +594,6 @@ namespace NV.Realtime.Simulation
                 }
 
                 return;
-            }
-
-            // 정적 룸에서는 **받는 사람이 자기를 방장으로 본다.**
-            //
-            // 권한을 새로 주는 것이 아니다. `IsAuthorized` 는 정적 룸에서 이미 전원의 요청을
-            // 받아들이고 있었고, 전문만 "방장 없음"(`NoPlayer`)을 말하고 있었다. 클라이언트는
-            // `RoomState.HostPlayerId == LocalPlayerId` 로 방장을 판단하므로(`NetworkClient.
-            // IsLocalHost`) 그 어긋남의 증상은 **아무도 시작 버튼을 누를 수 없는 개발용 룸**이다.
-            // 여기서 고치는 것은 권위가 아니라 권위에 대한 진술이다.
-            //
-            // 방장 토큰을 발급하는 쪽으로 고칠 수도 있었다. 그러지 않은 이유는 정적 룸에
-            // 그 토큰을 받을 사람이 없다는 것이다 — `POST /rooms` 를 지나지 않으므로 코드도
-            // 토큰도 없고, 먼저 붙은 세션에게 주면 그 사람이 나갈 때마다 승계가 필요해진다.
-            // "전원이 방장" 이 정적 룸의 실제 규칙이고, 전문이 그것을 말해야 한다.
-            foreach (var player in _players.Values)
-            {
-                if (player.IsBot)
-                {
-                    continue;
-                }
-
-                var length = WriteRoomState(player.PlayerId, roster, count);
-
-                transport.TrySend(
-                    player.SessionId,
-                    new ReadOnlySpan<byte>(_stateBuffer, 0, length),
-                    Reliability.Reliable);
             }
         }
 
@@ -748,9 +765,7 @@ namespace NV.Realtime.Simulation
                     Quantization.ToFixedPosition(device.Position.Y),
                     Quantization.ToFixedPosition(device.Position.Z),
                     Quantization.ToFixedYaw(device.Yaw),
-
-                    // 소진·파괴·쿨다운은 아직 서버가 판정하지 않는다 → IG-013·IG-015.
-                    0);
+                    DeviceStateOf(index, device.Type));
 
                 deviceCount++;
             }
@@ -1036,7 +1051,11 @@ namespace NV.Realtime.Simulation
         private void ProjectWire(PlayerEntity player)
         {
             player.MatchFlags = MatchFlagsFor(player);
-            player.Wire = StateProjection.ToEntityState(player.PlayerId, player.State, player.MatchFlags);
+            player.Wire = StateProjection.ToEntityState(
+                player.PlayerId,
+                player.State,
+                player.MatchFlags,
+                EscapeProgressOf(player));
         }
 
         /// 이 몸에 얹을 매치 판정 비트.
@@ -1178,29 +1197,44 @@ namespace NV.Realtime.Simulation
                 // 남아 있으면 문 앞에 도착한 순간 예전에 누른 키가 발동한다.
                 player.InteractRequested = false;
 
+                // 문에 넣지 못한 요청은 **장치로 흘려보낸다.** E 는 하나이고 클라이언트는
+                // 가까운 것 하나를 고르므로(`PlayerInteractor`), 서버도 한 번 누른 것을 한
+                // 번만 쓰되 어느 쪽인지는 여기서 가른다. 여기서 그냥 버리면 장치 앞에서 누른
+                // E 가 문 조건에 걸려 사라지고, 증상은 "가끔 장치가 안 눌린다" 가 된다.
+                if (!TryInsertKey(player))
+                {
+                    TryUseDevice(player);
+                }
+            }
+        }
+
+        /// 이 플레이어의 E 가 열쇠 삽입이었는가. 아니면 false 를 돌려 장치 쪽으로 넘긴다.
+        private bool TryInsertKey(PlayerEntity player)
+        {
+            {
                 if (_match.DoorOpen)
                 {
-                    continue;
+                    return false;
                 }
 
                 if (RoleOf(player.PlayerId) != MatchRole.Runner || player.Escaped || player.Downed)
                 {
-                    continue;
+                    return false;
                 }
 
                 if (player.CarriedKeys <= 0)
                 {
-                    continue;
+                    return false;
                 }
 
                 if (_tick < player.NextInsertTick)
                 {
-                    continue;
+                    return false;
                 }
 
                 if (!IsWithinDoorRange(player.State.Position))
                 {
-                    continue;
+                    return false;
                 }
 
                 player.CarriedKeys--;
@@ -1231,7 +1265,203 @@ namespace NV.Realtime.Simulation
                         _match.KeysInserted,
                         MatchConstants.KeysRequired);
                 }
+
+                return true;
             }
+        }
+
+        /// 장치 사용을 판정한다. 기획서 §5.
+        ///
+        /// **여기가 IG-013 이다.** 그전까지 장치는 클라이언트가 혼자 판정하고 효과까지 스스로
+        /// 적용했다. 순수 연출(전체 지도·술래 시점)은 그래도 됐지만 서버가 소유한 상태를
+        /// 건드리는 셋 — 순간이동(위치)·지혈(`Bleeding` 플래그)·시간 추가(시계) — 은 로컬로
+        /// 바뀌었다가 다음 전문이 그대로 되돌렸다. 증상은 "포탈을 탔는데 제자리로 튕긴다",
+        /// "지혈했는데 계속 피가 흐른다" 였고, 콘솔에는 아무것도 남지 않았다. 소진·쿨다운도
+        /// 클라이언트마다 따로 세고 있었으므로 1회용 장치를 **인원수만큼** 쓸 수 있었다.
+        private void TryUseDevice(PlayerEntity player)
+        {
+            if (player.Escaped || player.Downed)
+            {
+                return;
+            }
+
+            // 잠긴 동안에는 쓸 수 없다. 기획서 §4.3 의 체인은 "행동할 수 없는" 3초이고
+            // §5.1 의 정지도 마찬가지다 — 걷기만 막는 벌칙은 벌칙이 아니다. 입력은 이미
+            // `ApplyFrame` 이 비우므로 여기 오지 않지만, 그 사실에 기대지 않는다.
+            if (_match.MovementLocked || player.Chained)
+            {
+                return;
+            }
+
+            if (!TryFindDeviceInReach(player.State.Position, out var index))
+            {
+                return;
+            }
+
+            var device = _objectives.Devices[index];
+
+            if (!IsDeviceReady(index, device.Type))
+            {
+                return;
+            }
+
+            // 지혈은 되돌릴 수 없는 1회용이다. 멀쩡한 몸으로 쓰면 그 장치가 그냥 사라지므로,
+            // 클라이언트가 거절하는 것과 같은 이유로 여기서도 거절한다.
+            if (device.Type == MatchDeviceType.StopBleeding && !player.Bleeding)
+            {
+                return;
+            }
+
+            ApplyDevice(device.Type, player);
+            MarkDeviceUsed(index, device.Type);
+
+            _objectiveStateDirty = true;
+
+            _logger.LogDebug(
+                "룸 {RoomId} 플레이어 {PlayerId}: 장치 {Type} 를 썼다.",
+                RoomId,
+                player.PlayerId,
+                device.Type);
+        }
+
+        /// 이 자리에서 손이 닿는 장치. 가장 가까운 것 하나를 고른다.
+        ///
+        /// **높이도 본다.** 격자 거리만 보면 바로 위층의 장치가 발밑 장치보다 가까운 경우가
+        /// 생기고, 그때 플레이어는 보이지도 않는 것을 쓴다.
+        private bool TryFindDeviceInReach(Vector3 position, out int index)
+        {
+            index = -1;
+
+            var best = MatchConstants.DeviceUseRadius * MatchConstants.DeviceUseRadius;
+
+            for (var candidate = 0; candidate < _objectives.Devices.Count; candidate++)
+            {
+                var device = _objectives.Devices[candidate];
+                var delta = device.Position - position;
+
+                if (Math.Abs(delta.Y) > MatchConstants.DeviceUseRadius)
+                {
+                    continue;
+                }
+
+                var flat = (delta.X * delta.X) + (delta.Z * delta.Z);
+
+                if (flat > best)
+                {
+                    continue;
+                }
+
+                best = flat;
+                index = candidate;
+            }
+
+            return index >= 0;
+        }
+
+        private bool IsDeviceReady(int index, MatchDeviceType type)
+        {
+            if (index >= _deviceRuntime.Length
+                || _deviceRuntime[index].Spent
+                || _deviceRuntime[index].Destroyed)
+            {
+                return false;
+            }
+
+            if (_tick < _deviceRuntime[index].ReadyTick)
+            {
+                return false;
+            }
+
+            // 순간이동은 한 대를 쓰면 전부 잠긴다(기획서 §5.2).
+            return type != MatchDeviceType.Teleport || _tick >= _teleportReadyTick;
+        }
+
+        /// 효과를 건다.
+        ///
+        /// **전체 지도와 술래 시점은 여기에 없다.** 그 둘은 쓴 사람의 화면에만 그려지는 연출이라
+        /// 서버가 옮길 상태가 없다 — 서버는 장치가 쓰였다는 사실만 남기고, 그림은 클라이언트가
+        /// 그린다. 반대로 나머지 넷은 전부 서버가 소유한 것을 건드리므로 여기 있어야 한다.
+        private void ApplyDevice(MatchDeviceType type, PlayerEntity player)
+        {
+            switch (type)
+            {
+                case MatchDeviceType.AddTime:
+                    _match.AddTicks((int)MathF.Round(MatchConstants.DeviceTimeBonus * SimConstants.TickRate));
+                    _matchStateDirty = true;
+                    break;
+
+                case MatchDeviceType.StopBleeding:
+                    player.BleedingCleared = true;
+                    break;
+
+                case MatchDeviceType.Teleport:
+                    TeleportToRandomFreeFloor(player);
+                    break;
+
+                case MatchDeviceType.FreezeAndXray:
+                    _match.FreezeDevices((int)MathF.Ceiling(MatchConstants.FreezeDuration * SimConstants.TickRate));
+                    break;
+            }
+        }
+
+        private void MarkDeviceUsed(int index, MatchDeviceType type)
+        {
+            if (IsOneShot(type))
+            {
+                _deviceRuntime[index].Spent = true;
+            }
+            else
+            {
+                _deviceRuntime[index].ReadyTick =
+                    _tick + (uint)MathF.Ceiling(MatchConstants.RepeatableDeviceCooldown * SimConstants.TickRate);
+            }
+
+            if (type == MatchDeviceType.Teleport)
+            {
+                _teleportReadyTick =
+                    _tick + (uint)MathF.Ceiling(MatchConstants.TeleportSharedCooldown * SimConstants.TickRate);
+            }
+        }
+
+        /// 1회용인가. 클라이언트의 `MapDevice.IsOneShot` 과 **같은 표**여야 한다.
+        private static bool IsOneShot(MatchDeviceType type)
+        {
+            return type == MatchDeviceType.AddTime
+                || type == MatchDeviceType.StopBleeding
+                || type == MatchDeviceType.FreezeAndXray;
+        }
+
+        /// 이 장치의 지금 상태를 와이어 값으로 만든다.
+        private MatchDeviceState DeviceStateOf(int index, MatchDeviceType type)
+        {
+            var state = MatchDeviceState.None;
+
+            if (_deviceRuntime[index].Destroyed)
+            {
+                state |= MatchDeviceState.Destroyed;
+            }
+
+            if (_deviceRuntime[index].Spent)
+            {
+                state |= MatchDeviceState.Spent;
+            }
+            else if (_tick < _deviceRuntime[index].ReadyTick
+                || (type == MatchDeviceType.Teleport && _tick < _teleportReadyTick))
+            {
+                state |= MatchDeviceState.Cooling;
+            }
+
+            // 전체 정지가 도는 동안 그 장치가 켜져 있다. 클라이언트는 이 비트로 벽을 투명하게
+            // 만들고, **못 움직이는 이유가 체인이 아니라는 것도 이것으로 안다** — 스냅샷의
+            // `Frozen` 은 둘이 나눠 쓰는 한 비트라 그것만으로는 갈리지 않는다.
+            if (type == MatchDeviceType.FreezeAndXray && _match.DevicesFrozen)
+            {
+                state |= MatchDeviceState.Active;
+            }
+
+            // 맞은 수는 위 4비트에 실린다. Seeker 의 프롬프트가 "2/4" 를 그리는 값이고,
+            // 그것이 없으면 몇 발 더 쏴야 하는지 알 수 없다.
+            return MatchDeviceHits.With(state, _deviceRuntime[index].Hits);
         }
 
         /// 발사를 판정한다. 기획서 §4.3 — Seeker 의 3발.
@@ -1563,9 +1793,21 @@ namespace NV.Realtime.Simulation
                 var blocked = _map.Collision.Raycast(projectile.Position, projectile.Direction, step, out var mapHit);
                 var reach = blocked ? mapHit.Distance : step;
 
+                // **사람이 장치보다 먼저다.** 둘 다 이 선분 안에 있으면 사람을 맞히는 것이 맞다 —
+                // 콘솔 뒤에 숨은 Runner 를 노린 탄이 콘솔을 부수는 것은 몰라도, 눈앞의 Runner 를
+                // 두고 그 뒤 콘솔이 맞는 것은 조준이 거짓말을 하는 것이다. 거리 비교로 두 번째
+                // 갈래를 만들지 않는 이유는 사람 판정이 이미 **가장 가까운 사람**을 고르기
+                // 때문이고, 그 안에서 벽까지의 거리(`reach`)로 잘려 있다.
                 if (TryFindVictim(projectile, reach, out var victim))
                 {
                     ApplyHit(victim, projectile.OwnerId);
+                    projectile.Active = false;
+                    continue;
+                }
+
+                if (TryFindDeviceHit(projectile, reach, out var deviceIndex))
+                {
+                    DamageDevice(deviceIndex, projectile.OwnerId);
                     projectile.Active = false;
                     continue;
                 }
@@ -1636,6 +1878,114 @@ namespace NV.Realtime.Simulation
             return victim != null;
         }
 
+        /// 문턱에서 얼마나 버텼는가. 0 = 안 하고 있음, 255 = 다 채움.
+        ///
+        /// **역할로 거르지 않는다.** 룰셋이 이 진행도를 공개로 정했다 — 문의 *위치*는 여전히
+        /// Seeker 에게 숨기지만, 누군가 지금 나가고 있다는 사실은 그 유지 시간을 끊을 수 있게
+        /// 만드는 유일한 단서다. 아무도 볼 수 없는 유지 시간은 규칙이 아니라 지연이다.
+        private static byte EscapeProgressOf(PlayerEntity player)
+        {
+            if (player.EscapeHoldTicks <= 0 || player.Escaped)
+            {
+                return 0;
+            }
+
+            var ratio = (float)player.EscapeHoldTicks / Match.EscapeHoldTicks;
+
+            return (byte)Math.Clamp((int)MathF.Round(ratio * 255f), 0, 255);
+        }
+
+        /// 이 선분에서 맞는 장치를 찾는다(기획서 §5, IG-015). 여럿이면 가장 가까운 것이다.
+        ///
+        /// 이미 부서진 것은 세지 않는다 — 잔해가 총알을 계속 먹으면 그 자리가 영구적인
+        /// 엄폐물이 된다.
+        private bool TryFindDeviceHit(in Projectile projectile, float reach, out int index)
+        {
+            index = -1;
+
+            if (!_objectives.Placed)
+            {
+                return false;
+            }
+
+            var closest = reach;
+
+            for (var candidate = 0; candidate < _objectives.Devices.Count; candidate++)
+            {
+                if (candidate < _deviceRuntime.Length && _deviceRuntime[candidate].Destroyed)
+                {
+                    continue;
+                }
+
+                if (!Raycaster.RayAabb(
+                        projectile.Position,
+                        projectile.Direction,
+                        ConsoleOf(_objectives.Devices[candidate]),
+                        out var enter,
+                        out var exit,
+                        out _))
+                {
+                    continue;
+                }
+
+                var distance = enter < 0f ? 0f : enter;
+
+                if (exit < 0f || distance > closest)
+                {
+                    continue;
+                }
+
+                closest = distance;
+                index = candidate;
+            }
+
+            return index >= 0;
+        }
+
+        /// 장치 콘솔의 판정 박스.
+        ///
+        /// **요(yaw)를 무시하고 정사각형으로 잡는다.** 콘솔은 0.7×0.45 라 돌아간 각도에 따라
+        /// 실제 단면이 달라지는데, 판정을 회전시키면 서버만 아는 각도로 맞고 안 맞고가 갈린다.
+        /// 넓은 쪽(0.7)으로 맞추면 얇은 면이 10cm 씩 후해지고, 그 방향의 오차는 **보이는 것을
+        /// 쐈는데 빗나가는** 쪽이 아니라 그 반대다 — 넷을 맞혀야 부서지는 물건에서는 그쪽이 맞다.
+        private static Aabb ConsoleOf(in DevicePlacement device)
+        {
+            var half = new Vector3(
+                MatchConstants.DeviceWidth * 0.5f,
+                MatchConstants.DeviceHeight * 0.5f,
+                MatchConstants.DeviceWidth * 0.5f);
+
+            return Aabb.FromCenter(device.Position + new Vector3(0f, half.Y, 0f), half);
+        }
+
+        /// 장치가 한 발 맞았다. `DeviceDestroyHits` 발이면 부서진다.
+        private void DamageDevice(int index, byte shooterId)
+        {
+            if (index >= _deviceRuntime.Length)
+            {
+                return;
+            }
+
+            _deviceRuntime[index].Hits++;
+
+            // 맞은 수가 프롬프트에 그대로 나가므로("2/4") 한 발마다 전문을 보낸다. 5초 주기만
+            // 기다리면 Seeker 가 자기가 몇 발 맞혔는지 모른 채 쏘게 된다.
+            _objectiveStateDirty = true;
+
+            if (_deviceRuntime[index].Hits < MatchConstants.DeviceDestroyHits)
+            {
+                return;
+            }
+
+            _deviceRuntime[index].Destroyed = true;
+
+            _logger.LogDebug(
+                "룸 {RoomId} 플레이어 {ShooterId}: 장치 {Type} 를 부쉈다.",
+                RoomId,
+                shooterId,
+                _objectives.Devices[index].Type);
+        }
+
         /// 몸의 판정 박스. 이동이 쓰는 것과 같은 치수여야 한다 — 다르면 눈에 보이는 몸과
         /// 맞는 몸이 어긋난다.
         private static Aabb BodyOf(PlayerEntity player)
@@ -1661,6 +2011,10 @@ namespace NV.Realtime.Simulation
             }
 
             victim.Hits++;
+
+            // 새 상처는 지혈을 무효로 한다. 그러지 않으면 한 번 지혈한 몸은 그 뒤로 무엇을
+            // 맞아도 흔적을 남기지 않는다.
+            victim.BleedingCleared = false;
             victim.ImmuneUntilTick = _tick + (uint)Match.HitImmunityTicks;
             _matchStateDirty = true;
 
@@ -1952,7 +2306,17 @@ namespace NV.Realtime.Simulation
             // 방장 자리는 먼저 주장한 세션이 갖는다. 이미 방장이 있으면 무시한다 —
             // 같은 토큰으로 두 번 붙는 경우이며, 나중 접속에 자리를 넘기면
             // 먼저 붙은 쪽이 조용히 권한을 잃는다.
-            if (isHost && _hostSessionId == 0)
+            //
+            // **정적 룸에서는 토큰 없이 먼저 들어온 사람이 방장이다.** 그 방은 `POST /rooms`
+            // 를 지나지 않아 토큰을 받을 사람이 없고, 그래서 한동안 전문이 **받는 사람마다
+            // 자기를 방장이라고** 말했다. 개발용 룸에서는 그것으로 충분했지만 그 방은
+            // 공개(`isPublic`)라 로비 목록과 빠른 참가에도 뜬다 — 거기로 들어온 두 사람은
+            // 서로 자기가 방장인 방에 있게 되고, 강퇴도 방장 위임도 준비 게이트도 뜻을 잃는다.
+            //
+            // 처음 이 자리를 비워 둔 이유는 "먼저 붙은 사람에게 주면 나갈 때마다 승계가
+            // 필요하다" 였는데, 승계는 그 뒤에 생겼다(`LowestRemainingSessionId`). 그러니
+            // 이제 특별 취급을 할 이유가 없다.
+            if ((isHost || _isStatic) && _hostSessionId == 0)
             {
                 _hostSessionId = sessionId;
             }
@@ -2449,8 +2813,20 @@ namespace NV.Realtime.Simulation
 
                 // 지난 매치의 피격을 지운다. `ImmuneUntilTick` 은 절대 틱이라 언제나 과거다.
                 player.Hits = 0;
+                player.BleedingCleared = false;
                 player.Downed = false;
             }
+
+            // 지난 매치의 장치 사용을 지운다. 남겨 두면 새 매치의 1회용 장치가 이미 소진된
+            // 채로 서 있고, 그것은 배치가 아니라 규칙이 새는 것이다. 명단이 아니라 룸의
+            // 상태이므로 위 루프 밖이다.
+            for (var index = 0; index < _deviceRuntime.Length; index++)
+            {
+                _deviceRuntime[index] = default;
+            }
+
+            _teleportReadyTick = 0u;
+            _devicesFrozen = false;
 
             Volatile.Write(ref _phase, (int)RoomPhase.Playing);
             _stateDirty = true;
@@ -2521,10 +2897,12 @@ namespace NV.Realtime.Simulation
 
         /// 서버의 시계가 매치를 끝냈다.
         ///
-        /// **결과 코드를 채우지 않는다.** 기획서 §8 은 시간 종료를 술래 승리로 정하지만,
-        /// 구현과 어긋나는 지점이 남아 있어(전멸 승리 유무 OQ-2, 2인 매치에서 Runner
-        /// 승리가 구조적으로 불가능 OQ-6) 승패 판정을 여기서 추측하지 않는다. 단계만
-        /// 옮기고 `_outcome` 은 0(미정)으로 둔다 — IG-007 이 그 자리를 채운다.
+        /// **아직 결과 코드를 채우지 않는다.** 단계만 옮기고 `_outcome` 은 0(미정)으로 둔다.
+        ///
+        /// 예전에는 답이 없어서였다 — 전멸 승리의 유무(OQ-2)와 2인 매치의 탈출 목표(OQ-6).
+        /// 둘 다 이제 정해졌으므로(전멸은 술래 승, 목표는 `MatchConstants.EscapesToWinWith`)
+        /// 남은 것은 그 규칙을 여기로 옮기는 일이고 그것이 IG-007 이다. 그때까지는 방장이
+        /// 판정해 `Control(EndMatch)` 로 보고한다.
         private void EndMatchByServer()
         {
             Volatile.Write(ref _phase, (int)RoomPhase.Ended);

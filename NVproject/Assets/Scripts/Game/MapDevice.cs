@@ -69,11 +69,18 @@ namespace NV.Game
 
             // Body: a waist-high console. The collider lives on this box and nowhere else, so a
             // shot that lands anywhere on the device counts once.
+            //
+            // The dimensions come from `MatchConstants` because the server judges the shot with
+            // them (`Room.ConsoleOf`) while this draws what the player aims at. Two copies of that
+            // number is a device you can see but not hit.
             var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
             body.name = "Shell";
             body.transform.SetParent(transform, false);
-            body.transform.localPosition = new Vector3(0f, 0.5f, 0f);
-            body.transform.localScale = new Vector3(0.7f, 1f, 0.45f);
+            body.transform.localPosition = new Vector3(0f, NV.Shared.Simulation.MatchConstants.DeviceHeight * 0.5f, 0f);
+            body.transform.localScale = new Vector3(
+                NV.Shared.Simulation.MatchConstants.DeviceWidth,
+                NV.Shared.Simulation.MatchConstants.DeviceHeight,
+                NV.Shared.Simulation.MatchConstants.DeviceDepth);
             body.GetComponent<MeshRenderer>().sharedMaterial = _shellMaterial;
 
             var screen = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -145,12 +152,59 @@ namespace NV.Game
         }
 
         /// <summary>
+        /// The server's verdict on this device (IG-013). Networked, this is the only thing that
+        /// decides whether it is usable — the local tally was per client, so a one-shot device
+        /// could be spent once by every player in the room.
+        ///
+        /// **The countdown is rebuilt here rather than sent.** The bulletin goes out on change and
+        /// every 5 s, which is no place for a number that ticks; it carries "cooling" and this end
+        /// turns that into a deadline using the same shared constant the server counted with. The
+        /// worst case is that the two disagree by the latency of one bulletin, and the next one
+        /// corrects it.
+        /// </summary>
+        internal void AcceptServerState(bool spent, bool cooling, bool destroyed, int hits)
+        {
+            Spent = spent;
+            ShotsTaken = hits;
+
+            if (destroyed && !Destroyed)
+            {
+                Destroyed = true;
+                DeviceSystem.Instance?.ReportDestroyed(this);
+            }
+
+            if (cooling)
+            {
+                float lockout = type == DeviceType.Teleport
+                    ? NV.Shared.Simulation.MatchConstants.TeleportSharedCooldown
+                    : NV.Shared.Simulation.MatchConstants.RepeatableDeviceCooldown;
+
+                // 이미 세고 있던 카운트다운을 늘리지 않는다. 전문은 5초마다 같은 내용으로
+                // 다시 오므로, 그때마다 새로 잡으면 쿨다운이 영원히 끝나지 않는다.
+                if (NextUseTime <= Time.time) NextUseTime = Time.time + lockout;
+            }
+            else
+            {
+                NextUseTime = 0f;
+            }
+
+            ApplyPanelColour();
+        }
+
+        /// <summary>
         /// A round landed on the shell. <see cref="Bullet"/> raises this through
         /// <c>SendMessageUpwards</c>, so it arrives from the child collider.
         /// </summary>
         private void OnHit(float damage)
         {
             if (Destroyed) return;
+
+            // **서버가 전투를 판정하면 여기서 세지 않는다.** `Bullet` 은 쏜 사람의 기계에서만
+            // 날고, 그 기계의 탄이 맞았다고 부서지면 부순 사람 화면에서만 부서진 장치가 된다.
+            // 서버도 같은 탄을 날리고 있으므로(`Room.TryFindDeviceHit`) 맞은 수와 파괴는
+            // 목표물 전문으로 온다 — `MatchManager.ReportHit` 가 사람 피격에 대해 하는 것과
+            // 같은 이유의 같은 거절이다.
+            if (MatchManager.Instance != null && MatchManager.Instance.ServerOwnsCombat) return;
 
             ShotsTaken++;
             int needed = MatchManager.Instance != null

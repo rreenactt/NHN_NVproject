@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
@@ -292,6 +292,18 @@ public class WeaponController : MonoBehaviour
     /// </summary>
     private void OnBulletImpact(RaycastHit hit)
     {
+        // **서버가 판정하는 매치에서는 여기서 마커를 띄우지 않는다.**
+        //
+        // 이 탄은 로컬 예측이고, 원격 몸에는 총알을 멈출 콜라이더가 없다 — `CharacterController`
+        // 는 꺼져 있고 블록에는 콜라이더가 없다. 그래서 사람을 맞혀도 실제로 맞는 것은 **그 뒤의
+        // 벽**이고, 마커는 벽이든 사람이든 항상 떴다. 항상 뜨는 신호는 아무 말도 하지 않는다.
+        //
+        // 서버는 누가 맞았는지 알고 있으므로 그쪽에서 띄운다(`MatchManager.AcceptCombatState`).
+        // 전문이 2Hz 라 최대 0.5초 늦지만, **늦고 참인 편이 즉시이고 무의미한 것보다 낫다** —
+        // 세 발뿐인 탄창에서 맞았는지 여부는 조준 타이밍보다 훨씬 큰 정보다.
+        var match = NV.Game.MatchManager.Instance;
+        if (match != null && match.ServerOwnsCombat) return;
+
         if (crosshair != null) crosshair.ShowHitMarker();
     }
 
