@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.AI;
 
 namespace NV.Game
@@ -163,6 +163,12 @@ namespace NV.Game
             Alive = false;
             CarriedKeys = 0;
             SetBleeding(false);
+
+            // **숨기기 전에 터뜨린다.** 지금 서 있는 자세가 그대로 파편의 출발 자세다 —
+            // `SetPresent(false)` 뒤에 부르면 렌더러가 이미 꺼져 있어 복제할 것이 없고,
+            // 있더라도 리그가 만들어질 때의 T 자세에서 시작한다.
+            BlockGibs.Burst(GetComponent<BlockRig>(), displayName);
+
             SetPresent(false);
         }
 

@@ -29,7 +29,7 @@ namespace NV.Game.UI
         private VisualTreeAsset _uxml;
 
         // --- shared
-        private VisualElement _root, _scanlines, _vignette;
+        private VisualElement _root, _scanlines, _vignette, _deadWash;
         private Label _clock, _roleLabel, _escapeLabel, _notice, _prompt;
 
         // 칩에 함께 그리는 값들. 탈출 수는 이벤트로, 진행도는 매 프레임 온다.
@@ -63,6 +63,12 @@ namespace NV.Game.UI
         private readonly List<ActiveEffect> _effects = new List<ActiveEffect>();
         /// 매치가 끝나고 결과 카드가 올라오기까지의 시간(초).
         private const float EndCardDelaySeconds = 1.6f;
+
+        /// 쓰러진 뒤 화면에 얹히는 무채색 막의 진하기.
+        ///
+        /// "살짝" 이다 — 방이 무엇인지는 계속 보여야 한다. 색을 완전히 뽑으면 관전이 아니라
+        /// 화면이 꺼진 것이 되고, 남은 사람들이 어디서 무엇을 하는지 볼 수 없다.
+        private const float DeadWashOpacity = 0.45f;
 
         private float _endCardDelay;
         private float _noticeTimer;
@@ -202,6 +208,7 @@ namespace NV.Game.UI
             _root = documentRoot.Q<VisualElement>("hud-root");
             _scanlines = _root.Q<VisualElement>("scanlines");
             _vignette = _root.Q<VisualElement>("vignette");
+            _deadWash = _root.Q<VisualElement>("dead-wash");
 
             _roleChip = _root.Q<VisualElement>("role-chip");
             _roleLabel = _root.Q<Label>("role-label");
@@ -302,6 +309,7 @@ namespace NV.Game.UI
             }
 
             UpdateClock();
+            UpdateDeadWash();
 
             // 탈출 진행도는 매 틱 바뀌므로 이벤트가 아니라 여기서 그린다. 유지 시간이 0.8초라
             // 이벤트로 받으면 바가 두 번 튀고 끝난다.
@@ -316,6 +324,30 @@ namespace NV.Game.UI
 
             if (_local.Role == Role.Seeker) UpdateSeeker();
             else UpdateRunner();
+        }
+
+        /// <summary>
+        /// 쓰러진 뒤 화면에서 색이 빠진다.
+        ///
+        /// **역할을 가리지 않고 공유 구간에서 돈다.** 상처 비네트는 Runner 패널 안에서 그려지는데,
+        /// 그 패널은 역할에 따라 트리에서 아예 빠진다 — 여기 두면 그 갈림과 무관하게 산다.
+        ///
+        /// 탈출은 죽음이 아니므로 걸러지지 않는다. 나간 사람의 화면까지 회색으로 만들면 이긴
+        /// 것과 진 것이 같은 그림이 된다.
+        ///
+        /// 0.8초에 걸쳐 든다. 즉시 갈아 끼우면 화면이 깜빡인 것으로 보이고, 쓰러진 순간의
+        /// 마지막 장면을 덮어 버린다.
+        /// </summary>
+        private void UpdateDeadWash()
+        {
+            if (_deadWash == null) return;
+
+            bool down = _local != null && !_local.Alive;
+
+            _deadWash.style.opacity = Mathf.MoveTowards(
+                _deadWash.resolvedStyle.opacity,
+                down ? DeadWashOpacity : 0f,
+                Time.deltaTime * (down ? DeadWashOpacity / 0.8f : 1.5f));
         }
 
         private void UpdateClock()

@@ -1,4 +1,4 @@
-/*
+﻿/*
     Backrooms Escape — HUD style.
 
     The palette is the level's, not a UI palette: wall #C9B36B, trim #A8924E, ceiling #D8CFA8,
@@ -34,6 +34,22 @@
     bottom: 0;
     opacity: 0.16;
     /* texture generated at runtime to match the screen height, so the lines stay one pixel */
+}
+
+/*
+   쓰러진 뒤의 무채색 막.
+
+   회색의 밝기가 이 방의 중간 밝기에 맞춰져 있다. 더 밝으면 안개가 낀 것처럼, 더 어두우면
+   그냥 화면이 꺼지는 것처럼 보인다 — 목표는 밝기가 아니라 **색이 빠지는 것**이다.
+*/
+.dead-wash {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    opacity: 0;
+    background-color: rgb(84, 82, 78);
 }
 
 .vignette {
