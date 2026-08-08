@@ -330,9 +330,21 @@ namespace NV.Modules.Tests.Realtime
                 }
             }
 
+            // 사수는 스폰 표의 자리에 서 있지 않다. Seeker 전용 스폰(team 1)이 없는 이
+            // 픽스처 맵에서 술래는 **제단 착지점**에서 시작하므로(`Room` 의 역할별 스폰),
+            // 총알이 닿아야 성립하는 검사는 살아 있는 위치를 읽어야 한다 — 스폰 규칙이
+            // 또 바뀌어도 따라간다.
             var spawn = atSeeker
-                ? RoomFixture.Map().SpawnPosition(seeker) + new Vector3(0f, 0f, ShootRange)
+                ? Entity(room, seeker).State.Position + new Vector3(0f, 0f, ShootRange)
                 : RoomFixture.Map().SpawnPosition(actor);
+
+            // 배우를 사선에서 치운다. 사수는 +Z 로 쏘고 **동점은 사람이 이기므로**
+            // (`Room.TryFindDeviceHit`), 링 스폰이 그 선 위에 있으면 첫 발이 장치가 아니라
+            // 배우에게 간다 — 여기서 세는 것은 장치가 몇 발에 부서지는가이지 피격이 아니다.
+            if (atSeeker)
+            {
+                Entity(room, actor).State.Position = spawn + new Vector3(-6f, 0f, 0f);
+            }
 
             room.Objectives.Reset();
 
@@ -352,6 +364,20 @@ namespace NV.Modules.Tests.Realtime
             room.Objectives.MarkPlaced();
 
             return new DeviceWorld(room, transport, actor, seeker);
+        }
+
+        private static PlayerEntity Entity(Room room, byte playerId)
+        {
+            foreach (var player in room.Players)
+            {
+                if (player.PlayerId == playerId)
+                {
+                    return player;
+                }
+            }
+
+            Assert.Fail("룸에 그 플레이어가 없다.");
+            return null;
         }
 
         private sealed class DeviceWorld
