@@ -647,11 +647,16 @@ namespace NV.Game.UI
             bool runnersWon = outcome == MatchOutcome.RunnersEscaped;
             bool localWon = seeker ? !runnersWon : runnersWon;
 
+            // An abandoned match has no winner — counting a walkout as a victory would make
+            // leaving a weapon, so neither the win nor the lose styling applies.
+            bool aborted = outcome == MatchOutcome.Aborted;
+
             _endTitle.text = outcome switch
             {
                 MatchOutcome.RunnersEscaped => "THEY GOT OUT",
                 MatchOutcome.SeekerTimeout => "THE HOUR CLOSED",
                 MatchOutcome.SeekerWipedRunners => "NOBODY LEFT TO RUN",
+                MatchOutcome.Aborted => "MATCH ABANDONED",
                 _ => "MATCH OVER",
             };
 
@@ -664,6 +669,8 @@ namespace NV.Game.UI
                     _match.Config.keysRequired + " KEYS IN THE DOOR.",
                 MatchOutcome.SeekerWipedRunners =>
                     "EVERY RUNNER WENT DOWN BEFORE TWO COULD LEAVE.",
+                MatchOutcome.Aborted =>
+                    "TOO FEW PLAYERS LEFT TO KEEP THE HUNT GOING. NOBODY WINS.",
                 _ => string.Empty,
             };
 
@@ -674,6 +681,9 @@ namespace NV.Game.UI
             // 순간이다 — 마지막 한 명이 문으로 걸어 나가거나, 쓰러지거나, 시계가 0 이 된다.
             // 그 프레임에 카드가 덮으면 결과는 읽히는데 **왜 그렇게 됐는지를 못 본다.**
             _endCardDelay = EndCardDelaySeconds;
+            _endTitle.EnableInClassList("card__title--win", !aborted && localWon);
+            _endTitle.EnableInClassList("card__title--lose", !aborted && !localWon);
+            _endCard.style.display = DisplayStyle.Flex;
             _revealCard.style.display = DisplayStyle.None;
 
             _mapOverlay.style.display = DisplayStyle.None;

@@ -88,6 +88,38 @@ namespace NV.Shared.Collision
             {
                 errors.Add("스폰 지점이 없다.");
             }
+            else
+            {
+                // team 은 0(역할 무관)·1(Seeker 전용)·2(Runner 전용)만 안다. 모르는 값을
+                // 그대로 받으면 "역할 무관도 Seeker 전용도 아닌" 스폰이 되어 어느 목록에도
+                // 들어가지 않는 것처럼 읽히는데, 실제로는 Runner 목록에 들어간다 — 의도가
+                // 무엇이었든 그 어긋남은 파일 단계에서 잡는다.
+                var runnerCapable = 0;
+
+                for (var index = 0; index < data.Spawns.Length; index++)
+                {
+                    var team = data.Spawns[index].Team;
+
+                    if (team < 0 || team > 2)
+                    {
+                        errors.Add(
+                            $"스폰 {index} 의 team {team} 은 아는 값이 아니다" +
+                            "(0 = 역할 무관, 1 = Seeker 전용, 2 = Runner 전용).");
+                    }
+
+                    if (team != 1)
+                    {
+                        runnerCapable++;
+                    }
+                }
+
+                // Seeker 는 한 명이고 나머지 전원이 Runner 다. Runner 가 설 수 있는 스폰이
+                // 없는 맵은 조회가 폴백으로 버티더라도 만든 사람의 실수다.
+                if (runnerCapable == 0)
+                {
+                    errors.Add("Runner 가 설 수 있는 스폰(team ≠ 1)이 하나도 없다.");
+                }
+            }
 
             // 격자는 없어도 된다 — 이동 판정은 박스만으로 되고, 격자를 요구하는 것은 목표물
             // 배치처럼 나중에 붙는 기능이다. 다만 **있으면서 어긋난** 격자는 거절한다.

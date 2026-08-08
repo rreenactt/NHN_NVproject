@@ -132,6 +132,20 @@ namespace NV.Shared.Collision
 
     public sealed class MapSpawn
     {
+        /// 이 스폰이 누구의 것인가. 0 = 역할 무관, 1 = Seeker 전용, 2 = Runner 전용.
+        ///
+        /// 없으면 0 으로 읽힌다 — 그래서 이 필드를 도입해도 기존 맵 파일은 그대로 읽히고,
+        /// 스폰은 애초에 해시 밖이므로 재-export 도 강제되지 않는다
+        /// (`docs/map-generator-tool-plan.md` §8.4 의 계획이 이것이다).
+        ///
+        /// Seeker 전용 스폰이 없는 맵에서는 서버가 제단 착지점을 Seeker 시작점으로
+        /// 파생시킨다 — 이 필드는 맵이 그 파생값을 덮어쓰고 싶을 때만 적는다.
+        ///
+        /// **2(Runner 전용)는 아직 선언일 뿐이다** — 판정은 "1 인가 아닌가" 만 보므로
+        /// 지금은 0 과 같이 동작한다. Seeker 전용 스폰도 제단도 없는 열화 맵에서 Seeker
+        /// 가 team 2 스폰에 설 수 있고, 그것을 막는 판정은 필요해질 때 넣는다.
+        public int Team { get; set; }
+
         public float X { get; set; }
 
         public float Y { get; set; }

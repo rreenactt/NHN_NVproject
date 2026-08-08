@@ -44,9 +44,11 @@ namespace NV.Modules.Tests.Realtime
         {
             var world = Armed();
 
-            // 같은 입력을 간격보다 짧게 여러 틱 넣는다.
-            world.Fire(yaw: 0f);
-            world.FireHeldFor(Match.FireIntervalTicks - 1);
+            // 같은 입력을 간격보다 짧게 여러 틱 넣는다. **위로 쏜다** — Seeker 는 제단
+            // 착지점에서 시작하고, 수평으로 쏘면 사선이 Runner 의 링 스폰을 지나는 배치가
+            // 있다. 맞은 총알은 사라지므로 개수 검사가 역할 추첨에 따라 흔들린다.
+            world.Fire(yaw: 0f, pitch: -1.4f);
+            world.FireHeldFor(Match.FireIntervalTicks - 1, pitch: -1.4f);
 
             Assert.Equal(1, world.ActiveProjectiles());
         }
@@ -56,8 +58,9 @@ namespace NV.Modules.Tests.Realtime
         {
             var world = Armed();
 
-            world.Fire(yaw: 0f);
-            world.FireHeldFor(Match.FireIntervalTicks);
+            // 위로 쏜다 — 이유는 위 테스트와 같다.
+            world.Fire(yaw: 0f, pitch: -1.4f);
+            world.FireHeldFor(Match.FireIntervalTicks, pitch: -1.4f);
 
             Assert.Equal(2, world.ActiveProjectiles());
         }
@@ -248,11 +251,11 @@ namespace NV.Modules.Tests.Realtime
             }
 
             /// 같은 입력을 계속 보내며 여러 틱 돌린다 — 트리거를 누르고 있는 것과 같다.
-            public void FireHeldFor(int ticks)
+            public void FireHeldFor(int ticks, float pitch = 0f)
             {
                 for (var tick = 0; tick < ticks; tick++)
                 {
-                    Post(0f, 0f);
+                    Post(0f, pitch);
                     Room.Advance();
                 }
             }

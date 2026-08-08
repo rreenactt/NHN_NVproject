@@ -37,6 +37,10 @@ namespace NV.Client.Net.Session
         private uint _startedTick;
         private bool _subscribedToMatch;
 
+        /// 이번 매치에 술래 퇴장 배너를 이미 띄웠는가. 명단 게시는 2Hz 로 계속 오므로
+        /// 이 깃발이 없으면 같은 알림이 반 초마다 다시 올라온다.
+        private bool _seekerLeaveNotified;
+
         /// 이미 적용한 배치의 특징. 전문은 5초마다 같은 내용으로 다시 오므로, 그때마다
         /// 목표물을 다시 만들면 초당 오브젝트를 지우고 세우는 일이 반복된다.
         ///
@@ -311,8 +315,10 @@ namespace NV.Client.Net.Session
                         _startedTick = state.StartTick;
                         _pendingStart = true;
                         _pendingSince = Time.unscaledTime;
+                        _seekerLeaveNotified = false;
                     }
 
+                    NotifyIfSeekerLeft(state.SeekerPlayerId);
                     break;
 
                 case RoomPhase.Ended:
@@ -339,6 +345,37 @@ namespace NV.Client.Net.Session
 
                     break;
             }
+        }
+
+        /// 술래가 명단에서 사라졌으면 남은 사람에게 알린다. 서버는 유예(5초) 뒤 매치를
+        /// 중단하므로(`NVserver/docs/match-abort-plan.md`), 이 배너는 그 사이의 공백을
+        /// 설명하는 표시일 뿐이다 — 판정은 전적으로 서버의 것이다.
+        ///
+        /// 새 와이어 필드가 필요 없다. `RoomState` 명단은 2Hz 게시이고, 나간 사람은
+        /// 다음 게시에서 사라지므로 그것을 읽으면 된다. 한 매치에 한 번만 띄운다 —
+        /// 게시는 계속 오고, 알림을 게시마다 다시 올리면 화면이 그 문장으로 찬다.
+        private void NotifyIfSeekerLeft(byte seekerPlayerId)
+        {
+            // `_startedTick` 은 이 게시에서 방금 채워지므로 "시작했는가"의 답이 되지
+            // 못한다 — 매치 레이어가 실제로 열리기 전(몸을 기다리는 동안)은
+            // `_pendingStart` 가 말한다.
+            if (_seekerLeaveNotified
+                || _pendingStart
+                || seekerPlayerId == RoomStateHeader.NoPlayer)
+            {
+                return;
+            }
+
+            for (var index = 0; index < _client.RosterCount; index++)
+            {
+                if (_client.RosterEntry(index).PlayerId == seekerPlayerId)
+                {
+                    return;
+                }
+            }
+
+            _seekerLeaveNotified = true;
+            MatchManager.Instance.Notify("THE SEEKER IS GONE — THE MATCH ENDS SHORTLY");
         }
 
         /// 명단 전원의 몸이 도착했으면 매치를 시작한다.

@@ -189,6 +189,15 @@ namespace NV.Realtime.Simulation
         private uint _startTick;
         private byte _outcome;
 
+        /// 진행 불가로 판정된 매치가 중단되는 틱. 0 = 예약 없음 — `ChainReleaseTick`
+        /// 과 같은 규약으로 별도 bool 을 두지 않는다.
+        private uint _abortAtTick;
+
+        /// 결과 코드 4 — 승패가 아니라 **중단**이다. 클라이언트의 `MatchOutcome.Aborted`
+        /// 와 같은 값이어야 한다. 퇴장을 상대 팀의 승리로 치면 퇴장이 무기가 되므로
+        /// 어느 쪽의 승리도 아니다.
+        private const byte AbortedOutcome = 4;
+
         /// 상태가 바뀐 틱에는 간격을 무시하고 즉시 보낸다.
         private bool _stateDirty = true;
         private uint _lastStateTick;
@@ -421,6 +430,13 @@ namespace NV.Realtime.Simulation
                 if (_match.Phase != phaseBefore)
                 {
                     _matchStateDirty = true;
+                }
+
+                // 명단이 매치를 지탱하는지는 맨 뒤에 본다 — 이 틱의 시뮬레이션은 온전히
+                // 끝났고, 시계 종료가 같은 틱에 났으면 이미 `Ended` 라 건너뛴다.
+                if (Phase == RoomPhase.Playing)
+                {
+                    TickAbortWatch();
                 }
             }
             else
@@ -2289,11 +2305,13 @@ namespace NV.Realtime.Simulation
             }
 
             // 어느 스폰을 고를지는 판정이다. PlayerId 로 갈라 같은 룸에서 겹치지 않게 한다.
+            // 대기 중에는 역할이 없으므로 전원이 Runner 스폰을 쓴다 — Seeker 전용 스폰은
+            // 매치가 시작되어 술래가 정해진 뒤에만 뜻이 있다.
             var joined = new PlayerEntity(
                 sessionId,
                 playerId,
-                _map.SpawnPosition(playerId),
-                _map.SpawnYaw(playerId),
+                _map.RunnerSpawnPosition(playerId),
+                _map.RunnerSpawnYaw(playerId),
                 name);
 
             // 아무것도 입지 않은 참가자를 만들지 않는다. 정원 8 · 캐릭터 8 이므로 자리가
@@ -2406,8 +2424,8 @@ namespace NV.Realtime.Simulation
             var bot = new PlayerEntity(
                 sessionId,
                 playerId,
-                _map.SpawnPosition(playerId),
-                _map.SpawnYaw(playerId),
+                _map.RunnerSpawnPosition(playerId),
+                _map.RunnerSpawnYaw(playerId),
                 name);
 
             // 봇도 캐릭터를 입는다. 사람과 같은 명단 줄을 그리므로, 비워 두면 개발용 방의
@@ -2736,6 +2754,10 @@ namespace NV.Realtime.Simulation
             _placementSeed = NextPlacementSeed();
             _outcome = 0;
 
+            // 지난 매치의 중단 예약을 끊는다. 남겨 두면 새 매치가 시작 몇 틱 만에
+            // 지난 매치의 데드라인으로 끝난다.
+            _abortAtTick = 0u;
+
             // 지난 매치에서 날아가던 총알을 지운다. 남겨 두면 새 매치의 첫 틱에 아무도
             // 쏘지 않은 총알이 벽에 맞는다.
             for (var index = 0; index < _projectiles.Length; index++)
@@ -2779,9 +2801,28 @@ namespace NV.Realtime.Simulation
 
             // 배치는 서버가 한다. 이동이 서버 권위이므로 클라이언트가 자기 몸을
             // 옮겨 놓아도 다음 스냅샷이 되돌린다.
+            //
+            // 스폰은 역할의 것이다. Seeker 는 체인이 끝나는 자리에서 시작하고, Runner 는
+            // 링 스폰(team ≠ 1)을 PlayerId 로 나눠 갖는다. Seeker 의 자리는 맵이 적었으면
+            // (team 1 스폰) 그것이 먼저고, 없으면 제단 착지점을 파생시킨다. 착지점도 없는
+            // 맵(격자 없음)은 체인 벌칙도 없는 맵이므로 Seeker 도 링 스폰으로 돌아간다 —
+            // 열화의 경계를 새로 만들지 않는다. 제단이 맵마다 고정이라 이 시작 위치도
+            // 예측 가능하다 — Seeker 는 세 번째 총알이 자기를 어디로 보낼지 알아야 한다는
+            // 원칙과 같은 결이다.
             foreach (var player in _players.Values)
             {
-                player.RespawnAt(_map.SpawnPosition(player.PlayerId), _map.SpawnYaw(player.PlayerId));
+                if (player.PlayerId == _seekerPlayerId && _map.SeekerSpawnCount > 0)
+                {
+                    player.RespawnAt(_map.SeekerSpawnPosition(0), _map.SeekerSpawnYaw(0));
+                }
+                else if (player.PlayerId == _seekerPlayerId && _objectives.Placed)
+                {
+                    player.RespawnAt(_objectives.AltarDragPoint, SeekerSpawnYaw());
+                }
+                else
+                {
+                    player.RespawnAt(_map.RunnerSpawnPosition(player.PlayerId), _map.RunnerSpawnYaw(player.PlayerId));
+                }
 
                 // 지난 매치의 소지 열쇠를 지운다. `RespawnAt` 에 넣지 않는 것은 그 함수가
                 // 피격 순간이동에도 쓰일 예정이기 때문이다(IG-014) — 맞았다고 들고 있던
@@ -2840,6 +2881,27 @@ namespace NV.Realtime.Simulation
                 _placementSeed);
         }
 
+        /// Seeker 시작 방향. 제단을 등지고 맵 쪽을 본다 — 착지점은 제단 옆 셀이므로
+        /// 제단에서 착지점으로 나가는 방향이 곧 열린 쪽이다.
+        ///
+        /// `MathF.Atan2` 를 써도 된다. 이 값은 서버가 한 번 정해 스냅샷으로 내려보낼 뿐
+        /// 클라이언트가 같은 계산을 반복하지 않는다 — `DeterministicMath` 가 막는 것은
+        /// 양쪽이 재현해야 하는 연산이다. yaw 규약은 라디안, 0 = +Z.
+        private float SeekerSpawnYaw()
+        {
+            var away = DeterministicMath.Subtract(_objectives.AltarDragPoint, _objectives.AltarPosition);
+
+            if (DeterministicMath.Abs(away.X) < DeterministicMath.Epsilon &&
+                DeterministicMath.Abs(away.Z) < DeterministicMath.Epsilon)
+            {
+                // 착지점과 제단이 같은 XZ 에 있으면 방향이 퇴화한다. 배치 계약상 인접
+                // 셀이라 일어나지 않지만, 0 나눗셈 대신 +Z 를 본다.
+                return 0f;
+            }
+
+            return MathF.Atan2(away.X, away.Z);
+        }
+
         /// 요청자를 뺀 모든 **사람**이 준비했는가.
         ///
         /// 세 갈래가 각각 이유를 갖는다.
@@ -2886,6 +2948,21 @@ namespace NV.Realtime.Simulation
                 return;
             }
 
+            // 중단이 예약된 매치의 승패 보고는 받지 않는다. 유예 5초는 룸이 `Playing`
+            // 인 채로 흐르므로 방장 클라이언트의 판정도 그 안에서 계속 돈다 — 술래가
+            // 나간 방에서 남은 전원이 자유롭게 탈출하면 Runner 승리가, Runner 전원이
+            // 나간 방에서는 전멸 승리가 유예를 앞질러 도착한다. 퇴장을 상대 팀의
+            // 승리로 치지 않는 것이 이 예약의 내용이므로, 예약이 살아 있는 동안
+            // 결과는 중단뿐이다.
+            if (_abortAtTick != 0u)
+            {
+                _logger.LogInformation(
+                    "룸 {RoomId}: 중단이 예약된 매치의 승패 보고(결과 {Outcome})를 무시했다.",
+                    RoomId,
+                    outcome);
+                return;
+            }
+
             _outcome = outcome;
             _match.ForceEnd();
             Volatile.Write(ref _phase, (int)RoomPhase.Ended);
@@ -2915,6 +2992,94 @@ namespace NV.Realtime.Simulation
                 _tick);
         }
 
+        /// 명단이 매치를 지탱하는지 매 틱 본다. 지탱하지 못하면 유예를 걸고, 유예가
+        /// 끝나면 중단한다.
+        ///
+        /// **"누가 나갔나"가 아니라 "지금 명단이 성립하는가"를 본다.** 퇴장·강제
+        /// 퇴장·이중 퇴장이 전부 커맨드로 이 틱에 적용되어 있으므로, 상태에서
+        /// 판정하면 그 경우들을 따로 셀 필요가 없다.
+        ///
+        /// **취소 분기는 없다 — 회복이 불가능하기 때문이다.** 진행 중 합류는 `/ws` 가
+        /// 거절하고(`RealtimeEndpoints`, 역할과 배치가 이미 정해져 있어 규칙이 성립하지
+        /// 않는다) 봇 채우기는 대기 단계에만 돌므로, `Playing` 중에 빠진 자리를 메울
+        /// 길이 없다. 취소를 두면 지금은 죽은 코드이고, 진행 중 합류가 열리는 날에는
+        /// 새 참가자가 술래 표식을 조용히 물려받은 채 매치가 계속되는 길이 된다 —
+        /// 그날의 결정은 그날의 커밋이 한다.
+        ///
+        /// 전원 퇴장은 여기 오지 않는다 — `Leave` 가 빈 방을 커맨드 적용 시점에
+        /// `ResetToWaiting` 으로 되돌리므로, 볼 사람 없는 결과 화면은 생기지 않는다.
+        private void TickAbortWatch()
+        {
+            if (_abortAtTick == 0u)
+            {
+                var seekerPresent = SeekerPresent();
+                var runnerPresent = RunnerPresent();
+
+                if (!seekerPresent || !runnerPresent)
+                {
+                    _abortAtTick = _tick + RealtimeConstants.Match.AbortGraceTicks;
+
+                    _logger.LogInformation(
+                        "룸 {RoomId}: 매치가 정상 진행될 수 없다(술래 {SeekerPresent}, Runner {RunnerPresent}). " +
+                        "틱 {AbortTick} 에 중단한다.",
+                        RoomId,
+                        seekerPresent,
+                        runnerPresent,
+                        _abortAtTick);
+                }
+            }
+
+            if (_abortAtTick != 0u && _tick >= _abortAtTick)
+            {
+                AbortMatch();
+            }
+        }
+
+        /// 술래가 명단에 있는가. 슬롯 예약이 아니라 명단을 본다 — 예약은 접속의
+        /// 문제고, 매치의 사실은 명단이다.
+        private bool SeekerPresent()
+        {
+            return FindByPlayerId(_seekerPlayerId) != null;
+        }
+
+        /// 술래가 아닌 참가자가 하나라도 있는가. 봇도 참가자다 — 봇 Runner 가 남은
+        /// 정적 룸은 진행 가능으로 본다.
+        private bool RunnerPresent()
+        {
+            foreach (var player in _players.Values)
+            {
+                if (player.PlayerId != _seekerPlayerId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// 매치가 정상 진행 불가로 끝났다. 승패가 아니라 **중단**이다.
+        ///
+        /// 결과 4(`AbortedOutcome`)는 서버가 직접 쓰는 첫 결과 코드다 — 지금까지
+        /// 결과는 방장 클라이언트의 보고(한시적 경로, `EndMatch`)였지만, 명단의
+        /// 사실은 서버만 옳게 안다. 경합은 이미 안전하다: 방장의 늦은 보고는
+        /// `EndMatch` 의 `Playing` 게이트에서 멈추고, 보고가 먼저였으면 이 판정이
+        /// 그 게이트에서 멈춘다.
+        private void AbortMatch()
+        {
+            _outcome = AbortedOutcome;
+            _abortAtTick = 0u;
+            _match.ForceEnd();
+            Volatile.Write(ref _phase, (int)RoomPhase.Ended);
+            _stateDirty = true;
+            _matchStateDirty = true;
+
+            _logger.LogInformation(
+                "룸 {RoomId}: 진행 불가로 매치를 중단했다. 틱 {Tick}, 참가자 {Count}명",
+                RoomId,
+                _tick,
+                _players.Count);
+        }
+
         private void ReturnToLobby(int sessionId)
         {
             if (Phase == RoomPhase.Waiting || !IsAuthorized(sessionId))
@@ -2941,6 +3106,7 @@ namespace NV.Realtime.Simulation
             _placementSeed = 0;
             _startTick = 0;
             _outcome = 0;
+            _abortAtTick = 0u;
             _match.Reset();
             _objectives.Reset();
             _matchStateDirty = true;
