@@ -34,6 +34,19 @@ namespace NV.Game
         public int CharacterId { get; private set; } = None;
 
         /// <summary>
+        /// The rig was torn down and rebuilt (a role reveal swaps monster and humanoid).
+        /// The painted blocks and the head gear died with the old body, so forget both —
+        /// the roster poll calls <see cref="Apply"/> every frame and re-dresses a humanoid
+        /// on the next one. Without this reset the applied id still matches the roster and
+        /// the fresh white body never gets its character back.
+        /// </summary>
+        public void OnRigRebuilt()
+        {
+            _headGear = null;
+            CharacterId = None;
+        }
+
+        /// <summary>
         /// Dresses the body. Cheap to call repeatedly — the roster is polled, so this is asked the
         /// same question every frame and only does work when the answer changes.
         /// </summary>
@@ -43,6 +56,10 @@ namespace NV.Game
 
             if (_rig == null) _rig = GetComponent<BlockRig>();
             if (_rig == null || !_rig.IsBuilt) return;      // the rig builds in Awake; wait for it
+
+            // A monster owns its colours — the plan painted it at build time, and the lobby
+            // character this player picked stays parked until the body is human again.
+            if (_rig.IsMonster) return;
 
             LobbyCharacterCatalog.Character character = characterId >= 0
                     && characterId < LobbyCharacterCatalog.Count

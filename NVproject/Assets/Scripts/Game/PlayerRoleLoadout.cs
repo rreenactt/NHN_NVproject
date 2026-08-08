@@ -78,10 +78,42 @@ namespace NV.Game
 
             if (chain != null) chain.enabled = seeker;
 
-            SetWeaponVisible(seeker);
+            ApplyRole(gameObject, agent.Role);
         }
 
-        private void SetWeaponVisible(bool visible) => ShowWeapon(gameObject, visible);
+        /// <summary>
+        /// What a role looks like on a body: the Seeker *is* the monster, everyone else is the
+        /// humanoid they picked in the lobby. Static for the same reason <see cref="ShowWeapon"/>
+        /// is — a remote body needs the identical answer and must not get a second copy of it;
+        /// <c>RemotePlayerPuppet</c> calls this when the server tells it what a body is.
+        ///
+        /// The rebind-and-repaint block runs only on a real body swap: <c>Rebuild</c> reports
+        /// whether anything changed, and roles are re-announced on every match start.
+        /// </summary>
+        public static void ApplyRole(GameObject body, Role role)
+        {
+            if (body == null) return;
+
+            var rig = body.GetComponent<BlockRig>();
+            if (rig == null) return;
+
+            bool seeker = role == Role.Seeker;
+
+            if (rig.Rebuild(seeker ? SeekerModelCatalog.Default : null))
+            {
+                // The lobby paint died with the old blocks; clearing the applied id is what
+                // lets the poll dress the humanoid again on the way back from the monster.
+                var appearance = body.GetComponent<CharacterAppearance>();
+                if (appearance != null) appearance.OnRigRebuilt();
+
+                // The weapon cached the old viewmodel muzzle in Start; that transform is
+                // destroyed now, and a stale muzzle silently fires from the eye instead.
+                var weapon = body.GetComponent<WeaponController>();
+                if (weapon != null) weapon.RebindMuzzle();
+            }
+
+            ShowWeapon(body, seeker);
+        }
 
         /// <summary>
         /// What being armed looks like: the pistol in the hand and the arm pose that holds it.

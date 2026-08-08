@@ -58,7 +58,11 @@ namespace NV.Client.Net
 
             // 역할이 정해지기 전에는 아무도 무장하지 않는다. 로비에서 총을 든 채로 서 있는
             // 몸이 없어야 하고, 그것이 `PlayerRoleLoadout` 의 기본값과도 같다.
-            PlayerRoleLoadout.ShowWeapon(gameObject, _appliedRole == Role.Seeker);
+            //
+            // 무기 표시만이 아니라 몸 자체가 역할이다: Seeker 는 괴물로 재조립되고,
+            // Seeker 이기를 그만둔 몸은 휴머노이드로 돌아온다. 로컬과 같은 한 함수를
+            // 쓰므로 두 화면이 다른 몸을 그릴 수 없다.
+            PlayerRoleLoadout.ApplyRole(gameObject, _appliedRole);
         }
 
         /// 몸을 만든다. 컴포넌트의 Awake 가 필드보다 먼저 도는 것을 막기 위해

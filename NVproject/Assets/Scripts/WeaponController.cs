@@ -122,12 +122,22 @@ public class WeaponController : MonoBehaviour
     private void Start()
     {
         // The rig builds its blocks during Awake, so the viewmodel muzzle only exists by now.
+        RebindMuzzle();
+    }
+
+    /// <summary>
+    /// Points <see cref="muzzle"/> at the current viewmodel weapon's muzzle. Start does it once,
+    /// but a role reveal can rebuild the rig long after Start — the cached transform dies with
+    /// the old body, and a stale muzzle does not throw: it silently fails the null check in
+    /// <see cref="Fire"/> and every round leaves from the eye instead of the barrel.
+    /// </summary>
+    public void RebindMuzzle()
+    {
         Transform viewmodelWeapon = blockRig != null ? blockRig.ViewWeapon : null;
-        if (viewmodelWeapon != null)
-        {
-            Transform viewmodelMuzzle = viewmodelWeapon.Find("Muzzle");
-            if (viewmodelMuzzle != null) muzzle = viewmodelMuzzle;
-        }
+        if (viewmodelWeapon == null) return;
+
+        Transform viewmodelMuzzle = viewmodelWeapon.Find("Muzzle");
+        if (viewmodelMuzzle != null) muzzle = viewmodelMuzzle;
     }
 
     private void Update()

@@ -163,21 +163,25 @@ public class BlockRig : MonoBehaviour
     /// Anything that cached a transform out of the old body — the weapon controller keeps the
     /// viewmodel muzzle — holds a destroyed reference afterwards and must rebind. Components
     /// that read the rig's properties every frame (the animator, the switcher) need nothing.
+    ///
+    /// Returns whether the body actually changed, so the caller only rebinds and repaints on
+    /// a real swap — roles are re-announced every match and most announcements change nothing.
     /// </summary>
-    public void Rebuild(BodyPlan plan)
+    public bool Rebuild(BodyPlan plan)
     {
-        if (_built && Plan == plan) return;
+        if (_built && Plan == plan) return false;
 
         Plan = plan;
         if (!_built)
         {
             // Awake has not run yet — build now so the caller finds the joints in place.
             Build();
-            return;
+            return true;
         }
 
         TearDown();
         Build();
+        return true;
     }
 
     /// <summary>
