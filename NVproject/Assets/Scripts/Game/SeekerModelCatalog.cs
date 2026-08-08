@@ -57,6 +57,30 @@ namespace NV.Game
         /// <summary>Emissive eye block edge in px; 0 = no eyes. Two, on the head's front face.</summary>
         public float eyePx;
 
+        // ---- Dread detail. Every piece defaults to 0/off — a plan opts in. All of it is thin
+        // dressing that stays at or inside the server box; none of it may read as hittable mass.
+
+        /// <summary>Vertebrae poking through the back, in px; 0 = none. Bone-coloured, five of them.</summary>
+        public float spineRidgePx;
+
+        /// <summary>Exposed rib bars across the front, in px; 0 = none.</summary>
+        public float ribPx;
+
+        /// <summary>Finger blades on the free hand (and its viewmodel copy), in px; 0 = none.</summary>
+        public float clawPx;
+
+        /// <summary>Hanging unhinged jaw, as a scale on head-proportioned blocks; 0 = none.</summary>
+        public float jawPx;
+
+        /// <summary>Permanent head cock in degrees. The stillness reads wrong before it ever moves.</summary>
+        public float headTiltDeg;
+
+        /// <summary>Backward spur at each knee, in px; 0 = none. Hints at a joint bending the wrong way.</summary>
+        public float kneeSpurPx;
+
+        /// <summary>0 = matched eyes, 1 = plainly mismatched. Symmetry is what faces are supposed to have.</summary>
+        public float eyeAsymmetry;
+
         /// <summary>Viewmodel framing for this body's own first person. Longer arms need their own solve.</summary>
         public Vector3 viewmodelOffset = new Vector3(-0.1692f, -0.0028f, 0.1027f);
 
@@ -67,6 +91,9 @@ namespace NV.Game
 
         /// <summary>The grown weapon. Pale against the dark body, so the armed arm reads at a glance.</summary>
         public Color boneColor = Color.white;
+
+        /// <summary>Inside of the open mouth. Darker than the body — a hole, not a surface.</summary>
+        public Color mawColor = new Color(0.02f, 0.015f, 0.015f);
 
         /// <summary>Emission strength of the eyes. They must read through the fog before the body does.</summary>
         public float eyeGlow = 1f;
@@ -110,6 +137,7 @@ namespace NV.Game
         private Material _body;
         private Material _eye;
         private Material _bone;
+        private Material _maw;
 
         public Material BodyMaterial
         {
@@ -141,6 +169,15 @@ namespace NV.Game
             {
                 if (_bone == null) _bone = MakeLit(label + " Bone", boneColor);
                 return _bone;
+            }
+        }
+
+        public Material MawMaterial
+        {
+            get
+            {
+                if (_maw == null) _maw = MakeLit(label + " Maw", mawColor);
+                return _maw;
             }
         }
 
@@ -204,7 +241,15 @@ namespace NV.Game
             headDropPx = 3f,
             armLengthPx = 20f,
             armThickPx = 3f,
-            eyePx = 1.2f,
+            eyePx = 1.35f,
+
+            spineRidgePx = 1.1f,
+            ribPx = 0.55f,
+            clawPx = 0.6f,
+            jawPx = 1f,
+            headTiltDeg = 16f,
+            kneeSpurPx = 0.9f,
+            eyeAsymmetry = 0.65f,
 
             // Long arms hang lower on screen; lifted and pushed out relative to the humanoid
             // solve. First guess — re-solved against the rasteriser in the animation pass.
@@ -212,10 +257,10 @@ namespace NV.Game
 
             // Near-black warm grey: in the mono-yellow fog a dark mass with two lit points
             // reads from much further than any colour would.
-            bodyColor = new Color(0.09f, 0.085f, 0.078f),
+            bodyColor = new Color(0.062f, 0.058f, 0.052f),
             eyeColor = new Color(1f, 0.93f, 0.72f),
-            eyeGlow = 3.2f,
-            boneColor = new Color(0.82f, 0.78f, 0.68f),
+            eyeGlow = 4f,
+            boneColor = new Color(0.78f, 0.73f, 0.62f),
 
             walkStrideRate = 0.75f,     // long, slow strides — the swing angle follows from speed
             sprintStrideRate = 1.35f,

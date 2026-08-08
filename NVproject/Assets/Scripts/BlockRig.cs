@@ -100,6 +100,12 @@ public class BlockRig : MonoBehaviour
     public BodyPlan Plan { get; private set; }
 
     /// <summary>
+    /// The monster's eye blocks, for the animator's glow swell. Null on the humanoid and
+    /// after a teardown — consumers must re-read it every frame, like every other rig property.
+    /// </summary>
+    public MeshRenderer[] EyeRenderers { get; private set; }
+
+    /// <summary>
     /// Is this body a monster? <c>CharacterAppearance</c> keeps its lobby paint off while this
     /// is true — the plan owns its colours.
     /// </summary>
@@ -205,6 +211,7 @@ public class BlockRig : MonoBehaviour
         Hips = Torso = Neck = ArmL = ArmR = LegL = LegR = HandR = null;
         ViewRoot = ViewArmL = ViewArmR = ViewHandR = null;
         BodyWeapon = ViewWeapon = null;
+        EyeRenderers = null;
         _built = false;
     }
 
@@ -339,24 +346,96 @@ public class BlockRig : MonoBehaviour
                 bodyLayer, flesh);
         }
 
-        // The head hangs forward of the collar and *below* the hump, too small for the body.
+        // The head hangs forward of the collar and *below* the hump, too small for the body,
+        // and permanently cocked — a tilt that never rights itself reads as wrong before the
+        // thing has moved at all. The cock is baked into the blocks (same rule as the hunch),
+        // so the animator's look pitch and the idle snap ride on top of it.
         Neck = NewJoint("Neck", Torso, collar);
         Vector3 headCentre = new Vector3(0f,
             (plan.headPx * 0.5f - plan.headDropPx) * px,
             plan.headPx * 0.35f * px);
-        AddBlock(Neck, "Head Block", headCentre, Quaternion.identity,
+        Quaternion cock = Quaternion.Euler(8f, 0f, plan.headTiltDeg);
+        AddBlock(Neck, "Head Block", headCentre, cock,
             new Vector3(HeadSize, HeadSize, HeadSize), bodyLayer, flesh);
 
-        // Eyes: the only lit thing on the body. In this fog two pale points read from further
-        // than the whole silhouette does — they are what you see first down a corridor.
+        // A sinew of neck between collar and skull, so the head reads as hung, not floating.
+        AddBlock(Neck, "Neck Sinew", headCentre * 0.35f, Quaternion.identity,
+            new Vector3(1.8f, 2.6f, 1.8f) * px, bodyLayer, flesh);
+
+        // Eyes: the only lit thing on the body, and deliberately mismatched — symmetry is what
+        // faces are supposed to have. In this fog two pale points read from further than the
+        // whole silhouette does, and the animator swells them just before the head snaps.
         if (plan.eyePx > 0f)
         {
             Material glow = plan.EyeMaterial;
             float eye = plan.eyePx * px;
-            AddBlock(Neck, "Eye R", headCentre + new Vector3(HeadSize * 0.22f, HeadSize * 0.1f, HeadSize * 0.5f),
-                Quaternion.identity, new Vector3(eye, eye * 0.8f, eye * 0.4f), bodyLayer, glow);
-            AddBlock(Neck, "Eye L", headCentre + new Vector3(-HeadSize * 0.22f, HeadSize * 0.1f, HeadSize * 0.5f),
-                Quaternion.identity, new Vector3(eye, eye * 0.8f, eye * 0.4f), bodyLayer, glow);
+            float asym = plan.eyeAsymmetry;
+
+            Transform eyeR = AddBlock(Neck, "Eye R",
+                headCentre + cock * new Vector3(HeadSize * 0.22f, HeadSize * (0.1f - 0.08f * asym), HeadSize * 0.5f),
+                cock, new Vector3(eye, eye * 0.8f, eye * 0.4f) * (1f + 0.35f * asym), bodyLayer, glow);
+            Transform eyeL = AddBlock(Neck, "Eye L",
+                headCentre + cock * new Vector3(-HeadSize * 0.22f, HeadSize * (0.1f + 0.07f * asym), HeadSize * 0.5f),
+                cock, new Vector3(eye, eye * 0.8f, eye * 0.4f) * (1f - 0.25f * asym), bodyLayer, glow);
+
+            EyeRenderers = new[]
+            {
+                eyeR.GetComponent<MeshRenderer>(),
+                eyeL.GetComponent<MeshRenderer>(),
+            };
+        }
+
+        // The jaw hangs open and never closes. The maw behind it is darker than the body —
+        // a hole where a face should finish, not a surface.
+        if (plan.jawPx > 0f)
+        {
+            AddBlock(Neck, "Maw", headCentre + cock * new Vector3(0f, -HeadSize * 0.42f, HeadSize * 0.28f),
+                cock, new Vector3(HeadSize * 0.5f, HeadSize * 0.3f, HeadSize * 0.32f) * plan.jawPx,
+                bodyLayer, plan.MawMaterial);
+            AddBlock(Neck, "Jaw", headCentre + cock * new Vector3(0f, -HeadSize * 0.64f, HeadSize * 0.2f),
+                cock, new Vector3(HeadSize * 0.52f, HeadSize * 0.42f, HeadSize * 0.36f) * plan.jawPx,
+                bodyLayer, flesh);
+        }
+
+        // Vertebrae through the skin of the bent back, plus two blunt spikes off the hump for
+        // the outline. Bone against near-black flesh: the pale pieces are what the fog lets
+        // through first. All of it hugs the spine — thin dressing, no hittable-looking mass.
+        if (plan.spineRidgePx > 0f)
+        {
+            Material ridgeBone = plan.BoneMaterial;
+            float r = plan.spineRidgePx * px;
+            for (int i = 0; i < 5; i++)
+            {
+                float t = (i + 0.5f) / 5f;
+                AddBlock(Torso, "Ridge " + i,
+                    lean * new Vector3(0f, t * torsoSize.y, -(torsoSize.z * 0.5f + r * 0.35f)),
+                    lean, new Vector3(r * 0.9f, r * 1.5f, r * 0.9f), bodyLayer, ridgeBone);
+            }
+
+            if (plan.humpPx > 0f)
+            {
+                AddBlock(Torso, "Hump Spike R",
+                    collar + lean * new Vector3(torsoSize.x * 0.42f, plan.humpPx * 0.7f * px, 0f),
+                    lean, new Vector3(r, r * 2.4f, r), bodyLayer, flesh);
+                AddBlock(Torso, "Hump Spike L",
+                    collar + lean * new Vector3(-torsoSize.x * 0.42f, plan.humpPx * 0.7f * px, 0f),
+                    lean, new Vector3(r, r * 2.4f, r), bodyLayer, flesh);
+            }
+        }
+
+        // Bare ribs across the front. A chest that shows its skeleton reads as starved, and
+        // starved is scarier than strong in a building with nothing to eat.
+        if (plan.ribPx > 0f)
+        {
+            Material ribBone = plan.BoneMaterial;
+            float rb = plan.ribPx * px;
+            for (int i = 0; i < 3; i++)
+            {
+                float t = 0.30f + 0.16f * i;
+                AddBlock(Torso, "Rib " + i,
+                    lean * new Vector3(0f, t * torsoSize.y, torsoSize.z * 0.5f + rb * 0.3f),
+                    lean, new Vector3(torsoSize.x * (0.92f - 0.08f * i), rb, rb), bodyLayer, ribBone);
+            }
         }
 
         // Arms hang from the collar's corners — on this body that is above and forward of
@@ -369,8 +448,24 @@ public class BlockRig : MonoBehaviour
         LegR = NewLimb("Leg R", Hips, new Vector3(legX, 0f, 0f), legSize, bodyLayer, flesh);
         LegL = NewLimb("Leg L", Hips, new Vector3(-legX, 0f, 0f), legSize, bodyLayer, flesh);
 
+        // A backward spur at each knee — the hint of a joint that bends the wrong way. It
+        // rides the leg block, so the walk swings it and the limp drags it.
+        if (plan.kneeSpurPx > 0f)
+        {
+            float k = plan.kneeSpurPx * px;
+            Quaternion hook = Quaternion.Euler(-24f, 0f, 0f);
+            AddBlock(LegR, "Knee Spur", new Vector3(0f, -LimbLength * 0.5f, -(legSize.z * 0.5f + k * 0.25f)),
+                hook, new Vector3(k, k * 2.1f, k), bodyLayer, flesh);
+            AddBlock(LegL, "Knee Spur", new Vector3(0f, -LimbLength * 0.5f, -(legSize.z * 0.5f + k * 0.25f)),
+                hook, new Vector3(k, k * 2.1f, k), bodyLayer, flesh);
+        }
+
         HandR = NewJoint("Hand R", ArmR, new Vector3(0f, -ArmLength, 0f));
         BodyWeapon = BuildBoneBarrel("Bone Barrel", HandR, px, bodyLayer, plan);
+
+        // Finger blades on the free hand only — one arm is a tool, the other is what the tool
+        // grew out of, and the asymmetry between them is part of the wrongness.
+        if (plan.clawPx > 0f) AddClaws(ArmL, plan, px, bodyLayer);
 
         BuildMonsterViewmodel(px, armSize, plan);
     }
@@ -397,6 +492,10 @@ public class BlockRig : MonoBehaviour
         ViewHandR = NewJoint("View Hand R", ViewArmR, new Vector3(0f, -ArmLength, 0f));
         ViewWeapon = BuildBoneBarrel("Bone Barrel (Viewmodel)", ViewHandR, px, armsLayer, plan);
 
+        // Your own free hand carries the claws too — the first person has to be the same
+        // creature everyone else is running from.
+        if (plan.clawPx > 0f) AddClaws(ViewArmL, plan, px, armsLayer);
+
         DisableViewmodelShadows();
     }
 
@@ -422,6 +521,21 @@ public class BlockRig : MonoBehaviour
         Transform muzzle = NewJoint("Muzzle", gun, new Vector3(0f, 0.7f * px, 6.2f * px));
         muzzle.gameObject.layer = layer;
         return gun;
+    }
+
+    /// <summary>Three finger blades fanning off a hand, bone against the dark flesh.</summary>
+    private void AddClaws(Transform arm, BodyPlan plan, float px, int layer)
+    {
+        Material bone = plan.BoneMaterial;
+        float c = plan.clawPx * px;
+
+        for (int i = -1; i <= 1; i++)
+        {
+            AddBlock(arm, "Claw " + (i + 1),
+                new Vector3(i * c * 1.2f, -ArmLength - c * 1.2f, c * 0.4f),
+                Quaternion.Euler(10f, 0f, i * 9f),
+                new Vector3(c * 0.7f, c * 3.2f, c * 0.7f), layer, bone);
+        }
     }
 
     // ==================================================================== shared pieces
@@ -466,7 +580,7 @@ public class BlockRig : MonoBehaviour
     private void AddBlock(Transform parent, string name, Vector3 localCentre, Vector3 size, int layer)
         => AddBlock(parent, name, localCentre, Quaternion.identity, size, layer, blockMaterial);
 
-    private void AddBlock(Transform parent, string name, Vector3 localCentre, Quaternion localRotation,
+    private Transform AddBlock(Transform parent, string name, Vector3 localCentre, Quaternion localRotation,
         Vector3 size, int layer, Material material)
     {
         var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -485,6 +599,7 @@ public class BlockRig : MonoBehaviour
         t.localPosition = localCentre;
         t.localRotation = localRotation;
         t.localScale = size * (1f - seam);
+        return t;
     }
 
     private static Material CreateWhiteMaterial()

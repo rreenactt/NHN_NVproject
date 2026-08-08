@@ -177,6 +177,9 @@ public class BlockCharacterAnimator : MonoBehaviour
     private float _twitchInterval, _twitchAngle;
     private float _twitchCountdown, _twitchTarget, _twitchHold, _twitchYaw;
 
+    private MaterialPropertyBlock _eyeBlock;
+    private float _eyeSwell = 1f;
+
     /// <summary>How far through the recoil kick we currently are, 0..1. Read by the crosshair.</summary>
     public float RecoilWeight => _recoilWeight;
 
@@ -228,6 +231,7 @@ public class BlockCharacterAnimator : MonoBehaviour
         ApplyPlanProfile();
         UpdateGait();
         UpdateStateTimers();
+        UpdateEyeGlow();
 
         float lowered = weaponLower != null ? weaponLower.Weight : 0f;
 
@@ -495,6 +499,33 @@ public class BlockCharacterAnimator : MonoBehaviour
 
         float rate = Mathf.Abs(_twitchTarget) > 0.01f ? 1400f : 140f;
         _twitchYaw = Mathf.MoveTowards(_twitchYaw, _twitchTarget, rate * Time.deltaTime);
+    }
+
+    /// <summary>
+    /// The eyes swell while the head snaps and holds — brightening is the "it noticed you"
+    /// cue, timed to the twitch so the two read as one event — and idle at a slow uneasy
+    /// pulse otherwise. Applied through a per-renderer property block so the shared eye
+    /// material (one per plan, worn by every body on that plan) is never mutated: mutating it
+    /// would light every monster's eyes on one monster's twitch, and — same family as the
+    /// BloodTrail lesson — a runtime material edit is forever.
+    /// </summary>
+    private void UpdateEyeGlow()
+    {
+        NV.Game.BodyPlan plan = rig.Plan;
+        MeshRenderer[] eyes = rig.EyeRenderers;
+        if (plan == null || eyes == null || eyes.Length == 0) return;
+
+        float target = Mathf.Abs(_twitchTarget) > 0.01f ? 2.6f : 1f;
+        _eyeSwell = Mathf.MoveTowards(_eyeSwell, target, 7f * Time.deltaTime);
+
+        float pulse = 1f + 0.1f * Mathf.Sin(Time.time * 2.3f);
+
+        // Recreated after a domain reload wipes it — plain object, not a Unity one.
+        if (_eyeBlock == null) _eyeBlock = new MaterialPropertyBlock();
+        _eyeBlock.SetColor("_EmissionColor", plan.eyeColor * (plan.eyeGlow * _eyeSwell * pulse));
+
+        for (int i = 0; i < eyes.Length; i++)
+            if (eyes[i] != null) eyes[i].SetPropertyBlock(_eyeBlock);
     }
 
     /// <summary>
