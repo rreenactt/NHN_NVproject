@@ -674,16 +674,14 @@ namespace NV.Game.UI
                 _ => string.Empty,
             };
 
-            _endTitle.EnableInClassList("card__title--win", localWon);
-            _endTitle.EnableInClassList("card__title--lose", !localWon);
+            _endTitle.EnableInClassList("card__title--win", !aborted && localWon);
+            _endTitle.EnableInClassList("card__title--lose", !aborted && !localWon);
 
             // **한 박자 두고 띄운다.** 매치가 끝나는 순간은 대개 화면에서 무슨 일이 벌어지는
             // 순간이다 — 마지막 한 명이 문으로 걸어 나가거나, 쓰러지거나, 시계가 0 이 된다.
             // 그 프레임에 카드가 덮으면 결과는 읽히는데 **왜 그렇게 됐는지를 못 본다.**
+            // 카드를 켜는 것은 `UpdateCards` 다 — 여기서 함께 켜면 지연이 없는 것과 같다.
             _endCardDelay = EndCardDelaySeconds;
-            _endTitle.EnableInClassList("card__title--win", !aborted && localWon);
-            _endTitle.EnableInClassList("card__title--lose", !aborted && !localWon);
-            _endCard.style.display = DisplayStyle.Flex;
             _revealCard.style.display = DisplayStyle.None;
 
             _mapOverlay.style.display = DisplayStyle.None;
