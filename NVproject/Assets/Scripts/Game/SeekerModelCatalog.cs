@@ -65,6 +65,9 @@ namespace NV.Game
         public Color bodyColor = Color.white;
         public Color eyeColor = Color.white;
 
+        /// <summary>The grown weapon. Pale against the dark body, so the armed arm reads at a glance.</summary>
+        public Color boneColor = Color.white;
+
         /// <summary>Emission strength of the eyes. They must read through the fog before the body does.</summary>
         public float eyeGlow = 1f;
 
@@ -106,6 +109,7 @@ namespace NV.Game
 
         private Material _body;
         private Material _eye;
+        private Material _bone;
 
         public Material BodyMaterial
         {
@@ -128,6 +132,15 @@ namespace NV.Game
                     _eye.SetColor("_EmissionColor", eyeColor * eyeGlow);
                 }
                 return _eye;
+            }
+        }
+
+        public Material BoneMaterial
+        {
+            get
+            {
+                if (_bone == null) _bone = MakeLit(label + " Bone", boneColor);
+                return _bone;
             }
         }
 
@@ -202,6 +215,7 @@ namespace NV.Game
             bodyColor = new Color(0.09f, 0.085f, 0.078f),
             eyeColor = new Color(1f, 0.93f, 0.72f),
             eyeGlow = 3.2f,
+            boneColor = new Color(0.82f, 0.78f, 0.68f),
 
             walkStrideRate = 0.75f,     // long, slow strides — the swing angle follows from speed
             sprintStrideRate = 1.35f,
