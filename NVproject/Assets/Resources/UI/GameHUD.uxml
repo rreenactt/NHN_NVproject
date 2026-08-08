@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <ui:UXML xmlns:ui="UnityEngine.UIElements" editor-extension-mode="False">
     <Style src="project://database/Assets/Resources/UI/game-hud.uss" />
 
@@ -12,6 +12,16 @@
         <!-- full-screen atmosphere: fluorescent scanlines, then the wound vignette over them -->
         <ui:VisualElement name="scanlines" class="scanlines" picking-mode="Ignore" />
         <ui:VisualElement name="vignette" class="vignette" picking-mode="Ignore" />
+
+        <!--
+            쓰러진 뒤의 화면. 색이 빠진 것처럼 보이게 하는 중성 회색 막이다.
+
+            **포스트프로세싱으로 채도를 내리지 않는다.** 카메라의 `m_RenderPostProcessing` 이
+            꺼져 있고, 켜는 순간 씬 볼륨의 Bloom·Vignette·Tonemapping 이 함께 적용되어
+            게임 전체 룩이 바뀐다. 이 방의 색은 누런 형광등 하나뿐이므로, 채도를 가진
+            픽셀 위에 무채색을 얹는 것만으로 그 누런 기가 빠진다.
+        -->
+        <ui:VisualElement name="dead-wash" class="dead-wash" picking-mode="Ignore" />
 
         <!-- ============================================================ shared bar -->
         <ui:VisualElement name="shared-bar" class="shared-bar" picking-mode="Ignore">
