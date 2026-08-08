@@ -166,6 +166,17 @@ public class BlockCharacterAnimator : MonoBehaviour
     private float _recoilElapsed = -1f;   // negative = no shot in flight
     private float _recoilWeight;
 
+    // --- Body-plan profile (see ApplyPlanProfile) ---
+    private NV.Game.BodyPlan _appliedPlan;
+    private bool _planApplied;
+    private bool _defaultsCaptured;
+    private float _dWalkStrideRate, _dSprintStrideRate, _dArmSwingRatio, _dHeadStabilise, _dBreathAmount;
+    private Vector3 _dArmedDirectionR, _dArmedDirectionL;
+
+    private float _limpScale = 1f;
+    private float _twitchInterval, _twitchAngle;
+    private float _twitchCountdown, _twitchTarget, _twitchHold, _twitchYaw;
+
     /// <summary>How far through the recoil kick we currently are, 0..1. Read by the crosshair.</summary>
     public float RecoilWeight => _recoilWeight;
 
@@ -214,6 +225,7 @@ public class BlockCharacterAnimator : MonoBehaviour
     {
         if (rig == null || controller == null || rig.Hips == null) return;
 
+        ApplyPlanProfile();
         UpdateGait();
         UpdateStateTimers();
 
@@ -299,6 +311,69 @@ public class BlockCharacterAnimator : MonoBehaviour
     }
 
     /// <summary>
+    /// Retunes this animator to the rig's current <c>BodyPlan</c> — a monster walks with a lower
+    /// cadence, hanging arms, an unstabilised head and a limp, and all of that is data on the
+    /// plan rather than a second animator. **The maths does not change**: the no-slide relation
+    /// reads whatever cadence is set and solves the swing from measured speed, so a monster's
+    /// feet plant exactly like a human's.
+    ///
+    /// Polled per frame like every other role effect, because the rig can be rebuilt at any
+    /// moment (role reveal) and this component is never told. The serialized defaults are
+    /// captured once and restored on the way back — the humanoid must come back *tuned as the
+    /// scene tuned it*, not as the .cs defaults have it.
+    /// </summary>
+    private void ApplyPlanProfile()
+    {
+        NV.Game.BodyPlan plan = rig.Plan;
+        if (_planApplied && plan == _appliedPlan) return;
+
+        if (!_defaultsCaptured)
+        {
+            _dWalkStrideRate = walkStrideRate;
+            _dSprintStrideRate = sprintStrideRate;
+            _dArmSwingRatio = armSwingRatio;
+            _dHeadStabilise = headStabilise;
+            _dBreathAmount = breathAmount;
+            _dArmedDirectionR = armedDirectionR;
+            _dArmedDirectionL = armedDirectionL;
+            _defaultsCaptured = true;
+        }
+
+        if (plan != null)
+        {
+            walkStrideRate = plan.walkStrideRate;
+            sprintStrideRate = plan.sprintStrideRate;
+            armSwingRatio = plan.armSwingRatio;
+            headStabilise = plan.headStabilise;
+            breathAmount = plan.breathAmount;
+            armedDirectionR = plan.armedDirectionR;
+            armedDirectionL = plan.armedDirectionL;
+            _limpScale = plan.limpScale;
+            _twitchInterval = plan.twitchInterval;
+            _twitchAngle = plan.twitchAngle;
+        }
+        else
+        {
+            walkStrideRate = _dWalkStrideRate;
+            sprintStrideRate = _dSprintStrideRate;
+            armSwingRatio = _dArmSwingRatio;
+            headStabilise = _dHeadStabilise;
+            breathAmount = _dBreathAmount;
+            armedDirectionR = _dArmedDirectionR;
+            armedDirectionL = _dArmedDirectionL;
+            _limpScale = 1f;
+            _twitchInterval = 0f;
+            _twitchAngle = 0f;
+        }
+
+        _twitchCountdown = _twitchInterval;
+        _twitchTarget = 0f;
+        _twitchYaw = 0f;
+        _appliedPlan = plan;
+        _planApplied = true;
+    }
+
+    /// <summary>
     /// Turns measured speed into a stride. See the class comment for why the swing angle is
     /// solved from speed rather than authored — it is what keeps the feet planted.
     /// </summary>
@@ -371,6 +446,55 @@ public class BlockCharacterAnimator : MonoBehaviour
         _armedWeight = Mathf.SmoothDamp(_armedWeight, armedTarget, ref _armedVelocity, armedBlendTime);
 
         UpdateRecoil();
+        UpdateTwitch();
+    }
+
+    /// <summary>
+    /// The monster's idle: near-motionless, then a single sharp head turn, held, released
+    /// slowly. **The asymmetry of the speeds is the scare** — the snap is too fast to be a
+    /// glance (~1400°/s) and the return is too slow to be one (~140°/s), so it reads as
+    /// something *noticing* rather than someone looking around. Runs only while still; any
+    /// movement folds the head back and restarts the clock, so a stalking Seeker who stops to
+    /// listen is exactly when it fires.
+    /// </summary>
+    private void UpdateTwitch()
+    {
+        if (_twitchInterval <= 0f)
+        {
+            _twitchYaw = 0f;
+            return;
+        }
+
+        bool still = _speed < 0.25f && controller.IsGrounded;
+
+        if (!still)
+        {
+            _twitchTarget = 0f;
+            _twitchCountdown = _twitchInterval;
+        }
+        else if (_twitchTarget == 0f)
+        {
+            _twitchCountdown -= Time.deltaTime;
+            if (_twitchCountdown <= 0f)
+            {
+                // Presentation-only randomness — this is not the deterministic family of draws
+                // the map generator lives by, any more than the footstep pitch wobble is.
+                _twitchTarget = (Random.value < 0.5f ? -1f : 1f) * _twitchAngle;
+                _twitchHold = 1.1f;
+            }
+        }
+        else
+        {
+            _twitchHold -= Time.deltaTime;
+            if (_twitchHold <= 0f)
+            {
+                _twitchTarget = 0f;
+                _twitchCountdown = _twitchInterval * Random.Range(0.7f, 1.3f);
+            }
+        }
+
+        float rate = Mathf.Abs(_twitchTarget) > 0.01f ? 1400f : 140f;
+        _twitchYaw = Mathf.MoveTowards(_twitchYaw, _twitchTarget, rate * Time.deltaTime);
     }
 
     /// <summary>
@@ -437,7 +561,7 @@ public class BlockCharacterAnimator : MonoBehaviour
         // gaze stays level instead of rolling with every step.
         float headPitch = pitch * headShare - torsoPitch * headStabilise;
         float headRoll = -roll * headStabilise;
-        rig.Neck.localRotation = Quaternion.Euler(headPitch, 0f, headRoll);
+        rig.Neck.localRotation = Quaternion.Euler(headPitch, _twitchYaw, headRoll);
 
         // --- Legs ---
         if (airborne)
@@ -459,9 +583,12 @@ public class BlockCharacterAnimator : MonoBehaviour
                 ? 18f * Mathf.Sin(_landTimer / Mathf.Max(1e-3f, landRecovery) * Mathf.PI)
                 : 0f;
 
+            // The limp: one leg swings short. The planted-foot relation is solved for the FULL
+            // swing, so the short leg skates a little by design — a dragged foot is exactly a
+            // foot that does not keep up with the ground.
             rig.LegR.localRotation = Quaternion.AngleAxis(swingDegrees * stride, _swingAxis)
                                    * Quaternion.AngleAxis(legBend, Vector3.right);
-            rig.LegL.localRotation = Quaternion.AngleAxis(-swingDegrees * stride, _swingAxis)
+            rig.LegL.localRotation = Quaternion.AngleAxis(-swingDegrees * stride * _limpScale, _swingAxis)
                                    * Quaternion.AngleAxis(legBend, Vector3.right);
         }
     }
