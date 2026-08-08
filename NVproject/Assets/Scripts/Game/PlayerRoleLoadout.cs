@@ -113,6 +113,12 @@ namespace NV.Game
             }
 
             ShowWeapon(body, seeker);
+
+            // The step timbre follows the body, not the role: a plan without heavy steps keeps
+            // the shoes. Unconditional because it is one bool a frame at worst, and the flag has
+            // to be right even when the body did not need rebuilding.
+            var steps = body.GetComponent<FootstepAudio>();
+            if (steps != null) steps.monsterSteps = rig.Plan != null && rig.Plan.heavySteps;
         }
 
         /// <summary>

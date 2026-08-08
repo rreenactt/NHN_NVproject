@@ -60,6 +60,11 @@ public class FootstepAudio : MonoBehaviour
              "machine-gun the sound.")]
     public float minStepInterval = 0.14f;
 
+    [Tooltip("Play the monster's steps instead of the shoes. ONLY the timbre changes — the " +
+             "rolloff curve, the ranges and every loudness rule stay identical, because how far " +
+             "a step carries is a balance value and the monster does not get a different game.")]
+    public bool monsterSteps;
+
     [Header("Landing")]
     [Tooltip("Volume of the thud on landing, relative to a step.")]
     public float landLoudness = 1.5f;
@@ -77,6 +82,8 @@ public class FootstepAudio : MonoBehaviour
 
     private static AudioClip[] _stepClips;
     private static AudioClip _landClip;
+    private static AudioClip[] _monsterStepClips;
+    private static AudioClip _monsterLandClip;
 
     private AudioSource _source;
     private float _lastSin;
@@ -228,7 +235,8 @@ public class FootstepAudio : MonoBehaviour
         if (grounded && !_wasGrounded && controller != null)
         {
             float impact = Mathf.Clamp01(Mathf.Abs(controller.VerticalVelocity) / Mathf.Max(0.1f, landFullSpeed));
-            Play(LandClip(), landLoudness * Mathf.Lerp(0.45f, 1f, impact), Random.Range(0.94f, 1.02f));
+            AudioClip clip = monsterSteps ? MonsterLandClip() : LandClip();
+            Play(clip, landLoudness * Mathf.Lerp(0.45f, 1f, impact), Random.Range(0.94f, 1.02f));
         }
         _wasGrounded = grounded;
     }
@@ -270,7 +278,7 @@ public class FootstepAudio : MonoBehaviour
     /// <summary>Never the same sample twice running — repetition is what makes footsteps read as a machine.</summary>
     private AudioClip NextStepClip()
     {
-        AudioClip[] clips = StepClips();
+        AudioClip[] clips = monsterSteps ? MonsterStepClips() : StepClips();
         if (clips.Length == 0) return null;
 
         int index = Random.Range(0, clips.Length);
@@ -320,6 +328,47 @@ public class FootstepAudio : MonoBehaviour
     }
 
     /// <summary>
+    /// The Seeker's steps: something heavy and barefoot dragging itself over the carpet. Same
+    /// synthesis, opposite recipe to the shoes — the leather click is nearly gone (no sole), the
+    /// tock drops almost two octaves so it knocks like something hollow and large, the weight
+    /// more than doubles and rings long, the "toe" lands a slow 85+ ms after the heel (a shuffle,
+    /// not a heel-toe), and the scuff is cranked, which is the drag itself.
+    ///
+    /// In a game where the footstep is the Runner's main warning, *what* the step sounds like is
+    /// information too: one sound says where, the other says what is coming.
+    /// </summary>
+    private static AudioClip[] MonsterStepClips()
+    {
+        if (_monsterStepClips != null && _monsterStepClips.Length > 0 && _monsterStepClips[0] != null)
+            return _monsterStepClips;
+
+        _monsterStepClips = new AudioClip[5];
+        for (int i = 0; i < _monsterStepClips.Length; i++)
+            _monsterStepClips[i] = BuildShoeStep("Monster Step " + i, 7333 + i * 911,
+                tockHz: 190f + i * 14f,
+                bodyHz: 58f + i * 4f,
+                bodyDecay: 9f,
+                toeDelay: 0.085f + i * 0.006f,
+                toeLevel: 0.60f,
+                clickLevel: 0.10f,
+                bodyLevel: 1.6f,
+                length: 0.55f,
+                scuffLevel: 0.55f);
+
+        return _monsterStepClips;
+    }
+
+    private static AudioClip MonsterLandClip()
+    {
+        if (_monsterLandClip != null) return _monsterLandClip;
+
+        _monsterLandClip = BuildShoeStep("Monster Landing", 40417,
+            tockHz: 130f, bodyHz: 46f, bodyDecay: 7f, toeDelay: 0.03f, toeLevel: 0.5f,
+            clickLevel: 0.15f, bodyLevel: 1.9f, length: 0.7f, scuffLevel: 0.4f);
+        return _monsterLandClip;
+    }
+
+    /// <summary>
     /// A leather-soled shoe on a hard floor under thin carpet.
     ///
     /// A shoe is almost the opposite of the soft thud this used to make, and it is three things
@@ -340,7 +389,7 @@ public class FootstepAudio : MonoBehaviour
     /// </summary>
     private static AudioClip BuildShoeStep(string name, int seed, float tockHz, float bodyHz,
         float bodyDecay, float toeDelay, float toeLevel, float clickLevel, float bodyLevel,
-        float length)
+        float length, float scuffLevel = 0.20f)
     {
         const int sampleRate = 44100;
         int count = Mathf.RoundToInt(sampleRate * length);
@@ -407,7 +456,7 @@ public class FootstepAudio : MonoBehaviour
             // the low end has to still be there when the toe lands, or the step reads as a tap
             // with a thud stapled to the front of it.
             float weight = Mathf.Sin(2f * Mathf.PI * bodyHz * u) * Mathf.Exp(-u * bodyDecay) * bodyLevel;
-            float scuff = grit * Mathf.Exp(-u * 80f) * 0.20f;
+            float scuff = grit * Mathf.Exp(-u * 80f) * scuffLevel;
 
             return click + tock + knock + weight + scuff;
         }
