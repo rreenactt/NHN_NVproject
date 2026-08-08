@@ -7,6 +7,15 @@ change it here first, then update `GameConfig` and the systems.
 - **Seeker** — exactly 1, armed with a gun. Cannot see the door or Runner key UI.
 - **Runner** — everyone else, unarmed. Objective: escape.
 
+**The Seeker's body is an information rule, not a skin.** The Seeker is drawn as
+the monster (`SeekerModelCatalog`) on every client, always — a Runner who sees a
+figure through the fog must be able to tell friend from threat by outline alone,
+and the monster's heavy dragging footstep is the audible half of the same rule.
+The lobby character the Seeker picked comes back the moment they stop being the
+Seeker. What does **not** change with the body: the server's hitbox
+(1.8 m × 0.8 m box), movement speeds, and every footstep range/loudness rule —
+the monster is a different silhouette and timbre, never a different game.
+
 ## Match flow
 1. **Lobby** — players join; roles unassigned.
 2. **Role reveal** — one Seeker chosen; brief reveal screen per player.
