@@ -19,8 +19,10 @@
 서버에 미리 할 일이 없다. OCI 가 만들어 준 `ubuntu` 계정과 그 키를 그대로 쓰면
 키 등록조차 필요 없다 — 인스턴스 생성 때 이미 등록되어 있다.
 
-1. **OCI 콘솔** — `VM.Standard.A1.Flex`(2 OCPU / 12GB, Ubuntu 24.04 aarch64) 생성.
-   VCN 보안 목록에 인바운드 22 허용 (80/443 은 Caddy 를 올릴 때).
+1. **OCI 콘솔** — 인스턴스 생성(Ubuntu 24.04). VCN 보안 목록에 인바운드 22 허용
+   (80/443 은 Caddy 를 올릴 때). **인스턴스 CPU 와 워크플로의 게시 RID 가 짝이어야
+   한다** — 서버에서 `uname -m` 이 `x86_64` 면 `linux-x64`(현재 설정), `aarch64`(A1)면
+   `server-deploy.yml` 의 RID 를 `linux-arm64` 로 바꾼다. 틀리면 `Exec format error`.
 2. **GitHub Secrets** (저장소 Settings ▸ Secrets and variables ▸ Actions):
 
    | Secret | 필수 | 값 · 생략 시 |

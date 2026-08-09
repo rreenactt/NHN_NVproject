@@ -42,9 +42,10 @@ jobs:
         run: dotnet test
 
       # self-contained: 서버에 .NET 설치가 필요 없고 런타임이 아티팩트에 고정된다.
-      # x64 러너의 arm64 크로스 게시는 네이티브 컴파일이 없어 그대로 된다.
-      - name: 게시 (linux-arm64, self-contained)
-        run: dotnet publish Api -c Release -r linux-arm64 --self-contained -o "$RUNNER_TEMP/stage/app"
+      # RID 는 인스턴스의 CPU 와 짝이다 — x64(E2 등)는 linux-x64, Ampere A1 은 linux-arm64.
+      # 틀리면 증상은 systemd 의 "Exec format error" 기동 실패다.
+      - name: 게시 (linux-x64, self-contained)
+        run: dotnet publish Api -c Release -r linux-x64 --self-contained -o "$RUNNER_TEMP/stage/app"
 
       # app/ 옆에 MapData/ 를 두는 구조가 appsettings 의 Game:MapDirectory(../MapData) 를
       # 저장소에서와 똑같이 성립시킨다 — 설정 변경 없이.

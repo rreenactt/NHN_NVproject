@@ -137,8 +137,10 @@ do_deploy() {
     local ts target prev
     ts=$(date +%Y%m%d-%H%M%S)
     target="$RELEASES/$ts"
-    # 실패 시 돌아갈 곳을 전환 전에 기록해 둔다.
-    prev=$(readlink -f "$CURRENT" 2>/dev/null || true)
+    # 실패 시 돌아갈 곳을 전환 전에 기록해 둔다. -e 여야 한다 — -f 는 링크가 아직
+    # 없어도 경로 문자열을 돌려주므로, 첫 배포가 실패하면 "이전 릴리스" 가 current
+    # 자신이 되어 자기를 가리키는 링크를 만든다.
+    prev=$(readlink -e "$CURRENT" 2>/dev/null || true)
 
     log "전개: $target"
     mkdir -p "$target"

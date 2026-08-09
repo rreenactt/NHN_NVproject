@@ -14,7 +14,7 @@ Oracle Cloud Free Tier 인스턴스에 NVserver 를 올리고, GitHub Actions �
 |---|---|---|
 | 인스턴스 | **VM.Standard.A1.Flex** (Ampere ARM), 2 OCPU / 12GB | Free Tier 한도(4 OCPU / 24GB) 안에서 넉넉하다. x64 `E2.1.Micro`(1GB)는 예비로 남긴다 |
 | OS | Ubuntu 24.04 (aarch64) | systemd, 패키지 최신 |
-| 게시 방식 | `dotnet publish -c Release -r linux-arm64 --self-contained` | 서버에 .NET 런타임 설치가 불필요해지고, 런타임 버전이 배포 아티팩트에 고정된다. 아티팩트가 ~90MB 로 커지는 대가는 Free Tier 대역폭(월 10TB)에서 무시할 수 있다 |
+| 게시 방식 | `dotnet publish -c Release -r {RID} --self-contained` | 서버에 .NET 런타임 설치가 불필요해지고, 런타임 버전이 배포 아티팩트에 고정된다. 아티팩트가 ~90MB 로 커지는 대가는 Free Tier 대역폭(월 10TB)에서 무시할 수 있다. **RID 는 인스턴스 CPU 와 짝이다** — A1(ARM)은 `linux-arm64`, E2 등 x64 는 `linux-x64`. 틀리면 `Exec format error` 로 기동이 안 된다 |
 | TLS | **Caddy** 리버스 프록시 + Let's Encrypt | WebGL 페이지가 HTTPS 면 `ws://` 는 브라우저가 차단한다 — `wss` 없는 배포는 클라이언트가 빌드를 거부한다(루트 `CLAUDE.md`). Caddy 는 인증서 발급·갱신이 자동이고 WebSocket 프록시에 추가 설정이 없다 |
 | 도메인 | 필요. 없으면 `duckdns` 류 무료 서브도메인 | Let's Encrypt 는 IP 로 발급하지 않는다 |
 
