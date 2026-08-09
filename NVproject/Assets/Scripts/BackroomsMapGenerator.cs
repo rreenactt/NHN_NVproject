@@ -114,7 +114,7 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
     private readonly List<Light> _flickerLights = new List<Light>();
     private readonly List<float> _flickerPhase = new List<float>();
 
-    private BoxCollider _ceilingLid;
+    private readonly List<BoxCollider> _ceilingLids = new List<BoxCollider>();
     private Material _wallMaterial, _carpetMaterial, _ceilingMaterial, _lightMaterial, _trimMaterial;
     private Material _deadPanelMaterial;
     private float _originX, _originZ;
@@ -507,6 +507,9 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
         _originX = -gridSize * cellSize * 0.5f;
         _originZ = -gridSize * cellSize * 0.5f;
         _collisionBoxes.Clear();
+        // 낡은 뚜껑은 ClearRoot 가 지우지만 목록은 남는다. 비우지 않으면 재생성마다
+        // 파괴된 참조가 쌓이고, 베이크가 그것들을 훑는다.
+        _ceilingLids.Clear();
         _flickerLights.Clear();
         _flickerPhase.Clear();
         WallPieces = 0;
@@ -794,40 +797,79 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
             BuildWalls(f);
         }
         BuildStairs();
-        BuildCeilingLid();
+        BuildCeilingLids();
     }
 
     /// <summary>
-    /// One invisible slab across the top storey, level with its ceiling.
+    /// An invisible slab across every storey, level with its ceiling.
     ///
     /// Ceiling tiles carry no collider — deliberately, since a grid of them would be a thousand
-    /// colliders and they never need to stop anything from below. That holds on every floor but
-    /// the last: the storey above provides the barrier, because its carpet slab *is* solid. The
-    /// top floor has nothing above it, so a player who climbs onto a device console (1 m) and
-    /// jumps (1.2 m) puts their eyes at 7.0 m against a 6.2 m ceiling and sees straight out of
-    /// the level.
+    /// colliders. What stopped a jump from below was supposed to be the storey above, because its
+    /// carpet slab *is* solid.
     ///
-    /// One box the size of the grid fixes it for the cost of a single collider. It is switched off
-    /// across the NavMesh bake — see <see cref="BakeNavMesh"/> — or the bots get a floor on the roof.
+    /// **The storey above is mostly not there.** Only 90 of the first floor's 284 walkable cells
+    /// have a second floor over them; above the other 194 the carpet was never built, so there was
+    /// nothing between a jumping player's head and the sky. This was written as if the top floor
+    /// were the only special case, and it was not — it was the only case where the hole covered
+    /// the *whole* storey and so got noticed.
+    ///
+    /// A lid per floor costs five colliders instead of 194. The stairwell is cut out of every lid
+    /// below the top, for the same reason its ceiling tiles are skipped: that hole is the stairs.
+    /// The slab sits *on* the ceiling plane rather than through it, so it takes no headroom away,
+    /// and where a floor above does exist it lands exactly where that carpet already is.
+    ///
+    /// They are switched off across the NavMesh bake — see <see cref="BakeNavMesh"/> — or the bots
+    /// get a floor on the roof.
     /// </summary>
-    private void BuildCeilingLid()
+    private void BuildCeilingLids()
     {
-        float span = gridSize * cellSize;
-        float y = FloorY(FloorCount - 1) + CeilingHeight;
+        for (int f = 0; f < FloorCount; f++)
+        {
+            float y = FloorY(f) + CeilingHeight;
 
-        // Sits *on* the ceiling plane rather than through it, so it takes no headroom away.
-        var centre = new Vector3(_originX + span * 0.5f, y + 0.1f, _originZ + span * 0.5f);
-        var size = new Vector3(span, 0.2f, span);
+            if (f == FloorCount - 1)
+            {
+                AddLid("Ceiling Lid", 0, 0, gridSize, gridSize, y);
+                continue;
+            }
+
+            // 계단실을 뺀 네 조각. 위아래(Z)를 통짜로 두고 좌우(X)를 그 사이에만 넣어,
+            // 네 조각이 서로 겹치지 않게 자른다.
+            RectInt hole = stairwell;
+
+            AddLid("Ceiling Lid", 0, 0, gridSize, hole.yMin, y);
+            AddLid("Ceiling Lid", 0, hole.yMax, gridSize, gridSize - hole.yMax, y);
+            AddLid("Ceiling Lid", 0, hole.yMin, hole.xMin, hole.height, y);
+            AddLid("Ceiling Lid", hole.xMax, hole.yMin, gridSize - hole.xMax, hole.height, y);
+        }
+    }
+
+    /// 격자 칸 단위의 사각형 하나를 천장 뚜껑으로 놓는다. 폭이나 깊이가 0 이면 아무것도
+    /// 하지 않는다 — 계단실이 격자 가장자리에 붙어 있으면 네 조각 중 하나가 비어 버린다.
+    private void AddLid(string name, int cellX, int cellZ, int cellsWide, int cellsDeep, float y)
+    {
+        if (cellsWide <= 0 || cellsDeep <= 0) return;
+
+        float width = cellsWide * cellSize;
+        float depth = cellsDeep * cellSize;
+
+        var centre = new Vector3(
+            _originX + (cellX * cellSize) + (width * 0.5f),
+            y + 0.1f,
+            _originZ + (cellZ * cellSize) + (depth * 0.5f));
+
+        var size = new Vector3(width, 0.2f, depth);
 
         _collisionBoxes.Add(new Bounds(centre, size));
         if (_collisionOnly) return;
 
-        var lid = new GameObject("Ceiling Lid");
+        var lid = new GameObject(name);
         lid.transform.SetParent(_root, false);
         lid.transform.localPosition = centre;
 
-        _ceilingLid = lid.AddComponent<BoxCollider>();
-        _ceilingLid.size = size;
+        var box = lid.AddComponent<BoxCollider>();
+        box.size = size;
+        _ceilingLids.Add(box);
     }
 
     /// <summary>
@@ -1185,12 +1227,15 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
         // top-floor walls, which have always been in there — but the lid is switched off across
         // the bake anyway, because relying on that is relying on a detail of the voxelizer.
         // (NavMeshModifier.ignoreFromBuild was tried first and did not take.)
-        bool hadLid = _ceilingLid != null && _ceilingLid.enabled;
-        if (hadLid) _ceilingLid.enabled = false;
+        // 층마다 하나씩 있으므로 전부 내렸다가 전부 올린다. 하나라도 남으면 그 층의 지붕이
+        // 걸어다닐 수 있는 바닥으로 구워진다.
+        for (int i = 0; i < _ceilingLids.Count; i++)
+            if (_ceilingLids[i] != null) _ceilingLids[i].enabled = false;
 
         surface.BuildNavMesh();
 
-        if (hadLid) _ceilingLid.enabled = true;
+        for (int i = 0; i < _ceilingLids.Count; i++)
+            if (_ceilingLids[i] != null) _ceilingLids[i].enabled = true;
     }
 
     // ================================================================ materials
