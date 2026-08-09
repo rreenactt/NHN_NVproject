@@ -147,7 +147,8 @@ namespace NV.Client.Net.Session
 
             MatchManager.Instance.AcceptMatchState(
                 state.Phase,
-                MatchStateHeader.FromTenths(state.TimeRemainingTenths));
+                MatchStateHeader.FromTenths(state.TimeRemainingTenths),
+                state.ParticipantCount);
 
             // 목표 진행도. 문 개방은 **목표물 전문**에서 온다 — 두 전문의 주기가 다르므로
             // (2Hz / 5초) 여기서 함께 넘기면 늦게 온 쪽이 다음 폴링에 반영된다. 두 값 모두

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Numerics;
 using NV.Realtime.Contracts;
 using NV.Realtime.Simulation;
@@ -137,11 +137,11 @@ namespace NV.Modules.Tests.Realtime
         {
             var room = Playing(BotRolePreference.Runner);
 
-            PlaceKeys(room, KeyRing(MatchConstants.KeysRequired));
+            PlaceKeys(room, KeyRing(room.Match.KeysRequired));
             room.Objectives.SetDoor(new Vector3(-10f, 0f, -10f), 0f);
 
             AdvanceUntil(room, 12_000, () => room.Match.DoorOpen);
-            Assert.Equal(MatchConstants.KeysRequired, room.Match.KeysInserted);
+            Assert.Equal(room.Match.KeysRequired, room.Match.KeysInserted);
 
             AdvanceUntil(room, 1800, () => room.Match.Escapes > 0);
             Assert.Equal(1, room.Match.Escapes);
@@ -210,7 +210,7 @@ namespace NV.Modules.Tests.Realtime
         /// 문을 열어 둔다. 열쇠를 실제로 넣는 경로는 다른 검사가 덮는다.
         private static void OpenDoor(Room room)
         {
-            for (var index = 0; index < MatchConstants.KeysRequired; index++)
+            for (var index = 0; index < room.Match.KeysRequired; index++)
             {
                 room.Match.InsertKey();
             }

@@ -271,7 +271,7 @@ namespace NV.Game.UI
             _roleChip.AddToClassList(seeker ? "chip--seeker" : "chip--runner");
 
             ApplyAtmosphereTextures();
-            OnKeysChanged(_match.KeysInserted, _match.Config.keysRequired);
+            OnKeysChanged(_match.KeysInserted, _match.KeysRequired);
             OnEscapesChanged(_match.Escapes, _match.EscapesNeeded);
 
             _effects.Clear();
@@ -289,7 +289,7 @@ namespace NV.Game.UI
             _compassArrow = _root.Q<Label>("compass-arrow");
             _compassDistance = _root.Q<Label>("compass-distance");
 
-            Fill(_keySlots, _match.Config.keysRequired, "slot");
+            Fill(_keySlots, _match.KeysRequired, "slot");
             Fill(_healthPips, _match.Config.runnerHitsToDie, "pip");
         }
 
@@ -896,7 +896,7 @@ namespace NV.Game.UI
                     _match.Escapes + " RUNNERS REACHED THE DOOR. THE REST ARE STILL IN HERE.",
                 MatchOutcome.SeekerTimeout =>
                     "THE CLOCK RAN OUT WITH " + _match.KeysInserted + " OF " +
-                    _match.Config.keysRequired + " KEYS IN THE DOOR.",
+                    _match.KeysRequired + " KEYS IN THE DOOR.",
                 MatchOutcome.SeekerWipedRunners =>
                     "EVERY RUNNER WENT DOWN BEFORE TWO COULD LEAVE.",
                 MatchOutcome.Aborted =>

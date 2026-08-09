@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using NV.Realtime.Simulation;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
@@ -14,6 +14,11 @@ namespace NV.Modules.Tests.Realtime
     /// 판정이지 배치가 아니다.
     public class KeyInsertTests
     {
+        /// 픽스처는 2인 매치이고, 2인의 열쇠 요구량은 3 이다
+        /// (`MatchConstants.KeysRequiredWith`). **상수 `KeysRequired`(10)가 아니다** —
+        /// 그것은 어떤 매치도 넘지 않는 상한이고, 실제 요구량은 인원이 정한다.
+        private static readonly int Needed = MatchConstants.KeysRequiredWith(2);
+
         [Fact]
         public void 문_앞의_Runner가_열쇠를_넣는다()
         {
@@ -120,11 +125,11 @@ namespace NV.Modules.Tests.Realtime
         [Fact]
         public void 열쇠_전부가_들어가면_문이_열린다()
         {
-            var world = Insertable(keys: MatchConstants.KeysRequired);
+            var world = Insertable(keys: Needed);
 
             world.InsertAll();
 
-            Assert.Equal(MatchConstants.KeysRequired, world.KeysInserted());
+            Assert.Equal(Needed, world.KeysInserted());
             Assert.True(world.Room.Match.DoorOpen);
         }
 
@@ -136,18 +141,18 @@ namespace NV.Modules.Tests.Realtime
         [Fact]
         public void 열린_문에는_더_넣지_않는다()
         {
-            var world = Insertable(keys: MatchConstants.KeysRequired + 3);
+            var world = Insertable(keys: Needed + 3);
 
             world.InsertAll();
 
-            Assert.Equal(MatchConstants.KeysRequired, world.KeysInserted());
+            Assert.Equal(Needed, world.KeysInserted());
             Assert.Equal(3, world.CarriedKeys());
 
             // 열린 문에 한 번 더 요청한다. 삽입 수가 늘지 않아야 한다.
             world.Advance(Match.InsertIntervalTicks);
             world.Interact();
 
-            Assert.Equal(MatchConstants.KeysRequired, world.KeysInserted());
+            Assert.Equal(Needed, world.KeysInserted());
         }
 
         /// 문이 열린 틱에 목표물 전문이 나가야 한다. 5초 주기만 기다리면 그동안 Runner 가
@@ -155,7 +160,7 @@ namespace NV.Modules.Tests.Realtime
         [Fact]
         public void 문이_열리면_목표물_전문이_즉시_갱신된다()
         {
-            var world = Insertable(keys: MatchConstants.KeysRequired);
+            var world = Insertable(keys: Needed);
 
             world.InsertAll();
             world.Room.Broadcast(world.Transport);
@@ -291,7 +296,7 @@ namespace NV.Modules.Tests.Realtime
             /// 간격을 지켜 필요한 수만큼 넣는다.
             public void InsertAll()
             {
-                for (var index = 0; index < MatchConstants.KeysRequired; index++)
+                for (var index = 0; index < Needed; index++)
                 {
                     Interact();
                     Advance(Match.InsertIntervalTicks);

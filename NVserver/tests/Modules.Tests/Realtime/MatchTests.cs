@@ -1,4 +1,4 @@
-using NV.Realtime.Simulation;
+﻿using NV.Realtime.Simulation;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Simulation;
 using Xunit;
@@ -8,6 +8,10 @@ namespace NV.Modules.Tests.Realtime
     /// 매치의 단계와 시계. 이 계산이 클라이언트에서 서버로 옮겨 온 첫 판정이다.
     public class MatchTests
     {
+        /// 가득 찬 방. 열쇠 요구량이 최대(10)가 되는 인원이며, 이 검사들이 쓰여진
+        /// 시점의 값이다 — `MatchConstants.KeysRequiredWith`.
+        private const int FullRoom = 5;
+
         private static int TicksFor(float seconds)
         {
             return (int)(seconds * SimConstants.TickRate);
@@ -26,7 +30,7 @@ namespace NV.Modules.Tests.Realtime
         public void 시작하면_역할_공개부터다()
         {
             var match = new Match();
-            match.Begin();
+            match.Begin(FullRoom);
 
             Assert.Equal(MatchPhase.RoleReveal, match.Phase);
             Assert.True(match.MovementLocked);
@@ -38,7 +42,7 @@ namespace NV.Modules.Tests.Realtime
         public void 역할_공개_중에도_매치_시계가_이미_채워져_있다()
         {
             var match = new Match();
-            match.Begin();
+            match.Begin(FullRoom);
 
             Assert.Equal(MatchConstants.MatchDuration, match.MatchSecondsRemaining, 3);
             Assert.Equal(MatchConstants.RoleRevealDuration, match.RevealSecondsRemaining, 3);
@@ -48,7 +52,7 @@ namespace NV.Modules.Tests.Realtime
         public void 역할_공개가_끝나면_진행으로_간다()
         {
             var match = new Match();
-            match.Begin();
+            match.Begin(FullRoom);
 
             var revealTicks = TicksFor(MatchConstants.RoleRevealDuration);
 
@@ -70,7 +74,7 @@ namespace NV.Modules.Tests.Realtime
         public void 역할_공개_중에는_매치_시계가_줄지_않는다()
         {
             var match = new Match();
-            match.Begin();
+            match.Begin(FullRoom);
 
             var before = match.MatchTicksRemaining;
 
@@ -167,7 +171,7 @@ namespace NV.Modules.Tests.Realtime
             Assert.True(match.MatchTicksRemaining < TicksFor(MatchConstants.MatchDuration));
 
             match.Reset();
-            match.Begin();
+            match.Begin(FullRoom);
 
             Assert.Equal(TicksFor(MatchConstants.MatchDuration), match.MatchTicksRemaining);
             Assert.Equal(MatchPhase.RoleReveal, match.Phase);
@@ -179,7 +183,7 @@ namespace NV.Modules.Tests.Realtime
         public void 시계가_고정_틱으로_환산된다()
         {
             var match = new Match();
-            match.Begin();
+            match.Begin(FullRoom);
 
             Assert.Equal(14400, match.MatchTicksRemaining);
             Assert.Equal(120, match.RevealTicksRemaining);
@@ -188,7 +192,7 @@ namespace NV.Modules.Tests.Realtime
         private static Match AtPlaying()
         {
             var match = new Match();
-            match.Begin();
+            match.Begin(FullRoom);
 
             for (var tick = 0; tick < TicksFor(MatchConstants.RoleRevealDuration); tick++)
             {
