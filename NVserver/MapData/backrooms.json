@@ -1,5 +1,7 @@
 {
+  "version": 2,
   "name": "backrooms",
+  "source": { "scene": "SampleScene", "component": "BackroomsMapGenerator", "exportedAtUtc": "2026-08-09T05:39:02Z", "exporterVersion": 2 },
   "boxes": [
     { "minX": -43.5, "minY": -0.2, "minZ": -43.5, "maxX": -40.5, "maxY": 0, "maxZ": -40.5 },
     { "minX": -43.5, "minY": -0.2, "minZ": -40.5, "maxX": -40.5, "maxY": 0, "maxZ": -37.5 },
@@ -736,6 +738,10 @@
     { "minX": -4.46, "minY": 0, "minZ": 2.78249979, "maxX": 4.46, "maxY": 2.8, "maxZ": 3.375 },
     { "minX": -4.46, "minY": 0, "minZ": 3.34499979, "maxX": 4.46, "maxY": 3, "maxZ": 3.9375 },
     { "minX": -4.46, "minY": 0, "minZ": 3.90750027, "maxX": 4.46, "maxY": 3.2, "maxZ": 4.5 },
+    { "minX": -52.5, "minY": 3, "minZ": -52.5, "maxX": 52.5, "maxY": 3.19999981, "maxZ": -7.5 },
+    { "minX": -52.5, "minY": 3, "minZ": 7.5, "maxX": 52.5, "maxY": 3.19999981, "maxZ": 52.5 },
+    { "minX": -52.5, "minY": 3, "minZ": -7.5, "maxX": -4.5, "maxY": 3.19999981, "maxZ": 7.5 },
+    { "minX": 4.5, "minY": 3, "minZ": -7.5, "maxX": 52.5, "maxY": 3.19999981, "maxZ": 7.5 },
     { "minX": -52.5, "minY": 6.2, "minZ": -52.5, "maxX": 52.5, "maxY": 6.39999962, "maxZ": 52.5 }
   ],
   "spawns": [
