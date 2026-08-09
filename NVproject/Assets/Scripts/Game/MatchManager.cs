@@ -698,6 +698,22 @@ namespace NV.Game
         /// Silent when the agent has no weapon: a Runner does not carry one, and a zero would
         /// otherwise be indistinguishable from "empty".
         /// </summary>
+        /// <summary>
+        /// 로컬 술래의 달리기 게이지, 0..1. 화면의 막대가 쓴다.
+        ///
+        /// **판정은 서버의 것이다.** 이 값은 그리기 위한 것이고, 달릴 수 있는지는 서버가
+        /// 자기 정수 게이지로 정한다(`Room.TickSprintCharge`) — 여기서 0.02 쯤 어긋나도
+        /// 규칙이 갈리지 않는다.
+        public float SprintCharge { get; private set; } = 1f;
+
+        /// <summary>서버의 게이지를 받는다. 다른 사람의 것은 오지 않는다(코덱이 지운다).</summary>
+        public void AcceptSprintCharge(PlayerAgent agent, float charge)
+        {
+            if (agent == null || !agent.isLocalPlayer) return;
+
+            SprintCharge = Mathf.Clamp01(charge);
+        }
+
         public void AcceptAmmo(PlayerAgent agent, int rounds)
         {
             if (agent == null || agent.Role != Role.Seeker) return;

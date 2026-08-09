@@ -1,4 +1,4 @@
-using NV.Shared.Contracts.Enums;
+﻿using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
 using NV.Shared.Serialization;
 
@@ -11,12 +11,18 @@ namespace NV.Shared.Simulation
     public readonly struct MoveIntent
     {
         public MoveIntent(float moveX, float moveZ, float yaw, float pitch, ButtonFlags buttons)
+            : this(moveX, moveZ, yaw, pitch, buttons, false)
+        {
+        }
+
+        public MoveIntent(float moveX, float moveZ, float yaw, float pitch, ButtonFlags buttons, bool seekerLegs)
         {
             MoveX = moveX;
             MoveZ = moveZ;
             Yaw = yaw;
             Pitch = pitch;
             Buttons = buttons;
+            SeekerLegs = seekerLegs;
         }
 
         /// -1..1. 좌우.
@@ -37,14 +43,28 @@ namespace NV.Shared.Simulation
 
         public bool Sprint => (Buttons & ButtonFlags.Sprint) != 0;
 
+        /// 이 몸이 술래의 다리인가. 달릴 때의 배수가 달라진다
+        /// (<see cref="SimConstants.SeekerSprintMultiplier"/>).
+        ///
+        /// **버튼이 아니라 별도의 값이다.** 버튼은 클라이언트가 보내는 것이므로, 거기에
+        /// 실으면 아무나 술래의 다리를 주장할 수 있다. 이것은 서버가 자기 명단을 보고
+        /// 채운다.
+        public bool SeekerLegs { get; }
+
         public static MoveIntent FromInput(in InputFrame frame)
+        {
+            return FromInput(frame, false);
+        }
+
+        public static MoveIntent FromInput(in InputFrame frame, bool seekerLegs)
         {
             return new MoveIntent(
                 Quantization.ToMoveAxis(frame.MoveX),
                 Quantization.ToMoveAxis(frame.MoveZ),
                 Quantization.ToYawRadians(frame.Yaw),
                 Quantization.ToPitchRadians(frame.Pitch),
-                frame.Buttons);
+                frame.Buttons,
+                seekerLegs);
         }
     }
 }

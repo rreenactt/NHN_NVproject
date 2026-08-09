@@ -1,4 +1,4 @@
-namespace NV.Shared.Contracts.Messages
+﻿namespace NV.Shared.Contracts.Messages
 {
     /// 와이어 포맷의 불변값. 클라이언트와 서버가 다른 시점에 빌드되므로
     /// Version 불일치는 접속 거부로 처리한다. 이 핸드셰이크가 유일한 방어선이다.
@@ -21,7 +21,10 @@ namespace NV.Shared.Contracts.Messages
         /// 붙는다. 매치 시작은 전원 준비를 조건으로 서버가 다시 판정한다.
         ///
         /// 넷을 한 번의 인상 안에서 끝낸 이유가 바로 아래 단락이다.
-        public const ushort Version = 4;
+        /// 5 — 술래의 달리기 게이지가 `MatchParticipant` 에 실리며 그 크기가 5 → 6 이
+        /// 되었다. 이 프로젝트는 죽은 바이트를 재활용해 버전을 아끼는 쪽을 택해 왔지만
+        /// (`Ammo` 가 `Flags` 자리를 썼다) 그 다섯 바이트는 이제 전부 쓰이고 있다.
+        public const ushort Version = 5;
 
         /// 대기방에서 고를 수 있는 캐릭터 수.
         ///

@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using NV.Shared.Collision;
 using NV.Shared.Contracts.Enums;
 
@@ -81,6 +81,15 @@ namespace NV.Shared.Simulation
             return Step(state, MoveIntent.FromInput(frame), world);
         }
 
+        public static PlayerState Step(
+            in PlayerState state,
+            in Contracts.Messages.InputFrame frame,
+            CollisionWorld world,
+            bool seekerLegs)
+        {
+            return Step(state, MoveIntent.FromInput(frame, seekerLegs), world);
+        }
+
         public static Vector3 HalfExtentsFor(EntityFlags flags)
         {
             var height = IsCrouching(flags) ? SimConstants.PlayerCrouchHeight : SimConstants.PlayerHeight;
@@ -155,7 +164,12 @@ namespace NV.Shared.Simulation
             }
             else if (intent.Sprint)
             {
-                speed *= SimConstants.SprintMultiplier;
+                // 달릴 자격은 이미 걸러져 있다. 게이지가 빈 술래는 `Sprint` 비트가 지워진
+                // 채로 여기 온다(`Room.StepPlayer`) — 자격 판정을 이동 계산 안에 넣으면
+                // 게이지가 이동 함수의 입력이 되고, 그것은 결정성의 표면을 넓힌다.
+                speed *= intent.SeekerLegs
+                    ? SimConstants.SeekerSprintMultiplier
+                    : SimConstants.SprintMultiplier;
             }
 
             var targetX = wishX * speed;

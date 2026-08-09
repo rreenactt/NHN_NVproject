@@ -46,6 +46,20 @@ Escaping is not being wiped out. The wipe win requires every Runner to have gone
 **down**; a Runner who walked out through the door has not been eliminated, and
 counting them as such hands the Seeker a win for losing.
 
+## Seeker: running
+
+- The Seeker **cannot run continuously.** Running spends a gauge; at **0 they cannot run
+  at all** and move at ordinary speed.
+- A full gauge is **4 seconds** of running.
+- Running speed is **1.6× a player's running speed** (so `MoveSpeed × SprintMultiplier ×
+  1.6`). It is the only way the Seeker closes distance, and the reason it is bounded.
+- Recharge takes **10 seconds** from empty to full, and **the gauge is usable while it
+  refills** — any charge above 0 permits running. Short repeated bursts and one long
+  charge are both available, and choosing between them is the Seeker's decision.
+- Holding the run key while standing still does not spend it.
+- The gauge is the Seeker's own information. Runners are not told how much is left, for
+  the same reason they are not told the ammo count.
+
 ## Objective: keys & door
 - **10 keys** scattered at valid walkable locations (the pool does not shrink with
   the roster — a smaller match should not also be a barer map). Runners pick them up and
