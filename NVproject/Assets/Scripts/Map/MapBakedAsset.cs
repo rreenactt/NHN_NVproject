@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NV.Client.Net;
 using NV.Shared.Collision;
 using UnityEngine;
 
@@ -186,7 +187,92 @@ namespace NV.Client.Map
                 spawnYaws[index] = blueprint.Spawns[index].Yaw;
             }
 
-            var grid = blueprint.Grid;
+            StoreGrid(blueprint.Grid);
+        }
+
+        /// <summary>
+        /// Overwrites this asset from a level standing in the **open scene** instead of from a
+        /// blueprint.
+        ///
+        /// **This exists for the levels that are still generated at runtime inside their own
+        /// scene** — <c>backrooms</c> in <c>SampleScene</c>. Nothing produces a
+        /// <see cref="MapBlueprint"/> for those, so <see cref="Fill"/> can never describe them; and
+        /// a map with no asset gets no <c>MapCatalog</c> row, which the lobby reads as "the server
+        /// serves this map and this build cannot draw it" and refuses to make the room. Exporting
+        /// the map file does not help, because that file is the *server's* half of the pair.
+        ///
+        /// **The boxes are copied verbatim rather than rebuilt from a min/max pair.** The map hash
+        /// is taken from <c>Bounds.min</c> and <c>Bounds.max</c>, and a <c>Bounds</c> put back
+        /// together through <c>SetMinMax</c> can return a value one ULP away — which surfaces only
+        /// as terrain that differs for no visible reason. The choice between the built collision
+        /// and the computed one is <c>MapExport</c>'s, repeated here for the same reason: picking
+        /// differently is picking different terrain.
+        ///
+        /// **Scene volumes are deliberately not baked in.** <c>MapExport</c> appends them to the
+        /// level's own list at export time, and it does that on every path — including the one that
+        /// recomputes this asset's hash. Baking them here would count them twice.
+        ///
+        /// What this cannot carry is <see cref="Lights"/>: a level asked for its collision does not
+        /// offer them, and a lamp is not geometry. That costs nothing for the maps this path is
+        /// for, since they are opened by their own scene (<c>MapSceneTable</c>) which builds its own
+        /// lighting. A map that has to be drawn from a prefab goes through <see cref="Fill"/>.
+        /// </summary>
+        public void FillFromScene(INetworkMapSource source, string sourceName, string bakedAt)
+        {
+            if (source == null) return;
+
+            mapName = source.MapName;
+            generator = sourceName;
+
+            // Not a seed anybody can act on. The level's own component holds the seed it was built
+            // from, and copying it here would invite reading it back as the value to reproduce with.
+            usedSeed = 0;
+            bakedAtUtc = bakedAt;
+
+            var level = source.CollisionBoxes;
+            if (level == null || level.Count == 0) level = source.ComputeCollision();
+
+            boxes = new Bounds[level == null ? 0 : level.Count];
+            for (var index = 0; index < boxes.Length; index++) boxes[index] = level[index];
+
+            var spawns = new List<(Vector3 position, float yaw)>(8);
+            source.GetSpawns(spawns);
+
+            spawnPositions = new Vector3[spawns.Count];
+            spawnYaws = new float[spawns.Count];
+
+            for (var index = 0; index < spawns.Count; index++)
+            {
+                spawnPositions[index] = spawns[index].position;
+                spawnYaws[index] = spawns[index].yaw;
+            }
+
+            // Where the match puts the Seeker. Only a level that also answers ILevelQuery knows it,
+            // and one that does not is a level the match layer never runs on.
+            spawnCentre = source is ILevelQuery query ? query.SpawnCentre : Vector3.zero;
+            lights = new Vector3[0];
+
+            var meta = source.BuildMeta();
+
+            displayName = meta == null ? string.Empty : meta.DisplayName ?? string.Empty;
+            description = meta == null ? string.Empty : meta.Description ?? string.Empty;
+            recommendedPlayersMin = meta == null ? 0 : meta.RecommendedPlayersMin;
+            recommendedPlayersMax = meta == null ? 0 : meta.RecommendedPlayersMax;
+            tags = meta == null || meta.Tags == null ? new string[0] : meta.Tags;
+
+            StoreGrid(source.BuildGrid());
+        }
+
+        /// <summary>
+        /// Copies a grid in, or records that the level offered none.
+        ///
+        /// The cells are copied rather than referenced: the array handed in belongs to whoever
+        /// built it, and <c>MapExport.AttachGrid</c> writes <see cref="MapCellFlags.FreeFloor"/>
+        /// into the grid it is given — an asset sharing that array would be rewritten on disk by an
+        /// export.
+        /// </summary>
+        private void StoreGrid(MapGridData grid)
+        {
             hasGrid = grid != null;
 
             if (!hasGrid)

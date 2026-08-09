@@ -1,0 +1,1533 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b02aa5c438f4e6fbaf093fde44cd749, type: 3}
+  m_Name: backrooms
+  m_EditorClassIdentifier: Assembly-CSharp::NV.Client.Map.MapBakedAsset
+  mapName: backrooms
+  boxes:
+  - m_Center: {x: -42, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: -0.1, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: -0.1, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: -0.1, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: -0.1, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: -0.1, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: -0.1, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: -0.1, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: -0.1, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: -0.1, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: -0.1, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: -0.1, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: -0.1, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: -0.1, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: -0.1, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: -0.1, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: -0.1, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: -0.1, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: -0.1, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: -0.1, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: -0.1, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: -0.1, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: -0.1, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: -0.1, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: 24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: -0.1, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: 15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: -0.1, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: -0.1, z: 15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: -0.1, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: -0.1, z: 15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: -0.1, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: -0.1, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: -0.1, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: -0.1, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: -0.1, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: -0.1, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: -0.1, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: -0.1, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: -0.1, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: -0.1, z: -48}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: -0.1, z: -45}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: -0.1, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: -0.1, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: -0.1, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: -48}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: -45}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: 24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: -0.1, z: -48}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: -0.1, z: -45}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: -0.1, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: -0.1, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: -0.1, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: -0.1, z: -48}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: -0.1, z: -45}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: -0.1, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: -0.1, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: -0.1, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: -0.1, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: -0.1, z: -48}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: -0.1, z: -45}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 45, y: -0.1, z: -48}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 45, y: -0.1, z: -45}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 45, y: -0.1, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 45, y: -0.1, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 45, y: -0.1, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -43.5, y: 1.5, z: -34.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 9.125}
+  - m_Center: {x: -34.5, y: 1.5, z: -12}
+    m_Extent: {x: 0.125, y: 1.5, z: 13.625}
+  - m_Center: {x: -31.5, y: 1.5, z: -18}
+    m_Extent: {x: 0.125, y: 1.5, z: 7.625}
+  - m_Center: {x: -25.5, y: 1.5, z: -18}
+    m_Extent: {x: 0.125, y: 1.5, z: 7.625}
+  - m_Center: {x: -25.5, y: 1.5, z: 19.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 18.125}
+  - m_Center: {x: -22.5, y: 1.5, z: -25.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 15.125}
+  - m_Center: {x: -22.5, y: 1.5, z: 18}
+    m_Extent: {x: 0.125, y: 1.5, z: 16.625}
+  - m_Center: {x: -19.5, y: 1.5, z: 31.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: -19.5, y: 1.5, z: 40.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: -16.5, y: 1.5, z: -6}
+    m_Extent: {x: 0.125, y: 1.5, z: 4.625}
+  - m_Center: {x: -16.5, y: 1.5, z: 22.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 6.125}
+  - m_Center: {x: -13.5, y: 1.5, z: 13.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: -13.5, y: 1.5, z: 25.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: -10.5, y: 1.5, z: 36}
+    m_Extent: {x: 0.125, y: 1.5, z: 7.625}
+  - m_Center: {x: -4.5, y: 1.5, z: -4.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: -4.5, y: 1.5, z: 3}
+    m_Extent: {x: 0.125, y: 1.5, z: 1.625}
+  - m_Center: {x: -4.5, y: 1.5, z: 13.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: -4.5, y: 1.5, z: 21}
+    m_Extent: {x: 0.125, y: 1.5, z: 1.625}
+  - m_Center: {x: 4.5, y: 1.5, z: -1.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: 7.5, y: 1.5, z: -1.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: 7.5, y: 1.5, z: 9}
+    m_Extent: {x: 0.125, y: 1.5, z: 4.625}
+  - m_Center: {x: 16.5, y: 1.5, z: -24}
+    m_Extent: {x: 0.125, y: 1.5, z: 16.625}
+  - m_Center: {x: 19.5, y: 1.5, z: -24}
+    m_Extent: {x: 0.125, y: 1.5, z: 16.625}
+  - m_Center: {x: 22.5, y: 1.5, z: 31.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 6.125}
+  - m_Center: {x: 28.5, y: 1.5, z: -46.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: 28.5, y: 1.5, z: -37.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: 28.5, y: 1.5, z: 3}
+    m_Extent: {x: 0.125, y: 1.5, z: 10.625}
+  - m_Center: {x: 31.5, y: 1.5, z: 22.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: 34.5, y: 1.5, z: 21}
+    m_Extent: {x: 0.125, y: 1.5, z: 4.625}
+  - m_Center: {x: 40.5, y: 1.5, z: 31.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 6.125}
+  - m_Center: {x: 46.5, y: 1.5, z: -42}
+    m_Extent: {x: 0.125, y: 1.5, z: 7.625}
+  - m_Center: {x: 37.5, y: 1.5, z: -49.5}
+    m_Extent: {x: 9.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -7.5, y: 1.5, z: -43.5}
+    m_Extent: {x: 36.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -3, y: 1.5, z: -40.5}
+    m_Extent: {x: 19.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 24, y: 1.5, z: -40.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 37.5, y: 1.5, z: -34.5}
+    m_Extent: {x: 9.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -39, y: 1.5, z: -25.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -28.5, y: 1.5, z: -25.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -28.5, y: 1.5, z: -10.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -19.5, y: 1.5, z: -10.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: 6, y: 1.5, z: -7.5}
+    m_Extent: {x: 10.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 24, y: 1.5, z: -7.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 6, y: 1.5, z: -4.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -10.5, y: 1.5, z: -1.5}
+    m_Extent: {x: 6.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -30, y: 1.5, z: 1.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -13.5, y: 1.5, z: 1.5}
+    m_Extent: {x: 9.125, y: 1.5, z: 0.125}
+  - m_Center: {x: 6, y: 1.5, z: 1.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 1.5, y: 1.5, z: 4.5}
+    m_Extent: {x: 6.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -9, y: 1.5, z: 10.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 18, y: 1.5, z: 13.5}
+    m_Extent: {x: 10.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -15, y: 1.5, z: 16.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 15, y: 1.5, z: 16.5}
+    m_Extent: {x: 19.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 13.5, y: 1.5, z: 19.5}
+    m_Extent: {x: 18.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -9, y: 1.5, z: 22.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 27, y: 1.5, z: 25.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 37.5, y: 1.5, z: 25.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -18, y: 1.5, z: 28.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -12, y: 1.5, z: 28.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -21, y: 1.5, z: 34.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -22.5, y: 1.5, z: 37.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: 31.5, y: 1.5, z: 37.5}
+    m_Extent: {x: 9.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -15, y: 1.5, z: 43.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -45, y: 3.1000001, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -45, y: 3.1000001, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -45, y: 3.1000001, z: 24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -45, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -45, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -45, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -45, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -45, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: 3.1000001, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: 3.1000001, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: 3.1000001, z: 24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -42, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -39, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: 24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -36, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -33, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -30, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: 3.1000001, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: 3.1000001, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: 3.1000001, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: 3.1000001, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: 3.1000001, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -27, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: 3.1000001, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: 3.1000001, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: 3.1000001, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: 3.1000001, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: 3.1000001, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -24, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -21, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: 3.1000001, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: 3.1000001, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: 3.1000001, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: 3.1000001, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: 3.1000001, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -18, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: 3.1000001, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: 3.1000001, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: 3.1000001, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: 3.1000001, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: 3.1000001, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -15, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -12, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -9, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -6, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -3, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 0, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 3, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 6, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 9, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 12, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 15, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 18, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 21, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 24, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: -45}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 27, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -45}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: -3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 30, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: -45}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: -42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: -39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: -36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: -33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 33, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 0}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 3}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 6}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 9}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 12}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 15}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 18}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 21}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 24}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 36, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 39, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: 3.1000001, z: 27}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: 3.1000001, z: 30}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: 3.1000001, z: 33}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: 3.1000001, z: 36}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: 3.1000001, z: 39}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: 42, y: 3.1000001, z: 42}
+    m_Extent: {x: 1.5, y: 0.1, z: 1.5}
+  - m_Center: {x: -46.5, y: 4.7, z: 28.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 12.125}
+  - m_Center: {x: -40.5, y: 4.7, z: -12}
+    m_Extent: {x: 0.125, y: 1.5, z: 28.625}
+  - m_Center: {x: -37.5, y: 4.7, z: -7.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 24.125}
+  - m_Center: {x: -34.5, y: 4.7, z: 22.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 6.125}
+  - m_Center: {x: -34.5, y: 4.7, z: 36}
+    m_Extent: {x: 0.125, y: 1.5, z: 4.625}
+  - m_Center: {x: -28.5, y: 4.7, z: -1.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 9.125}
+  - m_Center: {x: -22.5, y: 4.7, z: 18}
+    m_Extent: {x: 0.125, y: 1.5, z: 10.625}
+  - m_Center: {x: -22.5, y: 4.7, z: 36}
+    m_Extent: {x: 0.125, y: 1.5, z: 4.625}
+  - m_Center: {x: -19.5, y: 4.7, z: -39}
+    m_Extent: {x: 0.125, y: 1.5, z: 1.625}
+  - m_Center: {x: -19.5, y: 4.7, z: -33}
+    m_Extent: {x: 0.125, y: 1.5, z: 1.625}
+  - m_Center: {x: -19.5, y: 4.7, z: 18}
+    m_Extent: {x: 0.125, y: 1.5, z: 10.625}
+  - m_Center: {x: -19.5, y: 4.7, z: 34.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: -13.5, y: 4.7, z: -6}
+    m_Extent: {x: 0.125, y: 1.5, z: 4.625}
+  - m_Center: {x: -13.5, y: 4.7, z: 4.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: -13.5, y: 4.7, z: 36}
+    m_Extent: {x: 0.125, y: 1.5, z: 1.625}
+  - m_Center: {x: -13.5, y: 4.7, z: 42}
+    m_Extent: {x: 0.125, y: 1.5, z: 1.625}
+  - m_Center: {x: -10.5, y: 4.7, z: -39}
+    m_Extent: {x: 0.125, y: 1.5, z: 1.625}
+  - m_Center: {x: -10.5, y: 4.7, z: -25.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 9.125}
+  - m_Center: {x: -4.5, y: 4.7, z: -4.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: -4.5, y: 4.7, z: 4.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: -1.5, y: 4.7, z: 18}
+    m_Extent: {x: 0.125, y: 1.5, z: 10.625}
+  - m_Center: {x: -1.5, y: 4.7, z: 33}
+    m_Extent: {x: 0.125, y: 1.5, z: 1.625}
+  - m_Center: {x: 1.5, y: 4.7, z: 21}
+    m_Extent: {x: 0.125, y: 1.5, z: 13.625}
+  - m_Center: {x: 4.5, y: 4.7, z: -4.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: 4.5, y: 4.7, z: 4.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 3.125}
+  - m_Center: {x: 7.5, y: 4.7, z: -34.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 6.125}
+  - m_Center: {x: 7.5, y: 4.7, z: -21}
+    m_Extent: {x: 0.125, y: 1.5, z: 4.625}
+  - m_Center: {x: 10.5, y: 4.7, z: 39}
+    m_Extent: {x: 0.125, y: 1.5, z: 4.625}
+  - m_Center: {x: 25.5, y: 4.7, z: -39}
+    m_Extent: {x: 0.125, y: 1.5, z: 7.625}
+  - m_Center: {x: 25.5, y: 4.7, z: 34.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 9.125}
+  - m_Center: {x: 28.5, y: 4.7, z: -30}
+    m_Extent: {x: 0.125, y: 1.5, z: 1.625}
+  - m_Center: {x: 28.5, y: 4.7, z: -13.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 12.125}
+  - m_Center: {x: 31.5, y: 4.7, z: -16.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 15.125}
+  - m_Center: {x: 34.5, y: 4.7, z: -39}
+    m_Extent: {x: 0.125, y: 1.5, z: 7.625}
+  - m_Center: {x: 34.5, y: 4.7, z: 13.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 12.125}
+  - m_Center: {x: 37.5, y: 4.7, z: 12}
+    m_Extent: {x: 0.125, y: 1.5, z: 13.625}
+  - m_Center: {x: 43.5, y: 4.7, z: 34.5}
+    m_Extent: {x: 0.125, y: 1.5, z: 9.125}
+  - m_Center: {x: 30, y: 4.7, z: -46.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -30, y: 4.7, z: -40.5}
+    m_Extent: {x: 10.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -1.5, y: 4.7, z: -40.5}
+    m_Extent: {x: 9.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -15, y: 4.7, z: -37.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -15, y: 4.7, z: -34.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -28.5, y: 4.7, z: -31.5}
+    m_Extent: {x: 9.125, y: 1.5, z: 0.125}
+  - m_Center: {x: 27, y: 4.7, z: -31.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 33, y: 4.7, z: -31.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 18, y: 4.7, z: -28.5}
+    m_Extent: {x: 10.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 18, y: 4.7, z: -25.5}
+    m_Extent: {x: 10.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -1.5, y: 4.7, z: -16.5}
+    m_Extent: {x: 9.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -21, y: 4.7, z: -10.5}
+    m_Extent: {x: 7.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 0, y: 4.7, z: -7.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -9, y: 4.7, z: -1.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 16.5, y: 4.7, z: -1.5}
+    m_Extent: {x: 12.125, y: 1.5, z: 0.125}
+  - m_Center: {x: 34.5, y: 4.7, z: -1.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -9, y: 4.7, z: 1.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 19.5, y: 4.7, z: 1.5}
+    m_Extent: {x: 15.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -25.5, y: 4.7, z: 7.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -16.5, y: 4.7, z: 7.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -3, y: 4.7, z: 7.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 3, y: 4.7, z: 7.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -43.5, y: 4.7, z: 16.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -36, y: 4.7, z: 16.5}
+    m_Extent: {x: 1.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 30, y: 4.7, z: 25.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: 40.5, y: 4.7, z: 25.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -28.5, y: 4.7, z: 28.5}
+    m_Extent: {x: 6.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -10.5, y: 4.7, z: 28.5}
+    m_Extent: {x: 9.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -28.5, y: 4.7, z: 31.5}
+    m_Extent: {x: 6.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -10.5, y: 4.7, z: 31.5}
+    m_Extent: {x: 9.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -7.5, y: 4.7, z: 34.5}
+    m_Extent: {x: 6.125, y: 1.5, z: 0.125}
+  - m_Center: {x: 6, y: 4.7, z: 34.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -16.5, y: 4.7, z: 37.5}
+    m_Extent: {x: 3.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -40.5, y: 4.7, z: 40.5}
+    m_Extent: {x: 6.125, y: 1.5, z: 0.125}
+  - m_Center: {x: -18, y: 4.7, z: 40.5}
+    m_Extent: {x: 4.625, y: 1.5, z: 0.125}
+  - m_Center: {x: -1.5, y: 4.7, z: 43.5}
+    m_Extent: {x: 12.125, y: 1.5, z: 0.125}
+  - m_Center: {x: 34.5, y: 4.7, z: 43.5}
+    m_Extent: {x: 9.125, y: 1.5, z: 0.125}
+  - m_Center: {x: 0, y: 0.1, z: -4.23375}
+    m_Extent: {x: 4.46, y: 0.1, z: 0.29625}
+  - m_Center: {x: 0, y: 0.2, z: -3.67125}
+    m_Extent: {x: 4.46, y: 0.2, z: 0.29625}
+  - m_Center: {x: 0, y: 0.3, z: -3.10875}
+    m_Extent: {x: 4.46, y: 0.3, z: 0.29625}
+  - m_Center: {x: 0, y: 0.4, z: -2.54625}
+    m_Extent: {x: 4.46, y: 0.4, z: 0.29625}
+  - m_Center: {x: 0, y: 0.5, z: -1.98375}
+    m_Extent: {x: 4.46, y: 0.5, z: 0.29625}
+  - m_Center: {x: 0, y: 0.6, z: -1.42125}
+    m_Extent: {x: 4.46, y: 0.6, z: 0.29625}
+  - m_Center: {x: 0, y: 0.7, z: -0.85875}
+    m_Extent: {x: 4.46, y: 0.7, z: 0.29625}
+  - m_Center: {x: 0, y: 0.8, z: -0.29625}
+    m_Extent: {x: 4.46, y: 0.8, z: 0.29625}
+  - m_Center: {x: 0, y: 0.90000004, z: 0.26625}
+    m_Extent: {x: 4.46, y: 0.90000004, z: 0.29625}
+  - m_Center: {x: 0, y: 1, z: 0.82875}
+    m_Extent: {x: 4.46, y: 1, z: 0.29625}
+  - m_Center: {x: 0, y: 1.1, z: 1.39125}
+    m_Extent: {x: 4.46, y: 1.1, z: 0.29625}
+  - m_Center: {x: 0, y: 1.2, z: 1.95375}
+    m_Extent: {x: 4.46, y: 1.2, z: 0.29625}
+  - m_Center: {x: 0, y: 1.3000001, z: 2.51625}
+    m_Extent: {x: 4.46, y: 1.3000001, z: 0.29625}
+  - m_Center: {x: 0, y: 1.4, z: 3.07875}
+    m_Extent: {x: 4.46, y: 1.4, z: 0.29625}
+  - m_Center: {x: 0, y: 1.5, z: 3.64125}
+    m_Extent: {x: 4.46, y: 1.5, z: 0.29625}
+  - m_Center: {x: 0, y: 1.6, z: 4.20375}
+    m_Extent: {x: 4.46, y: 1.6, z: 0.29625}
+  - m_Center: {x: 0, y: 3.1, z: -30}
+    m_Extent: {x: 52.5, y: 0.1, z: 22.5}
+  - m_Center: {x: 0, y: 3.1, z: 30}
+    m_Extent: {x: 52.5, y: 0.1, z: 22.5}
+  - m_Center: {x: -28.5, y: 3.1, z: 0}
+    m_Extent: {x: 24, y: 0.1, z: 7.5}
+  - m_Center: {x: 28.5, y: 3.1, z: 0}
+    m_Extent: {x: 24, y: 0.1, z: 7.5}
+  - m_Center: {x: 0, y: 6.2999997, z: 0}
+    m_Extent: {x: 52.5, y: 0.1, z: 52.5}
+  spawnPositions:
+  - {x: -42, y: 0, z: -42}
+  - {x: -42, y: 0, z: -39}
+  - {x: -42, y: 0, z: -36}
+  - {x: -42, y: 0, z: -33}
+  - {x: -42, y: 0, z: -30}
+  - {x: -42, y: 0, z: -27}
+  - {x: -39, y: 0, z: -42}
+  - {x: -39, y: 0, z: -27}
+  spawnYaws:
+  - 0.7853982
+  - 1.0303768
+  - 1.3734008
+  - 1.7681919
+  - 2.1112158
+  - 2.3561945
+  - 0.5404195
+  - 2.6011732
+  spawnCentre: {x: -34.5, y: 0, z: -34.5}
+  lights: []
+  hasGrid: 1
+  gridFloors: 2
+  gridWidth: 35
+  gridDepth: 35
+  gridCellSize: 3
+  gridFloorHeight: 3.2
+  gridOriginX: -52.5
+  gridOriginZ: -52.5
+  gridCells: 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010101010101000000000000000000000000000000000000000000000000000000000001010101010100000000000101010101010101010101010101010101010101010101010101010101010000000000010101010101010000000000000000000000000001000000010101010101000000000001010101010101000000000000000000000000000100000001010101010100000000000101010101010100000000000000000000000000010000000000000000000000000000010101010101010000000000000000000000000001000000000000000000000000000001010101010101000000000000000000000000000100000000000000000000000000000000000100000100000000000000000000000000010000000000000000000000000000000000010000010000000000000000000000000001000000000000000000000000000000000001000001000000000000000000000000000100000000000000000000000000000000000100000100000000000000000000000000010000000000000000000000000000000000010000010000000000000000000000000001000000000000000000000000000000000001010101010100000000000000000000000100000000000000000000000000000000000101010101010000000005050501010101010101010000000000000000000000000000010101010101000000000505050001010101010101000000000000000000000000000001010101010101010101050505000101010101010100000000000000000000000000000000000100000000000005050501010101010101010000000000000000000000000000000000010000000000000404040001010101010101000000000000000000000000000000000001000000000000000000000101010101010100000000000000000000000000000000000100000001010100000000010101010101010000000000000000000000000000000000010000000101010000000000000000000000000000000000000000000000000000000001000001010101010101010101010101010101010000000000000000000000000000000100000101010100000000000000000000000001000000000000000000000000000000010000010000000000000000000000000000000100000000000000000000000000000001000001000000000000000000000000010101010101000000000000000000000000000100010101000000000000000000000001010101010100000000000000000000000000010001010100000000000000000000000101010101010000000000000000000000000001010101010000000000000000000000010101010101000000000000000000000000000000010101000000000000000000000000000000000000000000000000000000000000000001010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001010100000000000000000000000000000000000000000000000000000000000000000101010000000000000000000001010101010101000000010101010101000000000000010101000000000000000000000101010101010101010101010101010100000000000001010100000000000000000000010101010101010000000101010101010000000000000101010000000000000000000001000000000000000000010101010101000000000000000100000000000000000000000100000000000000000001010101010101010101010101010000000000000000000000010000000000000000000101010101010000000000000001000000000000000000000001000000000000000000010101010101000000000000000100000000000000000000000100000000000000000001010101010100000000000000010000000000000000000000010000000000000000000000000000000000000000000001000000000000000000000001000000000000000000000000000000000000000000000100000000000000000000000100000001010101010000000000000000000000000000010000000000000000000000010000000101010101000000040404000000000000000001000000000000000000000001000000010101010100000004040400000000000000000100000000000000000000000100000001010101010101010404040101010101010101010101000000000000000000010000000101010101000000040404000000000000000000000100000000000000000001000000010101010100000005050500000000000000000000010000000000000000000100000000000100000000000001000000000000000000000001000000000000000000010000000000010000000000000100000000000000000000000100000000000000000001000000000001000000000000010000000000000000000000010000000000000001010101000000000100000000000001000000000000000000000001000000000000000101010100000000010000000000000100000000000000000000000100000000000000010101010000000001000000000000010000000000000000000000010000000000000001010101000000000100000000000001000000000000000001010101010100000000000101010101010101010101010101010100000000000000000101010101010000000000010101010000000001000000000000010000000000000000010101010101000000000001010101000000000100000101010101010101000000000001010101010100000000000101010100000000010101010101010101010100000000000101010101010000000000000000000000000000000001010101010101010000000000010101010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+  displayName: 
+  description: 
+  recommendedPlayersMin: 0
+  recommendedPlayersMax: 0
+  tags: []
+  generator: Scene/BackroomsMapGenerator
+  usedSeed: 0
+  bakedAtUtc: 2026-08-09T17:17:05Z

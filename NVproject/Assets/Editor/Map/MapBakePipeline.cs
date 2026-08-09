@@ -112,6 +112,83 @@ namespace NV.Client.EditorTools
             return result;
         }
 
+        /// **열려 있는 씬의 레벨을 그대로 굳힌다.** 생성기를 돌리지 않는다.
+        ///
+        /// `Bake` 는 설정 → 생성기 → blueprint 를 지나므로 **런타임 생성기로만 존재하는 레벨을
+        /// 굳힐 수 없다.** `SampleScene` 의 `backrooms` 가 그것이고, 그래서 그 맵만 카탈로그에
+        /// 줄이 없었다 — 서버에는 있는데 이 빌드가 그릴 수 없는 맵으로 읽혀 방을 만들 수 없다.
+        /// export 는 이것을 고치지 못한다. 그쪽은 **서버가 읽는 절반**이고, 카탈로그는 클라이언트가
+        /// 읽는 나머지 절반이다.
+        ///
+        /// **판정은 export 와 한 글자도 다르지 않다.** 같은 `MapExportPipeline.Plan()` 을 지나므로
+        /// export 가 거절하는 레벨은 여기서도 거절된다 — 재현되지 않는 씨드, 씬에 레벨이 둘,
+        /// 좌표계가 어긋난 격자가 전부 그대로 걸린다. 파일에 쓰지 않는 것만 다르다.
+        ///
+        /// **프리팹은 쓰지 않는다.** 이 경로가 상대하는 맵은 전용 씬으로 열리는 맵이고
+        /// (`MapSceneTable`), 그 씬이 자기 지오메트리를 만든다. 프리팹으로 그려야 하는 맵은
+        /// 생성기를 갖고 있으므로 `Bake` 로 간다.
+        public static BakeResult BakeScene(Net.INetworkMapSource source, MapExportPlan plan)
+        {
+            var result = new BakeResult();
+
+            if (plan == null || !plan.CanExport || source == null)
+            {
+                result.Error = "통과하지 않은 계획으로는 굽지 않는다.";
+                return result;
+            }
+
+            // **전용 씬이 없는 맵은 거절한다.** 카탈로그의 줄이 "그릴 수 있다" 를 뜻하려면 프리팹
+            // 이나 전용 씬 중 하나가 있어야 하고(`MapCatalogEntry.IsPlayable`), 이 경로는 프리팹을
+            // 만들지 않는다. 막지 않으면 줄은 생기는데 여전히 `MissingLocally` 인, 고쳤다고 믿게
+            // 만드는 카탈로그가 나온다.
+            var scene = Net.MapSceneTable.SceneFor(source.MapName);
+
+            if (string.IsNullOrEmpty(scene))
+            {
+                result.Error =
+                    $"\"{source.MapName}\" 은 `MapSceneTable` 에 전용 씬이 없다. 씬 굽기는 프리팹을 " +
+                    "만들지 않으므로 이 맵은 카탈로그에 올라가도 그릴 수 없는 채로 남는다.\n" +
+                    "Tools ▸ NV ▸ Map ▸ Map Generator 로 구워 프리팹을 만든다.";
+                return result;
+            }
+
+            Directory.CreateDirectory(AssetDirectory);
+
+            result.AssetPath = $"{AssetDirectory}/{source.MapName}.asset";
+
+            // 있으면 덮어쓴다 — `Bake` 와 같은 이유다. 새로 만들면 이 에셋을 가리키는 참조가 끊긴다.
+            var asset = AssetDatabase.LoadAssetAtPath<MapBakedAsset>(result.AssetPath);
+            var created = asset == null;
+
+            if (created)
+            {
+                asset = ScriptableObject.CreateInstance<MapBakedAsset>();
+            }
+
+            asset.FillFromScene(
+                source,
+                "Scene/" + source.GetType().Name,
+                DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+
+            if (created)
+            {
+                AssetDatabase.CreateAsset(asset, result.AssetPath);
+            }
+            else
+            {
+                EditorUtility.SetDirty(asset);
+            }
+
+            AssetDatabase.SaveAssets();
+
+            result.Asset = asset;
+
+            // 씬에 아무것도 세우지 않는다. 레벨은 이미 그 씬에 있다.
+            MapCatalogWriter.Register(result.Asset, null);
+
+            return result;
+        }
+
         /// 씬 루트를 프리팹으로 저장하고 씬의 것을 그 인스턴스로 잇는다.
         ///
         /// **잇는 것이 중요하다.** 잇지 않으면 씬에 프리팹과 무관한 사본이 남고, 다음에 프리팹을

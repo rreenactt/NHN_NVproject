@@ -13,6 +13,13 @@ MonoBehaviour:
   m_Name: MapCatalog
   m_EditorClassIdentifier: Assembly-CSharp::NV.Client.Map.MapCatalog
   entries:
+  - mapId: backrooms
+    asset: {fileID: 11400000, guid: 40f5d00da028e9945a68719cd0bcfe8d, type: 2}
+    prefab: {fileID: 0}
+    displayName: backrooms
+    description: 
+    bakedHash: -1922523650
+    sceneOverride: SampleScene
   - mapId: backrooms-v2
     asset: {fileID: 11400000, guid: ff5ba93d1758cdd449dffd6c8f5f6bf0, type: 2}
     prefab: {fileID: 1676762635958154636, guid: ccc49a5ab11cc4143a127696840ea34c, type: 3}
