@@ -385,6 +385,11 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(RoomPhase.Playing, room.Phase);
         }
 
+        /// 정적 룸에서는 방장이 아니어도 START 가 먹는다(`IsAuthorized`). 코드를 발급받는
+        /// 경로가 없어 방장 토큰이 없기 때문이다.
+        ///
+        /// **준비 조건은 별개이고, 그것은 정적 룸에도 걸린다.** 그래서 먼저 준비를 채운다 —
+        /// 이 검사가 묻는 것은 "누가 눌러도 되는가" 이지 "준비 없이 되는가" 가 아니다.
         [Fact]
         public void 정적_룸은_방장_없이_아무나_시작한다()
         {
@@ -392,6 +397,10 @@ namespace NV.Modules.Tests.Realtime
 
             room.PostCommand(RoomCommand.Join(1, 0));
             room.PostCommand(RoomCommand.Join(2, 1));
+
+            // 세션 1 이 먼저 들어와 방장이 된다. 세션 2 가 누를 것이므로 그 사람을 뺀
+            // 나머지, 즉 세션 1 이 준비해야 한다.
+            room.PostCommand(RoomCommand.SetReady(1, true));
             room.PostCommand(RoomCommand.Start(2));
             room.Advance();
 

@@ -46,6 +46,15 @@ Escaping is not being wiped out. The wipe win requires every Runner to have gone
 **down**; a Runner who walked out through the door has not been eliminated, and
 counting them as such hands the Seeker a win for losing.
 
+## Starting a match
+
+- Everyone **except the host** must press READY. The host's START **is** their ready —
+  requiring both would make two controls mean one thing.
+- Bots do not ready; they have no way to ask.
+- **No room is exempt**, including the pre-opened development room. That room is public,
+  so the room list and quick join put ordinary players in it, and an exemption there is an
+  exemption in a real match.
+
 ## Seeker: running
 
 - The Seeker **cannot run continuously.** Running spends a gauge; at **0 they cannot run

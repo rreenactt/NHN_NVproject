@@ -1,4 +1,4 @@
-using NV.Realtime;
+﻿using NV.Realtime;
 using NV.Realtime.Simulation;
 using NV.Shared.Contracts.Enums;
 using Xunit;
@@ -130,17 +130,28 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(RoomPhase.Playing, room.Phase);
         }
 
-        /// 정적 룸은 조건을 건너뛴다. `IsAuthorized` 가 이미 그 룸을 예외로 두고 있고,
-        /// 개발용 예외를 같은 경계 안에만 두면 실제 매치의 판정에는 닿지 않는다.
+        /// **정적 룸도 준비를 요구한다.**
+        ///
+        /// 한동안 건너뛰었다 — 두 클라이언트 개발 루프가 그 룸으로 돌아가므로 편의였다.
+        /// 그런데 그 룸은 **공개**라서 방 목록과 빠른 참가가 보통 사람을 그리로 넣고, 그래서
+        /// 개발용 예외가 개발용 경계 밖으로 샜다. 증상은 "아무도 레디를 안 눌렀는데 게임이
+        /// 시작된다" 였다.
         [Fact]
-        public void 정적_룸은_준비_없이_시작한다()
+        public void 정적_룸도_준비를_요구한다()
         {
             var room = RoomFixture.Create(isStatic: true);
 
             RoomFixture.JoinHuman(room, 1);
             RoomFixture.JoinHuman(room, 2);
 
-            room.PostCommand(RoomCommand.Start(2));
+            room.PostCommand(RoomCommand.Start(1));
+            room.Advance();
+
+            Assert.Equal(RoomPhase.Waiting, room.Phase);
+
+            // 게스트가 누르면 시작된다. 방장은 누르지 않는다 — START 가 그 사람의 준비다.
+            room.PostCommand(RoomCommand.SetReady(2, true));
+            room.PostCommand(RoomCommand.Start(1));
             room.Advance();
 
             Assert.Equal(RoomPhase.Playing, room.Phase);

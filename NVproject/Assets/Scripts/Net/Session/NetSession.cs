@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NV.Client.Config;
 using NV.Shared.Contracts.Enums;
 using NV.Shared.Contracts.Messages;
@@ -178,12 +178,13 @@ namespace NV.Client.Net.Session
 
         /// <summary>나를 뺀 모든 사람이 준비했는가. 서버의 `EveryoneElseIsReady` 와 같은 규칙.</summary>
         ///
-        /// **개발용 정적 룸은 조건을 건너뛴다.** 서버가 그 룸에서 준비를 보지 않으므로
-        /// (`Room.EveryoneElseIsReady`) 여기서 보면 두 클라이언트 개발 루프의 시작 버튼이
-        /// 서버가 받아들일 상태에서도 꺼져 있게 된다. 정적 룸 판정은 `InviteCodeText` 한
-        /// 곳에만 있다.
-        public bool EveryoneElseIsReady =>
-            InviteCodeText.IsStaticRoomId(Code) || NotReadyCount == 0;
+        /// **정적 룸 예외가 여기에도 있었고 함께 없앴다.** 서버가 그 룸에서 준비를 보지
+        /// 않았으므로 버튼도 켜 두는 것이 맞았는데, 그 룸은 공개라서 방 목록과 빠른 참가가
+        /// 보통 사람을 그리로 넣었다 — 아무도 준비하지 않은 채 시작되는 방이 그렇게 생겼다.
+        ///
+        /// 두 곳이 같은 규칙을 들고 있다는 것 자체는 그대로다. 서버가 판정이고 이쪽은 버튼의
+        /// 모양이며, 어긋나면 증상은 **"눌렀는데 아무 일도 없다"** 다.
+        public bool EveryoneElseIsReady => NotReadyCount == 0;
 
         /// <summary>시작에 필요한 최소 인원. 서버가 알려 준 값이며 클라이언트가 정하지 않는다.</summary>
         public int MinPlayers => Room.MinPlayers > 0 ? Room.MinPlayers : 2;
