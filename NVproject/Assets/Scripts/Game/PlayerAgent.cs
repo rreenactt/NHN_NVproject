@@ -163,6 +163,20 @@ namespace NV.Game
             SetPresent(false);
         }
 
+        /// <summary>
+        /// Blows the body apart without ending anything — the losing side at the final whistle.
+        ///
+        /// **Deliberately not <see cref="Kill"/>.** Kill is an authority-only mutator: it drops
+        /// `Alive`, which the wipe check and the spectator both read. Calling it after the match
+        /// is already decided would rewrite the roster the result was computed from. This one
+        /// only touches what the screen shows.
+        /// </summary>
+        internal void Shatter()
+        {
+            BlockGibs.Burst(GetComponent<BlockRig>(), displayName);
+            SetPresent(false);
+        }
+
         internal void Kill()
         {
             Alive = false;

@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using NV.Client.Map;
+using NV.Client.Net.Session;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -50,6 +51,10 @@ namespace NV.Game.UI
         private VisualElement _mapOverlay, _mapImage, _feedOverlay, _feedImage, _freezeBanner;
         private Label _mapCaption, _feedCaption;
         private VisualElement _revealCard, _endCard;
+        private Button _endExit;
+
+        /// 결과를 사람이 아직 닫지 않았다. 이 값이 참인 동안 씬 전환을 붙잡는다.
+        private bool _holdingResult;
         private Label _revealRole, _revealFlavor, _revealCount, _endTitle, _endDetail;
 
         // --- state
@@ -253,6 +258,8 @@ namespace NV.Game.UI
             _revealFlavor = _root.Q<Label>("reveal-flavor");
             _revealCount = _root.Q<Label>("reveal-count");
             _endCard = _root.Q<VisualElement>("end-card");
+            _endExit = _root.Q<Button>("end-exit");
+            if (_endExit != null) _endExit.clicked += LeaveResult;
             _endTitle = _root.Q<Label>("end-title");
             _endDetail = _root.Q<Label>("end-detail");
 
@@ -370,7 +377,11 @@ namespace NV.Game.UI
         /// </summary>
         private void UpdateSpectator()
         {
-            _spectator.Tick(_local, _match != null ? _match.Agents : null, _viewCamera);
+            // **매치가 도는 동안만 관전한다.** 결과가 뜬 뒤에도 남의 눈에 붙어 있으면,
+            // 나가기를 눌러야 하는 화면을 남의 어깨 너머로 보게 된다.
+            bool playing = _match != null && _match.Phase == MatchPhase.Playing;
+
+            _spectator.Tick(playing ? _local : null, _match != null ? _match.Agents : null, _viewCamera);
 
             if (_spectatorBar == null || _spectatorName == null) return;
 
@@ -387,6 +398,53 @@ namespace NV.Game.UI
         /// 한 프레임 뒤처지지 않는다 — 뒤처지면 보고 있는 대상에 대해서만 화면이 떤다.
         /// </summary>
         private void LateUpdate() => _spectator.LateTick();
+
+        /// 결과를 화면에 올리고, 사람이 닫을 때까지 씬을 붙잡기 시작한다.
+        ///
+        /// 커서를 푼다 — 매치 중에는 잠겨 있어서, 풀지 않으면 화면에 버튼이 보이는데 누를
+        /// 수가 없다. 이동은 이미 서버가 잠갔으므로(`Match.MovementLocked`) 여기서 조작을
+        /// 더 막을 것은 없다.
+        private void ShowResult()
+        {
+            _endCard.style.display = DisplayStyle.Flex;
+            _holdingResult = true;
+
+            // `UnityEngine.UIElements` 에도 `Cursor` 가 있어 한정이 필요하다.
+            UnityEngine.Cursor.lockState = CursorLockMode.None;
+            UnityEngine.Cursor.visible = true;
+        }
+
+        /// 나가기를 눌렀다. 붙잡음을 놓으면 다음 프레임에 라우터가 대기방으로 컷한다.
+        private void LeaveResult()
+        {
+            _holdingResult = false;
+            _endCard.style.display = DisplayStyle.None;
+            SceneTransitionHold.Release();
+        }
+
+        /// <summary>
+        /// 술래가 이긴 매치의 끝에서, 아직 서 있는 Runner 들의 몸이 터진다.
+        ///
+        /// **`Kill` 이 아니라 연출이다.** `Kill` 은 매치 판정에 쓰이는 상태를 건드리고, 여기는
+        /// 이미 끝난 매치다 — 그 상태를 지금 바꾸면 결과가 이미 나온 뒤에 명단이 흔들린다.
+        /// 씨드가 이름에서 오므로 두 사람이 같은 파편을 본다.
+        /// </summary>
+        private void ShatterTheLost()
+        {
+            IReadOnlyList<PlayerAgent> agents = _match.Agents;
+
+            for (int i = 0; i < agents.Count; i++)
+            {
+                PlayerAgent agent = agents[i];
+                if (agent == null || agent.Role != Role.Runner) continue;
+
+                // 이미 쓰러졌거나 빠져나간 몸은 건드리지 않는다. 탈출한 사람은 나갔으므로
+                // 진 것이 아니고, 쓰러진 사람은 그때 이미 터졌다.
+                if (!agent.InPlay) continue;
+
+                agent.Shatter();
+            }
+        }
 
         private void UpdateClock()
         {
@@ -682,7 +740,22 @@ namespace NV.Game.UI
             if (!TreeIsLive) return;
 
             _revealCard.style.display = phase == MatchPhase.RoleReveal ? DisplayStyle.Flex : DisplayStyle.None;
-            if (phase != MatchPhase.Ended) _endCard.style.display = DisplayStyle.None;
+            if (phase != MatchPhase.Ended)
+            {
+                _endCard.style.display = DisplayStyle.None;
+
+                // 방이 결과를 떠났다. 아직 읽고 있었더라도 놓아 준다 — 여기서 계속 붙잡으면
+                // 방은 다음 매치를 시작했는데 이 클라이언트만 지난 결과 화면에 남는다.
+                _holdingResult = false;
+            }
+
+            // 매치가 시작되면 커서를 다시 잠근다. 결과 화면이 풀어 놓은 것을 되돌리는 자리다 —
+            // 없으면 한 번 결과를 본 사람은 다음 매치를 **커서가 뜬 채로** 시작한다.
+            if (phase == MatchPhase.RoleReveal || phase == MatchPhase.Playing)
+            {
+                UnityEngine.Cursor.lockState = CursorLockMode.Locked;
+                UnityEngine.Cursor.visible = false;
+            }
 
             if (phase != MatchPhase.RoleReveal) return;
 
@@ -702,7 +775,18 @@ namespace NV.Game.UI
             if (_endCardDelay > 0f)
             {
                 _endCardDelay -= Time.deltaTime;
-                if (_endCardDelay <= 0f) _endCard.style.display = DisplayStyle.Flex;
+                if (_endCardDelay <= 0f) ShowResult();
+            }
+
+            // **매 프레임 다시 붙잡는다.** 한 번에 긴 시간을 요구하면 사람이 버튼을 누른 뒤에도
+            // 그만큼 서 있게 되고, 무엇보다 이 컴포넌트가 죽었을 때 아무도 못 나가는 방이
+            // 남는다. 짧은 시한을 갱신하는 쪽이 같은 일을 하면서 저절로 풀린다.
+            if (_holdingResult)
+            {
+                // 카드를 매 프레임 다시 세운다. 붙잡음만 갱신하면, 역할 재배정 등으로 트리가
+                // 다시 그려졌을 때 **보이지 않는 카드를 기다리며** 아무도 못 나가게 된다.
+                _endCard.style.display = DisplayStyle.Flex;
+                SceneTransitionHold.Hold(0.5f);
             }
 
             if (_match.Phase != MatchPhase.RoleReveal) return;
@@ -753,6 +837,10 @@ namespace NV.Game.UI
             // 카드를 켜는 것은 `UpdateCards` 다 — 여기서 함께 켜면 지연이 없는 것과 같다.
             _endCardDelay = EndCardDelaySeconds;
             _revealCard.style.display = DisplayStyle.None;
+
+            // 진 쪽의 몸이 터진다. 시간 초과는 아무도 쓰러지지 않은 채 끝나므로, 그것이
+            // 없으면 화면에서 벌어지는 일이 하나도 없이 숫자만 0 이 된다.
+            if (!aborted && !runnersWon) ShatterTheLost();
 
             _mapOverlay.style.display = DisplayStyle.None;
             _feedOverlay.style.display = DisplayStyle.None;

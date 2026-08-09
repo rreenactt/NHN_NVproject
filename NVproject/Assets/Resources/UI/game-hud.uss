@@ -499,6 +499,30 @@
     display: none;
 }
 
+.card__button {
+    margin-top: 26px;
+    padding-left: 34px;
+    padding-right: 34px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    font-size: 15px;
+    letter-spacing: 2px;
+    color: rgb(232, 228, 216);
+    background-color: rgba(120, 110, 78, 0.35);
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-color: rgb(150, 140, 104);
+    border-right-color: rgb(150, 140, 104);
+    border-top-color: rgb(150, 140, 104);
+    border-bottom-color: rgb(150, 140, 104);
+}
+
+.card__button:hover {
+    background-color: rgba(150, 140, 104, 0.55);
+}
+
 .card__title {
     font-size: 76px;
     letter-spacing: 26px;

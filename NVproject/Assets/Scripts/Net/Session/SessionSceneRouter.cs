@@ -1,4 +1,4 @@
-using NV.Client.Map;
+﻿using NV.Client.Map;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -95,6 +95,20 @@ namespace NV.Client.Net.Session
         private void EnterGameLobby()
         {
             if (SceneManager.GetActiveScene().name == GameLobbyScene)
+            {
+                return;
+            }
+
+            // **결과 화면이 여기를 붙잡는다.** 방이 `Ended` 가 되는 프레임에 그대로 컷하면
+            // 매치 씬이 언로드되고 그 안에 있던 결과 카드가 함께 사라진다 — 시간 초과로 진
+            // 사람은 졌다는 표시조차 보지 못하고 대기방에 서 있었다.
+            //
+            // `EnterGame` 과 같은 장치를 쓰지만 성격이 다르다. 저쪽은 연출이 끝나기를 기다리는
+            // 짧은 시한이고, 이쪽은 **사람이 버튼을 누르기를** 기다린다. 그래서 카드가 떠 있는
+            // 동안 매 프레임 다시 붙잡는다(`GameHudController`) — 시한이라는 성질은 그대로
+            // 두고 싶기 때문이다. HUD 가 죽으면 붙잡음도 함께 풀려서, 아무도 못 나가는 방이
+            // 되는 대신 반 초 뒤에 평소처럼 컷한다.
+            if (SceneTransitionHold.Active)
             {
                 return;
             }

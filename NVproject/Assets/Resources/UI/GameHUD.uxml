@@ -143,6 +143,12 @@
             <ui:Label name="end-title" text="" class="card__title" />
             <ui:Label name="end-detail" text="" class="card__flavor" />
             <ui:Label name="end-hint" text="F2 — RUN IT AGAIN" class="card__count" />
+            <!--
+                나가기. **이 버튼이 결과 화면을 화면으로 만든다** — 이것이 생기기 전에는
+                방이 Ended 가 되는 프레임에 라우터가 대기방 씬을 로드해서, 카드가 붙어 있던
+                씬째로 사라졌다. 진 사람은 자기가 왜 졌는지는커녕 졌다는 것도 못 봤다.
+            -->
+            <ui:Button name="end-exit" text="나가기" class="card__button" />
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>
