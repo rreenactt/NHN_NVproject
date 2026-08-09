@@ -198,6 +198,18 @@ namespace NV.Realtime.Simulation
         /// 어느 쪽의 승리도 아니다.
         private const byte AbortedOutcome = 4;
 
+        /// 매치가 시작될 때의 Runner 수. 탈출 목표가 여기서 나온다
+        /// (`MatchConstants.EscapesToWinWith`) — **지금 세면 안 된다.** 쓰러지거나 나간
+        /// 사람이 빠진 명단으로 목표를 다시 계산하면, 남은 인원이 줄어들수록 목표도 줄어
+        /// 마지막 한 명이 걸어 나가는 것으로 팀이 이긴다.
+        private int _runnersAtStart;
+
+        /// 결과 1 — Runner 가 목표 인원을 내보냈다.
+        private const byte RunnersEscapedOutcome = 1;
+
+        /// 결과 2 — 시계가 다 됐고 목표에 못 미쳤다. 술래 승.
+        private const byte SeekerTimeoutOutcome = 2;
+
         /// 상태가 바뀐 틱에는 간격을 무시하고 즉시 보낸다.
         private bool _stateDirty = true;
         private uint _lastStateTick;
@@ -836,6 +848,22 @@ namespace NV.Realtime.Simulation
         ///
         /// Seeker 가 정해지기 전에는 아무도 배정되지 않았다. 그때 전원을 Runner 로 두면
         /// 클라이언트가 로비에서 무기 없는 몸을 만들고, 역할이 정해진 뒤 다시 만들어야 한다.
+        /// 지금 명단의 Runner 수.
+        private int CountRunners()
+        {
+            var runners = 0;
+
+            foreach (var player in _players.Values)
+            {
+                if (RoleOf(player.PlayerId) == MatchRole.Runner)
+                {
+                    runners++;
+                }
+            }
+
+            return runners;
+        }
+
         private MatchRole RoleOf(byte playerId)
         {
             if (_seekerPlayerId == RoomStateHeader.NoPlayer)
@@ -2816,6 +2844,8 @@ namespace NV.Realtime.Simulation
             // 첫 틱이며, 이 값과 스냅샷의 틱이 같은 기준이 된다.
             _startTick = _tick + 1u;
 
+            _runnersAtStart = CountRunners();
+
             // 배치는 서버가 한다. 이동이 서버 권위이므로 클라이언트가 자기 몸을
             // 옮겨 놓아도 다음 스냅샷이 되돌린다.
             //
@@ -2991,14 +3021,18 @@ namespace NV.Realtime.Simulation
 
         /// 서버의 시계가 매치를 끝냈다.
         ///
-        /// **아직 결과 코드를 채우지 않는다.** 단계만 옮기고 `_outcome` 은 0(미정)으로 둔다.
+        /// **결과 코드를 서버가 채운다.** 예전에는 0(미정)으로 두고 방장의 보고를 기다렸는데,
+        /// 그 보고는 도착할 수 없었다 — `EndMatch` 는 `Playing` 게이트를 지나야 하고, 이
+        /// 함수가 이미 단계를 `Ended` 로 옮긴 뒤다. 시계로 끝난 매치는 **항상** 결과 0 으로
+        /// 나갔고, 클라이언트에는 승패 없는 "MATCH OVER" 만 떴다.
         ///
-        /// 예전에는 답이 없어서였다 — 전멸 승리의 유무(OQ-2)와 2인 매치의 탈출 목표(OQ-6).
-        /// 둘 다 이제 정해졌으므로(전멸은 술래 승, 목표는 `MatchConstants.EscapesToWinWith`)
-        /// 남은 것은 그 규칙을 여기로 옮기는 일이고 그것이 IG-007 이다. 그때까지는 방장이
-        /// 판정해 `Control(EndMatch)` 로 보고한다.
+        /// 막고 있던 질문은 둘 다 답이 나와 있었다 — 전멸은 술래 승(OQ-2), 탈출 목표는
+        /// `MatchConstants.EscapesToWinWith`(OQ-6). 남은 것은 규칙을 여기로 옮기는 일뿐이었고
+        /// (IG-007), 이 함수가 그 첫 조각이다. 탈출·전멸로 끝나는 경로는 아직 방장이
+        /// 판정한다 — 그쪽은 방이 `Playing` 인 동안 도착하므로 게이트에 막히지 않는다.
         private void EndMatchByServer()
         {
+            _outcome = JudgeTimeout();
             Volatile.Write(ref _phase, (int)RoomPhase.Ended);
             _stateDirty = true;
             _matchStateDirty = true;
@@ -3072,6 +3106,21 @@ namespace NV.Realtime.Simulation
             }
 
             return false;
+        }
+
+        /// 시계가 다 된 매치의 결과.
+        ///
+        /// 시간 초과는 그 자체로 술래 승이지만(기획서 §8, 타임 어택), 먼저 목표 인원이
+        /// 빠져나갔는데 방장의 보고만 늦은 경우가 있다 — 그것을 술래 승으로 뒤집으면
+        /// 이미 이긴 팀에게서 승리를 빼앗는 셈이다. 그래서 탈출 수를 먼저 본다.
+        ///
+        /// 전멸을 따로 보지 않는 이유는 답이 같기 때문이다. 전멸도 시간 초과도 술래 승이고
+        /// (OQ-2), 화면에 뜨는 승패가 갈리지 않는다.
+        private byte JudgeTimeout()
+        {
+            return _match.Escapes >= MatchConstants.EscapesToWinWith(_runnersAtStart)
+                ? RunnersEscapedOutcome
+                : SeekerTimeoutOutcome;
         }
 
         /// 매치가 정상 진행 불가로 끝났다. 승패가 아니라 **중단**이다.

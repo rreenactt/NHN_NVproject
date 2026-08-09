@@ -55,6 +55,9 @@ namespace NV.Game.UI
 
         /// 결과를 사람이 아직 닫지 않았다. 이 값이 참인 동안 씬 전환을 붙잡는다.
         private bool _holdingResult;
+
+        /// 이 매치의 결과를 사람이 이미 닫았다. 닫은 카드가 다시 올라오지 않게 한다.
+        private bool _resultClosed;
         private Label _revealRole, _revealFlavor, _revealCount, _endTitle, _endDetail;
 
         // --- state
@@ -418,6 +421,7 @@ namespace NV.Game.UI
         private void LeaveResult()
         {
             _holdingResult = false;
+            _resultClosed = true;
             _endCard.style.display = DisplayStyle.None;
             SceneTransitionHold.Release();
         }
@@ -747,6 +751,7 @@ namespace NV.Game.UI
                 // 방이 결과를 떠났다. 아직 읽고 있었더라도 놓아 준다 — 여기서 계속 붙잡으면
                 // 방은 다음 매치를 시작했는데 이 클라이언트만 지난 결과 화면에 남는다.
                 _holdingResult = false;
+                _resultClosed = false;
             }
 
             // 매치가 시작되면 커서를 다시 잠근다. 결과 화면이 풀어 놓은 것을 되돌리는 자리다 —
@@ -777,6 +782,14 @@ namespace NV.Game.UI
                 _endCardDelay -= Time.deltaTime;
                 if (_endCardDelay <= 0f) ShowResult();
             }
+            else if (_match.Phase == MatchPhase.Ended && !_holdingResult && !_resultClosed)
+            {
+                // **결과 카드는 게시지 알림이 아니다.** `MatchEnded` 한 번에 기대면 그 순간
+                // 트리가 살아 있지 않은 클라이언트는 카드를 영영 못 본다 — 그리고 그것이
+                // 곧 "승패 없이 로비로" 다. 단계에서 유도하면 늦게 올라온 트리도 따라잡는다.
+                RenderResult(_match.Outcome);
+                ShowResult();
+            }
 
             // **매 프레임 다시 붙잡는다.** 한 번에 긴 시간을 요구하면 사람이 버튼을 누른 뒤에도
             // 그만큼 서 있게 되고, 무엇보다 이 컴포넌트가 죽었을 때 아무도 못 나가는 방이
@@ -794,6 +807,33 @@ namespace NV.Game.UI
         }
 
         private void OnMatchEnded(MatchOutcome outcome)
+        {
+            // **한 박자 두고 띄운다.** 매치가 끝나는 순간은 대개 화면에서 무슨 일이 벌어지는
+            // 순간이다 — 마지막 한 명이 문으로 걸어 나가거나, 쓰러지거나, 시계가 0 이 된다.
+            // 그 프레임에 카드가 덮으면 결과는 읽히는데 **왜 그렇게 됐는지를 못 본다.**
+            //
+            // 트리가 살아 있지 않아도 여기까지는 온다. 카드를 그리는 것은 `UpdateCards` 이고,
+            // 그쪽은 단계에서 유도하므로 이 지연이 그냥 지나가도 결과는 뜬다.
+            _endCardDelay = EndCardDelaySeconds;
+            _resultClosed = false;
+
+            // 진 쪽의 몸이 터진다. 시간 초과는 아무도 쓰러지지 않은 채 끝나므로, 그것이
+            // 없으면 화면에서 벌어지는 일이 하나도 없이 숫자만 0 이 된다.
+            // 술래가 이긴 두 경우만이다. 중단은 승패가 아니고, 결과가 미정인 매치에서
+            // 한쪽 몸만 터뜨리면 화면이 아직 나오지도 않은 판정을 먼저 말한다.
+            if (outcome == MatchOutcome.SeekerTimeout || outcome == MatchOutcome.SeekerWipedRunners)
+            {
+                ShatterTheLost();
+            }
+
+            if (!TreeIsLive) return;
+
+            RenderResult(outcome);
+        }
+
+        /// 결과 카드의 글자와 색. **여러 번 불려도 같은 값을 쓴다** — 이벤트로도 오고
+        /// 단계 폴링으로도 오기 때문이다.
+        private void RenderResult(MatchOutcome outcome)
         {
             if (!TreeIsLive) return;
 
@@ -831,16 +871,7 @@ namespace NV.Game.UI
             _endTitle.EnableInClassList("card__title--win", !aborted && localWon);
             _endTitle.EnableInClassList("card__title--lose", !aborted && !localWon);
 
-            // **한 박자 두고 띄운다.** 매치가 끝나는 순간은 대개 화면에서 무슨 일이 벌어지는
-            // 순간이다 — 마지막 한 명이 문으로 걸어 나가거나, 쓰러지거나, 시계가 0 이 된다.
-            // 그 프레임에 카드가 덮으면 결과는 읽히는데 **왜 그렇게 됐는지를 못 본다.**
-            // 카드를 켜는 것은 `UpdateCards` 다 — 여기서 함께 켜면 지연이 없는 것과 같다.
-            _endCardDelay = EndCardDelaySeconds;
             _revealCard.style.display = DisplayStyle.None;
-
-            // 진 쪽의 몸이 터진다. 시간 초과는 아무도 쓰러지지 않은 채 끝나므로, 그것이
-            // 없으면 화면에서 벌어지는 일이 하나도 없이 숫자만 0 이 된다.
-            if (!aborted && !runnersWon) ShatterTheLost();
 
             _mapOverlay.style.display = DisplayStyle.None;
             _feedOverlay.style.display = DisplayStyle.None;
