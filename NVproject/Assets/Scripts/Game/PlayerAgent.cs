@@ -73,6 +73,11 @@ namespace NV.Game
             if (controller == null) controller = GetComponent<FirstPersonController>();
             if (navAgent == null) navAgent = GetComponent<NavMeshAgent>();
             if (head == null && controller != null) head = controller.cameraTransform;
+
+            // 손전등은 몸을 가진 모두가 든다 — 이 컴포넌트가 붙어 있다는 것이 곧 "이것은
+            // 플레이어의 몸이다" 이므로, 로컬·원격·연습 러너를 각각 챙기는 대신 여기서 한 번
+            // 붙인다. 방마다 따로 붙이면 원격 몸에만 빠지는 식으로 갈린다.
+            if (GetComponent<Flashlight>() == null) gameObject.AddComponent<Flashlight>();
         }
 
         private void OnEnable() => MatchManager.Instance?.Register(this);

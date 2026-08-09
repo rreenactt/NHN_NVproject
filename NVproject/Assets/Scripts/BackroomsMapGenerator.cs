@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using NV.Client.Map;
 using NV.Client.Net;
 using NV.Shared.Collision;
@@ -73,9 +73,12 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
     [Header("Lighting")]
     [Tooltip("A fluorescent panel every N cells, so the lighting reads as an office grid.")]
     public int lightSpacing = 3;
-    public float lightIntensity = 1.6f;
+    public float lightIntensity = 0.34f;
     [Tooltip("Fraction of lights that buzz and flicker. Occasional is eerier than constant.")]
-    [Range(0f, 0.4f)] public float flickerFraction = 0.18f;
+    [Range(0f, 0.4f)] public float flickerFraction = 0.2f;
+    [Tooltip("Fraction of panels that are simply dead — no light, no glow. Drawn from the same " +
+             "roll as the flicker, so the two sets never overlap and each is exactly its share.")]
+    [Range(0f, 0.6f)] public float deadFraction = 0.2f;
 
     [Header("Mood — values from the aesthetic spec")]
     public Color wallColor = new Color32(0xC9, 0xB3, 0x6B, 0xFF);
@@ -83,8 +86,8 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
     public Color carpetColor = new Color32(0x8A, 0x7F, 0x52, 0xFF);
     public Color ceilingColor = new Color32(0xD8, 0xCF, 0xA8, 0xFF);
     public Color lightColor = new Color32(0xFF, 0xF6, 0xD6, 0xFF);
-    public Color fogColor = new Color32(0xB7, 0xAC, 0x7E, 0xFF);
-    public float fogDensity = 0.022f;
+    public Color fogColor = new Color32(0x0E, 0x0D, 0x09, 0xFF);
+    public float fogDensity = 0.034f;
     [Tooltip("Low fluorescent/HVAC drone, generated in code. This one sound does a lot of work.")]
     public bool ambientHum = true;
     [Range(0f, 1f)] public float humVolume = 0.35f;
@@ -113,6 +116,7 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
 
     private BoxCollider _ceilingLid;
     private Material _wallMaterial, _carpetMaterial, _ceilingMaterial, _lightMaterial, _trimMaterial;
+    private Material _deadPanelMaterial;
     private float _originX, _originZ;
 
     public int WallPieces { get; private set; }
@@ -1004,8 +1008,19 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
             Vector3 centre = CellCentre(f, x, z);
             float y = FloorY(f) + CeilingHeight;
 
+            // **한 번만 뽑는다.** 죽은 것과 깜빡이는 것을 따로 뽑으면 둘이 겹쳐서, 부탁받은
+            // 1/5 씩이 아니라 "죽었는데 깜빡이는" 등기구가 생기고 각 몫도 줄어든다.
+            double roll = random.NextDouble();
+            bool dead = roll < deadFraction;
+            bool flickers = !dead && roll < deadFraction + flickerFraction;
+
+            // 죽은 등기구는 패널도 죽는다. 발광 재질을 그대로 두면 빛은 없는데 판만 하얗게
+            // 떠서, 꺼진 것이 아니라 조명이 고장 난 렌더로 보인다.
             AddBox("Panel", new Vector3(centre.x, y - 0.07f, centre.z),
-                new Vector3(cellSize * 0.42f, 0.06f, cellSize * 0.42f), _lightMaterial, false);
+                new Vector3(cellSize * 0.42f, 0.06f, cellSize * 0.42f),
+                dead ? _deadPanelMaterial : _lightMaterial, false);
+
+            if (dead) continue;
 
             var lightGo = new GameObject("Fluorescent");
             lightGo.transform.SetParent(root, false);
@@ -1021,7 +1036,7 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
             light.shadows = LightShadows.None;
             LightCount++;
 
-            if (random.NextDouble() < flickerFraction)
+            if (flickers)
             {
                 _flickerLights.Add(light);
                 _flickerPhase.Add((float)random.NextDouble() * 10f);
@@ -1038,8 +1053,12 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
 
         // No sun indoors, and no skybox to leak blue into a yellow room.
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.19f, 0.17f, 0.12f);
+        RenderSettings.ambientLight = new Color(0.026f, 0.024f, 0.018f);
         RenderSettings.skybox = null;
+
+        // 역할별 밝기는 이 값들의 배수다. 새 맵이 새 기준을 세웠으므로 지난 맵의 기준을
+        // 버리게 한다 — 남겨 두면 v2 에 서 있는 술래의 화면이 backrooms 의 황토색으로 밝는다.
+        NV.Game.RoleVision.Forget();
 
         if (ambientHum) BuildHum();
     }
@@ -1183,9 +1202,16 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
         _carpetMaterial = MakeMaterial("Backrooms Carpet", carpetColor, 0.05f);
         _ceilingMaterial = MakeMaterial("Backrooms Ceiling", ceilingColor, 0.1f);
 
+        // 꺼진 패널. 켜진 것과 같은 색이되 훨씬 어둡고 발광이 없다 — 같은 등기구가
+        // 꺼져 있는 것으로 읽혀야지, 다른 물건으로 보이면 안 된다.
+        _deadPanelMaterial = MakeMaterial("Backrooms Dead Panel",
+            // 알파는 곱하지 않는다. `lightColor * 0.22f` 는 알파까지 0.22 로 만들고,
+            // 이 재질이 투명 표면으로 바뀌는 날 패널이 반쯤 사라진다.
+            new Color(lightColor.r * 0.22f, lightColor.g * 0.22f, lightColor.b * 0.22f, 1f), 0.2f);
+
         _lightMaterial = MakeMaterial("Backrooms Light Panel", lightColor, 0.2f);
         _lightMaterial.EnableKeyword("_EMISSION");
-        _lightMaterial.SetColor("_EmissionColor", lightColor * 2.6f);
+        _lightMaterial.SetColor("_EmissionColor", lightColor * 1.7f);
         _lightMaterial.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
     }
 

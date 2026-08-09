@@ -915,8 +915,9 @@ namespace NV.Realtime.Simulation
             {
                 // 잠금 중에는 반복도 비운다. 이 갈래를 빼면 잠금이 걸린 첫 틱에 새 입력이
                 // 없는 플레이어가 **직전 프레임의 이동을 그대로 반복**해, 리빌 중에 혼자
-                // 계속 달린다.
-                if (_match.MovementLocked)
+                // 계속 달린다. 매치에서 빠진 몸도 같다 — 쓰러지던 순간의 이동이 반복되면
+                // 시체가 몇 틱 더 걸어간다.
+                if (_match.MovementLocked || IsOutOfPlay(player))
                 {
                     var locked = InputValidator.Neutral(player.LastInput);
                     Simulate(player, locked);
@@ -1033,7 +1034,12 @@ namespace NV.Realtime.Simulation
             // 체인도 같은 잠금이다. 다른 점은 매치 전체가 아니라 **한 사람**이라는 것뿐이라
             // 판정을 한 곳에 모아 둔다 — 갈라 두면 "리빌 중에는 멈추는데 체인 중에는 걸어
             // 다닌다" 같은 반쪽 규칙이 생긴다.
-            if (_match.MovementLocked || player.Chained)
+            //
+            // 매치에서 빠진 몸도 여기서 선다. 클라이언트는 이미 스스로 멈추지만
+            // (`PlayerAgent.ApplyLock` 의 `!InPlay`), 그것은 **부탁이지 규칙이 아니다** —
+            // 고쳐진 클라이언트가 계속 걸으면 보이지 않는 몸으로 맵을 정찰하게 되고,
+            // 관전이 붙은 뒤로는 남의 눈으로 보면서 자기 몸으로 걷는 셈이 된다.
+            if (_match.MovementLocked || player.Chained || IsOutOfPlay(player))
             {
                 frame = InputValidator.Neutral(frame);
             }
@@ -1059,6 +1065,17 @@ namespace NV.Realtime.Simulation
 
             return frame;
         }
+
+        /// 매치에서 빠진 몸인가. 쓰러졌거나 빠져나갔다.
+        ///
+        /// **몸을 지우지 않는 대신 이것이 있다.** 둘 다 명단에는 남아야 하고(전멸 판정이
+        /// 세어야 한다) 좌표도 계속 나가야 하지만, 더 이상 자기 뜻으로 움직이지는 않는다.
+        ///
+        /// `EntityFlags.Frozen` 은 **일부러 세우지 않는다.** 클라이언트는 그 비트 하나로
+        /// 체인을 그리므로, 여기서 함께 세우면 시체마다 제단으로 늘어진 사슬이 붙는다.
+        /// 못 움직인다는 사실은 같아도 그리는 그림이 다르고, 이미 `Downed`·`Escaped` 라는
+        /// 자기 비트가 나가고 있다.
+        private static bool IsOutOfPlay(PlayerEntity player) => player.Downed || player.Escaped;
 
         /// 이 몸의 와이어 표현을 다시 만든다. **틱의 마지막 단계다.**
         ///

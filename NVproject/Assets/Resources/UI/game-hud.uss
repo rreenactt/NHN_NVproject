@@ -52,6 +52,42 @@
     background-color: rgb(84, 82, 78);
 }
 
+/*
+    관전 띠. 화면 아래 가운데.
+
+    `display` 로 껐다 켠다 — 관전은 죽어 있는 동안만이고, 그 사이 다른 HUD 는 그대로 살아
+    있어야 하므로 트리에서 빼지 않는다.
+*/
+.spectator-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 64px;
+    display: none;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+
+.spectator-tag {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: rgb(150, 146, 136);
+    margin-right: 8px;
+}
+
+.spectator-name {
+    font-size: 17px;
+    -unity-font-style: bold;
+    color: rgb(232, 228, 216);
+    margin-right: 12px;
+}
+
+.spectator-hint {
+    font-size: 11px;
+    color: rgb(122, 118, 110);
+}
+
 .vignette {
     position: absolute;
     left: 0;
