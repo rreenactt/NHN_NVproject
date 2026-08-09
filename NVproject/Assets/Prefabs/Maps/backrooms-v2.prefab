@@ -4065,11 +4065,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 012a3a8e0d6675f4a81fd2955844cf1f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NV.Client.Map.BackroomsV2Ambience
-  fogColor: {r: 0.048, g: 0.057, b: 0.054, a: 1}
-  fogDensity: 0.034
-  ambientColor: {r: 0.02, g: 0.025, b: 0.024, a: 1}
+  fogColor: {r: 0.03, g: 0.036, b: 0.034, a: 1}
+  fogDensity: 0.042
+  ambientColor: {r: 0.013, g: 0.016, b: 0.015, a: 1}
   lightColor: {r: 0.82, g: 1, b: 0.94, a: 1}
-  lightIntensity: 0.34
+  lightIntensity: 0.26
   lightRangeCells: 2.2
   flickerFraction: 0.2
   deadFraction: 0.2

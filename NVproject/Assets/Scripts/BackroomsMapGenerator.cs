@@ -73,7 +73,7 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
     [Header("Lighting")]
     [Tooltip("A fluorescent panel every N cells, so the lighting reads as an office grid.")]
     public int lightSpacing = 3;
-    public float lightIntensity = 0.34f;
+    public float lightIntensity = 0.26f;
     [Tooltip("Fraction of lights that buzz and flicker. Occasional is eerier than constant.")]
     [Range(0f, 0.4f)] public float flickerFraction = 0.2f;
     [Tooltip("Fraction of panels that are simply dead — no light, no glow. Drawn from the same " +
@@ -86,8 +86,8 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
     public Color carpetColor = new Color32(0x8A, 0x7F, 0x52, 0xFF);
     public Color ceilingColor = new Color32(0xD8, 0xCF, 0xA8, 0xFF);
     public Color lightColor = new Color32(0xFF, 0xF6, 0xD6, 0xFF);
-    public Color fogColor = new Color32(0x0E, 0x0D, 0x09, 0xFF);
-    public float fogDensity = 0.034f;
+    public Color fogColor = new Color32(0x09, 0x08, 0x06, 0xFF);
+    public float fogDensity = 0.042f;
     [Tooltip("Low fluorescent/HVAC drone, generated in code. This one sound does a lot of work.")]
     public bool ambientHum = true;
     [Range(0f, 1f)] public float humVolume = 0.35f;
@@ -1095,7 +1095,7 @@ public class BackroomsMapGenerator : MonoBehaviour, INetworkMapSource, ILevelQue
 
         // No sun indoors, and no skybox to leak blue into a yellow room.
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.026f, 0.024f, 0.018f);
+        RenderSettings.ambientLight = new Color(0.016f, 0.015f, 0.011f);
         RenderSettings.skybox = null;
 
         // 역할별 밝기는 이 값들의 배수다. 새 맵이 새 기준을 세웠으므로 지난 맵의 기준을

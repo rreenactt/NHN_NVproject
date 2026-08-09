@@ -52,7 +52,7 @@ namespace NV.Game
         /// <see cref="PlayerRoleLoadout"/>, which only ever runs on the local player — a remote
         /// body must not get a vote on how bright this machine's screen is.
         /// </summary>
-        public static void Apply(Role role)
+        public static void Apply(Role role, Camera view = null)
         {
             Capture();
 
@@ -61,14 +61,39 @@ namespace NV.Game
                 RenderSettings.ambientLight = Scale(_baseAmbient, SeekerAmbientGain, SeekerTint);
                 RenderSettings.fogColor = Scale(_baseFogColor, SeekerAmbientGain * 0.5f, SeekerTint);
                 RenderSettings.fogDensity = _baseFogDensity * SeekerFogRelief;
-                return;
+            }
+            else
+            {
+                // Runner 와 미배정은 맵이 지은 그대로다. 이 맵의 어둠은 손전등을 전제로
+                // 맞춰져 있으므로, 여기서 더 손대면 두 곳에서 같은 값을 정하게 된다.
+                RenderSettings.ambientLight = _baseAmbient;
+                RenderSettings.fogColor = _baseFogColor;
+                RenderSettings.fogDensity = _baseFogDensity;
             }
 
-            // Runner 와 미배정은 맵이 지은 그대로다. 이 맵의 어둠은 손전등을 전제로 맞춰져
-            // 있으므로, 여기서 더 손대면 두 곳에서 같은 값을 정하게 된다.
-            RenderSettings.ambientLight = _baseAmbient;
-            RenderSettings.fogColor = _baseFogColor;
-            RenderSettings.fogDensity = _baseFogDensity;
+            PaintBackground(view);
+        }
+
+        /// <summary>
+        /// Makes the camera's background the fog's own colour.
+        ///
+        /// **The scene camera was still clearing to the default skybox blue.** Both maps set
+        /// `RenderSettings.skybox = null` — no sky belongs indoors — but the camera's clear flags
+        /// still said *Skybox*, and with no skybox material that falls through to the camera's
+        /// background colour, which was Unity's factory blue-grey. Anywhere the level had a gap,
+        /// the far end of a dark corridor opened onto daylight.
+        ///
+        /// It is painted with the fog colour rather than plain black so that distance dissolves
+        /// into the background instead of ending at it — exponential fog blends *towards*
+        /// `fogColor`, so any other background leaves a visible edge exactly where sight should
+        /// simply run out. That also means it has to be set after the role's fog, not before.
+        /// </summary>
+        private static void PaintBackground(Camera view)
+        {
+            if (view == null) return;
+
+            view.clearFlags = CameraClearFlags.SolidColor;
+            view.backgroundColor = RenderSettings.fogColor;
         }
 
         /// <summary>

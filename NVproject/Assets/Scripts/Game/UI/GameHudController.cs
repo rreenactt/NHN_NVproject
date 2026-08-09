@@ -53,11 +53,12 @@ namespace NV.Game.UI
         private VisualElement _revealCard, _endCard;
         private Button _endExit;
 
-        /// 결과를 사람이 아직 닫지 않았다. 이 값이 참인 동안 씬 전환을 붙잡는다.
-        private bool _holdingResult;
-
-        /// 이 매치의 결과를 사람이 이미 닫았다. 닫은 카드가 다시 올라오지 않게 한다.
+        /// 이 매치의 결과를 사람이 이미 닫았다. 닫은 카드가 다시 올라오지 않게 하고,
+        /// 씬을 붙잡는 것도 여기서 끝난다.
         private bool _resultClosed;
+
+        /// 카드가 올라와 있다. 커서를 한 번만 푸는 데 쓴다.
+        private bool _resultShown;
         private Label _revealRole, _revealFlavor, _revealCount, _endTitle, _endDetail;
 
         // --- state
@@ -323,6 +324,13 @@ namespace NV.Game.UI
 
         private void Update()
         {
+            // **트리보다 먼저 붙잡는다.** 결과를 붙잡는 시점은 카드가 화면에 뜬 순간이 아니라
+            // **매치가 끝난 순간**이다. 카드는 한 박자(1.6초) 뒤에 올라오는데 라우터는 방이
+            // `Ended` 가 되는 바로 그 프레임에 컷하므로, 붙잡기를 카드에 매달아 두면 카드는
+            // 뜰 기회조차 얻지 못한다 — 술래가 전멸시켜 이긴 판이 결과 없이 끝난 것이 이
+            // 구멍이었고, 시계로 끝난 판도 같은 구멍을 지나고 있었다.
+            HoldWhileResultStands();
+
             if (!TreeIsLive || _match == null)
             {
                 if (MatchManager.Instance != null && MatchManager.Instance.LocalAgent != null) Rebuild();
@@ -404,24 +412,34 @@ namespace NV.Game.UI
 
         /// 결과를 화면에 올리고, 사람이 닫을 때까지 씬을 붙잡기 시작한다.
         ///
-        /// 커서를 푼다 — 매치 중에는 잠겨 있어서, 풀지 않으면 화면에 버튼이 보이는데 누를
-        /// 수가 없다. 이동은 이미 서버가 잠갔으므로(`Match.MovementLocked`) 여기서 조작을
-        /// 더 막을 것은 없다.
+        /// 입력을 UI 로 넘긴다. **커서를 직접 푸는 것으로는 안 된다.**
+        ///
+        /// `FirstPersonController.HandleCursor` 는 입력이 켜져 있는 동안 매 프레임 돌면서,
+        /// 커서가 풀린 상태의 좌클릭을 보면 **커서를 다시 잠근다** — 화면 아무 데나 눌러
+        /// 조작으로 돌아가는 동작이다. 그래서 커서만 풀어 두면 나가기를 누르려는 클릭이
+        /// 버튼에 닿기 전에 그 재잠금에 쓰이고, 버튼은 영원히 눌리지 않는다.
+        ///
+        /// ESC 메뉴가 `InputEnabled` 를 내리는 것이 정확히 이 이유다. 같은 손잡이를 쓴다 —
+        /// 커서가 풀리고, 컨트롤러의 커서·시선·이동 처리가 통째로 서고, 무기도 같은 값을
+        /// 보므로 버튼을 누른 클릭이 총으로 새지 않는다.
         private void ShowResult()
         {
             _endCard.style.display = DisplayStyle.Flex;
-            _holdingResult = true;
+            _resultShown = true;
 
-            // `UnityEngine.UIElements` 에도 `Cursor` 가 있어 한정이 필요하다.
-            UnityEngine.Cursor.lockState = CursorLockMode.None;
-            UnityEngine.Cursor.visible = true;
+            SetPlayerInput(false);
         }
 
         /// 나가기를 눌렀다. 붙잡음을 놓으면 다음 프레임에 라우터가 대기방으로 컷한다.
+        /// 나가기를 눌렀다. 붙잡음을 놓으면 다음 프레임에 라우터가 대기방으로 컷한다.
+        ///
+        /// **입력을 되돌려주지 않는다.** 되돌리면 그 순간 커서가 다시 잠기는데, 지금 가는
+        /// 곳은 버튼으로 된 대기방이다(ESC 메뉴의 `CloseVisualOnly` 가 같은 이유로 같은
+        /// 선택을 한다). 다음 매치가 시작될 때 `OnPhaseChanged` 가 되돌린다.
         private void LeaveResult()
         {
-            _holdingResult = false;
             _resultClosed = true;
+            _resultShown = false;
             _endCard.style.display = DisplayStyle.None;
             SceneTransitionHold.Release();
         }
@@ -750,16 +768,15 @@ namespace NV.Game.UI
 
                 // 방이 결과를 떠났다. 아직 읽고 있었더라도 놓아 준다 — 여기서 계속 붙잡으면
                 // 방은 다음 매치를 시작했는데 이 클라이언트만 지난 결과 화면에 남는다.
-                _holdingResult = false;
                 _resultClosed = false;
+                _resultShown = false;
             }
 
-            // 매치가 시작되면 커서를 다시 잠근다. 결과 화면이 풀어 놓은 것을 되돌리는 자리다 —
-            // 없으면 한 번 결과를 본 사람은 다음 매치를 **커서가 뜬 채로** 시작한다.
+            // 매치가 시작되면 조작을 되돌려준다. 결과 화면이 내려놓은 것을 되돌리는 자리다 —
+            // 없으면 한 번 결과를 본 사람은 다음 매치를 **움직일 수 없는 채로** 시작한다.
             if (phase == MatchPhase.RoleReveal || phase == MatchPhase.Playing)
             {
-                UnityEngine.Cursor.lockState = CursorLockMode.Locked;
-                UnityEngine.Cursor.visible = false;
+                SetPlayerInput(true);
             }
 
             if (phase != MatchPhase.RoleReveal) return;
@@ -776,30 +793,31 @@ namespace NV.Game.UI
 
         private void UpdateCards()
         {
-            // 결과 카드는 끝난 뒤 한 박자 뒤에 올라온다. 그 사이에 마지막 장면이 보인다.
-            if (_endCardDelay > 0f)
+            // **결과 카드는 게시지 알림이 아니다.** `MatchEnded` 한 번에 기대면 그 순간
+            // 트리가 살아 있지 않은 클라이언트는 카드를 영영 못 본다 — 그리고 그것이 곧
+            // "승패 없이 로비로" 다. 단계에서 유도하면 늦게 올라온 트리도 따라잡는다.
+            //
+            // 씬을 붙잡는 것은 여기가 아니다(`HoldWhileResultStands`). 아래의 한 박자가
+            // 지나기 전에 이미 붙잡고 있어야 한다.
+            if (_match.Phase == MatchPhase.Ended && !_resultClosed)
             {
-                _endCardDelay -= Time.deltaTime;
-                if (_endCardDelay <= 0f) ShowResult();
-            }
-            else if (_match.Phase == MatchPhase.Ended && !_holdingResult && !_resultClosed)
-            {
-                // **결과 카드는 게시지 알림이 아니다.** `MatchEnded` 한 번에 기대면 그 순간
-                // 트리가 살아 있지 않은 클라이언트는 카드를 영영 못 본다 — 그리고 그것이
-                // 곧 "승패 없이 로비로" 다. 단계에서 유도하면 늦게 올라온 트리도 따라잡는다.
-                RenderResult(_match.Outcome);
-                ShowResult();
-            }
+                // 결과 카드는 끝난 뒤 한 박자 뒤에 올라온다. 그 사이에 마지막 장면이 보인다.
+                if (_endCardDelay > 0f)
+                {
+                    _endCardDelay -= Time.deltaTime;
+                }
+                else
+                {
+                    if (!_resultShown)
+                    {
+                        RenderResult(_match.Outcome);
+                        ShowResult();
+                    }
 
-            // **매 프레임 다시 붙잡는다.** 한 번에 긴 시간을 요구하면 사람이 버튼을 누른 뒤에도
-            // 그만큼 서 있게 되고, 무엇보다 이 컴포넌트가 죽었을 때 아무도 못 나가는 방이
-            // 남는다. 짧은 시한을 갱신하는 쪽이 같은 일을 하면서 저절로 풀린다.
-            if (_holdingResult)
-            {
-                // 카드를 매 프레임 다시 세운다. 붙잡음만 갱신하면, 역할 재배정 등으로 트리가
-                // 다시 그려졌을 때 **보이지 않는 카드를 기다리며** 아무도 못 나가게 된다.
-                _endCard.style.display = DisplayStyle.Flex;
-                SceneTransitionHold.Hold(0.5f);
+                    // 카드를 매 프레임 다시 세운다. 역할 재배정 등으로 트리가 다시 그려지면
+                    // 카드가 사라지고, 그때 사람은 **누를 것이 없는 채로** 붙잡힌 방에 남는다.
+                    _endCard.style.display = DisplayStyle.Flex;
+                }
             }
 
             if (_match.Phase != MatchPhase.RoleReveal) return;
@@ -816,6 +834,7 @@ namespace NV.Game.UI
             // 그쪽은 단계에서 유도하므로 이 지연이 그냥 지나가도 결과는 뜬다.
             _endCardDelay = EndCardDelaySeconds;
             _resultClosed = false;
+            _resultShown = false;
 
             // 진 쪽의 몸이 터진다. 시간 초과는 아무도 쓰러지지 않은 채 끝나므로, 그것이
             // 없으면 화면에서 벌어지는 일이 하나도 없이 숫자만 0 이 된다.
@@ -829,6 +848,39 @@ namespace NV.Game.UI
             if (!TreeIsLive) return;
 
             RenderResult(outcome);
+        }
+
+        /// 로컬 플레이어의 조작을 켜고 끈다. ESC 메뉴와 같은 손잡이다.
+        ///
+        /// **ESC 메뉴가 열려 있으면 되돌려주지 않는다.** 결과 화면 위에서 ESC 를 눌렀다가
+        /// 다음 매치가 시작되면, 이 함수가 메뉴 뒤에서 조작을 켜서 커서를 잠가 버린다 —
+        /// 메뉴는 떠 있는데 아무것도 누를 수 없는 상태가 된다.
+        private void SetPlayerInput(bool enabled)
+        {
+            if (enabled && EscapeMenuController.AnyOpen) return;
+
+            // `_local` 은 `Rebuild` 가 채운다. 아직 비어 있으면 명단에서 직접 찾는다 —
+            // 여기서 조용히 넘어가면 조작이 켜진 채로 결과 화면이 뜨고, 그러면 나가기를
+            // 누르려는 클릭이 컨트롤러의 커서 재잠금에 쓰여 버튼이 눌리지 않는다.
+            PlayerAgent local = _local != null ? _local : MatchManager.Instance?.LocalAgent;
+
+            if (local == null || local.controller == null) return;
+
+            local.controller.InputEnabled = enabled;
+        }
+
+        /// 결과가 서 있는 동안 씬 전환을 미룬다.
+        ///
+        /// **상태에서 유도한다.** `MatchManager.Phase` 만 보므로 이 컴포넌트의 트리가 아직
+        /// 살아 있지 않아도, 카드가 아직 안 떴어도 동작한다. 시한을 매 프레임 갱신하는
+        /// 것이라 이 컴포넌트가 죽으면 저절로 풀린다(`SceneTransitionHold`).
+        private void HoldWhileResultStands()
+        {
+            MatchManager match = MatchManager.Instance;
+
+            if (match == null || match.Phase != MatchPhase.Ended || _resultClosed) return;
+
+            SceneTransitionHold.Hold(0.5f);
         }
 
         /// 결과 카드의 글자와 색. **여러 번 불려도 같은 값을 쓴다** — 이벤트로도 오고

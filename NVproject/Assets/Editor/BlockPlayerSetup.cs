@@ -1,4 +1,4 @@
-using UnityEditor;
+﻿using UnityEditor;
 using UnityEngine;
 
 /// <summary>
@@ -152,6 +152,16 @@ public static class BlockPlayerSetup
         var camera = GetOrAdd<Camera>(cameraGo);
         // The viewmodel arms sit very close to the lens, so the near plane has to be tight.
         camera.nearClipPlane = 0.02f;
+
+        // **하늘은 실내에 없다.** 두 맵 모두 `RenderSettings.skybox` 를 비우는데, 지우는
+        // 것만으로는 부족하다 — clear flags 가 Skybox 로 남아 있으면 스카이박스 재질이
+        // 없는 자리를 카메라의 배경색이 메우고, 그 기본값은 유니티의 파란 회색이다.
+        // 어두운 복도 끝의 틈이 대낮으로 열린다.
+        //
+        // 실제 색은 매치가 시작되며 안개색으로 덮인다(`RoleVision.Apply`) — 거리가 배경에서
+        // 끝나는 대신 배경으로 녹아야 하기 때문이다. 여기 두는 값은 그 전까지의 것이다.
+        camera.clearFlags = CameraClearFlags.SolidColor;
+        camera.backgroundColor = new Color(0.035f, 0.032f, 0.023f, 1f);
         // Your own body is present for the mirror and for shadows, but never for your eyes.
         camera.cullingMask = ~(1 << BodyLayer);
 
