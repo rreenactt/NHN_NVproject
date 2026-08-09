@@ -83,7 +83,7 @@ namespace NV.Api.Composition
             // 맵 로드는 파일 IO 다. 컴포지션 루트가 하고 결과만 넘긴다.
             // 실패하면 기동을 멈춘다. 빈 콜리전으로 올라가면 지형을 통과한다.
             services.AddSingleton(LoadMaps(configuration));
-            services.AddSingleton(LoadStaticRooms(configuration));
+            services.AddSingleton(LoadStaticRooms(configuration, environment));
 
             services.AddRealtime(options =>
             {
@@ -377,7 +377,14 @@ namespace NV.Api.Composition
         ///
         /// **모르는 키는 기동 거부다.** 구성 바인딩은 오타를 조용히 무시하고, 그 증상은
         /// "프로필이 안 먹는다" 로만 나타난다 — 그것을 대조할 자리가 여기뿐이다.
-        private static StaticRooms LoadStaticRooms(IConfiguration configuration)
+        ///
+        /// **개발 환경 밖도 기동 거부다.** 정적 룸은 방장이 없고 만료되지 않는 공개 방이며,
+        /// 준비 게이트를 건너뛰고 전원의 시작을 받아 준다(`Room.IsAuthorized`) — 전부
+        /// 2클라 개발 루프를 위한 성질이고, 운영에서는 로비 목록과 빠른 입장이 실제
+        /// 사용자를 그 방에 떨어뜨린다. 실제로 기본 설정의 `test` 룸이 배포까지 따라갔다.
+        /// 조용히 걸러 주지 않는 이유는 봇 가드(`GuardDevelopmentOnlyOptions`)와 같다 —
+        /// 설정이 거짓말을 하게 된다.
+        private static StaticRooms LoadStaticRooms(IConfiguration configuration, IHostEnvironment environment)
         {
             var section = configuration.GetSection(StaticRoomsKey);
             var profiles = new Dictionary<string, TestRoomProfile>(StringComparer.Ordinal);
@@ -387,7 +394,17 @@ namespace NV.Api.Composition
                 profiles[child.Key] = ReadRoomProfile(child);
             }
 
-            return new StaticRooms(profiles, configuration.GetValue(TestRoomsPerMapKey, false));
+            var perMap = configuration.GetValue(TestRoomsPerMapKey, false);
+
+            if (!environment.IsDevelopment() && (profiles.Count > 0 || perMap))
+            {
+                throw new InvalidOperationException(
+                    $"{StaticRoomsKey} 와 {TestRoomsPerMapKey} 는 개발 환경에서만 쓸 수 있다. " +
+                    $"지금 환경은 '{environment.EnvironmentName}' 다. 정적 룸은 방장 없이 만료되지 않는 " +
+                    "공개 방이라 운영 서버에 있을 이유가 없다 — 설정에서 제거한다.");
+            }
+
+            return new StaticRooms(profiles, perMap);
         }
 
         private static TestRoomProfile ReadRoomProfile(IConfigurationSection room)
