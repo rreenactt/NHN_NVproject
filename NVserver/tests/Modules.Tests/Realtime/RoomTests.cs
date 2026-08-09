@@ -678,19 +678,28 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(MatchPhase.Ended, room.MatchPhase);
             Assert.Equal(0f, room.MatchSecondsRemaining);
 
-            // 결과 코드는 아직 서버가 정하지 않는다 — 규칙은 정해졌고(전멸=술래 승,
-            // 목표=min(2, 시작 Runner 수)) IG-007 이 그것을 여기로 옮기면 채워진다.
-            Assert.True(OutcomeIsUnset(room));
+            // **결과 코드를 서버가 채운다.** 이 자리에는 "아직 정하지 않는다" 가 적혀
+            // 있었고 IG-007 이 옮기면 채워진다는 주석이 붙어 있었다 — 옮겼다.
+            //
+            // 비워 두는 것은 선택지가 아니었다. 방장의 보고는 `EndMatch` 의 `Playing`
+            // 게이트를 지나야 하는데 이 함수가 이미 `Ended` 로 옮긴 뒤라 **도착할 수 없다.**
+            // 그래서 시계로 끝난 매치는 전부 결과 0 으로 나갔고, 화면에는 이긴 쪽도 진
+            // 쪽도 아닌 카드가 떴다.
+            Assert.Equal(SeekerTimeoutOutcome, OutcomeOf(room));
         }
 
-        /// 결과 코드가 아직 비어 있는지 본다. 룸 상태 전문으로 확인한다 — 그것이
-        /// 클라이언트가 실제로 보는 값이다.
-        private static bool OutcomeIsUnset(Room room)
+        /// 클라이언트 `MatchOutcome.SeekerTimeout` 과 같은 값.
+        private const byte SeekerTimeoutOutcome = 2;
+
+        /// 나가는 결과 코드. 룸 상태 전문으로 확인한다 — 그것이 클라이언트가 실제로 보는
+        /// 값이고, 서버 내부 필드는 그 값이 되기 전에도 무엇이든 될 수 있다.
+        private static byte OutcomeOf(Room room)
         {
             var transport = new RecordingTransport();
             room.Broadcast(transport);
 
-            return transport.TryLastRoomState(1, out var header, out _) && header.Outcome == 0;
+            Assert.True(transport.TryLastRoomState(1, out var header, out _));
+            return header.Outcome;
         }
 
         [Fact]
