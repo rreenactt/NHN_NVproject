@@ -1,0 +1,20 @@
+# /etc/systemd/system/nvserver.service — provision.sh 가 설치한다.
+[Unit]
+Description=NVserver game server
+After=network.target
+# Restart=always 가 영원히 다시 시도하게 한다. 기본 시작 제한(10초에 5회)을 끄지 않으면
+# RestartSec=3 이 그 한도에 걸려 유닛이 failed 로 멈추고, 크래시 복구의 1차 방어선이 사라진다.
+StartLimitIntervalSec=0
+
+[Service]
+User=nvserver
+# current/app 을 작업 디렉터리로 잡아야 appsettings 의 Game:MapDirectory(../MapData) 가
+# 저장소에서와 똑같이 성립한다 — 옆의 MapData/ 는 배포 아티팩트가 함께 나른다.
+WorkingDirectory=/opt/nvserver/current/app
+ExecStart=/opt/nvserver/current/app/Api
+EnvironmentFile=/opt/nvserver/shared/nvserver.env
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

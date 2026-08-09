@@ -11,6 +11,13 @@
 *.jslib     text eol=lf
 Dockerfile  text eol=lf
 
+# 배포 파일(deploy/). 셸 스크립트가 CRLF 로 체크아웃되면 서버의 bash 가 \r 을
+# 명령 이름에 붙여 읽어 배포가 깨진다.
+*.sh        text eol=lf
+*.service   text eol=lf
+*.timer     text eol=lf
+*.example   text eol=lf
+
 # Unity YAML 에셋. 개행이 흔들리면 머지에서 씬·프리팹이 깨진다.
 *.unity     text eol=lf
 *.prefab    text eol=lf

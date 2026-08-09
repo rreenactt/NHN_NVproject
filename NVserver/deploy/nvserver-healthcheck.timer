@@ -1,0 +1,12 @@
+# /etc/systemd/system/nvserver-healthcheck.timer — provision.sh 가 설치하고 켠다.
+[Unit]
+Description=NVserver health check every minute
+
+[Timer]
+# 부팅 직후는 첫 배포·기동이 끝나기 전이므로 2분 여유를 둔다.
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

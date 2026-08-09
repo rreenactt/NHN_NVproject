@@ -1,0 +1,33 @@
+# NVserver 빌드 + 테스트 게이트. 클라이언트(Unity)는 CLI 빌드가 없어 CI 대상이 아니다.
+name: server-ci
+
+on:
+  pull_request:
+    paths:
+      - 'NVserver/**'
+      - '.github/workflows/server-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'NVserver/**'
+      - '.github/workflows/server-ci.yml'
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: NVserver
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: NVserver/global.json
+
+      # TreatWarningsAsErrors 가 켜져 있어 경고 하나가 곧 실패다.
+      - name: 빌드
+        run: dotnet build
+
+      - name: 테스트 (Architecture.Tests + Modules.Tests)
+        run: dotnet test --no-build

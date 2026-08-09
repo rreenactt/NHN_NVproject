@@ -1,0 +1,147 @@
+# main 에 NVserver 변경이 닿으면 OCI 인스턴스로 배포한다. docs 만 바뀐 푸시는 배포하지 않는다.
+# workflow_dispatch 는 두 용도다 — 입력 없이 실행하면 재배포, rollback_to 를 주면 롤백.
+# 배포 절차 자체는 서버의 /opt/nvserver/deploy.sh 에 있고(원본은 NVserver/deploy/deploy.sh),
+# 이 워크플로는 아티팩트를 만들어 올리고 그 스크립트를 부를 뿐이다.
+name: server-deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'NVserver/**'
+      - '!NVserver/docs/**'
+      - '.github/workflows/server-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      rollback_to:
+        description: '롤백할 릴리스 이름 (서버 /opt/nvserver/releases/ 의 디렉터리, 예: 20260809-140000). 비우면 일반 배포.'
+        required: false
+        default: ''
+
+# 배포가 겹치면 심볼릭 링크 전환과 재시작이 얽힌다. 한 번에 하나, 취소하지 않고 줄을 세운다.
+concurrency:
+  group: server-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # push 에서는 inputs 가 비어 있어 true, dispatch 는 rollback_to 가 비어 있을 때만 true.
+    if: ${{ !inputs.rollback_to }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: NVserver
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: NVserver/global.json
+
+      - name: 테스트 — 배포 게이트 재확인
+        run: dotnet test
+
+      # self-contained: 서버에 .NET 설치가 필요 없고 런타임이 아티팩트에 고정된다.
+      # x64 러너의 arm64 크로스 게시는 네이티브 컴파일이 없어 그대로 된다.
+      - name: 게시 (linux-arm64, self-contained)
+        run: dotnet publish Api -c Release -r linux-arm64 --self-contained -o "$RUNNER_TEMP/stage/app"
+
+      # app/ 옆에 MapData/ 를 두는 구조가 appsettings 의 Game:MapDirectory(../MapData) 를
+      # 저장소에서와 똑같이 성립시킨다 — 설정 변경 없이.
+      - name: 아티팩트 구성
+        run: |
+          cp -r MapData "$RUNNER_TEMP/stage/MapData"
+          tar -czf "$RUNNER_TEMP/nvserver.tar.gz" -C "$RUNNER_TEMP/stage" app MapData
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nvserver-${{ github.sha }}
+          path: ${{ runner.temp }}/nvserver.tar.gz
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nvserver-${{ github.sha }}
+
+      # 필수 Secret 은 DEPLOY_HOST 와 DEPLOY_SSH_KEY 뿐이다.
+      # DEPLOY_USER 생략 → nvserver. DEPLOY_KNOWN_HOSTS 생략 → 핀 고정 대신 첫 접속 신뢰(accept-new).
+      - name: SSH 구성
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "필수 Secret 이 비어 있다: DEPLOY_HOST, DEPLOY_SSH_KEY" >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          strict=accept-new
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            strict=yes
+          fi
+          cat > ~/.ssh/config <<EOF
+          Host deploy
+            HostName $DEPLOY_HOST
+            User ${DEPLOY_USER:-nvserver}
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking $strict
+          EOF
+
+      # deploy.sh 를 매번 함께 올린다 — 서버의 사본이 저장소를 따라오게 하는 유일한 경로다.
+      - name: 전송 및 배포
+        run: |
+          scp NVserver/deploy/deploy.sh deploy:/opt/nvserver/deploy.sh
+          scp nvserver.tar.gz deploy:/opt/nvserver/incoming/nvserver-${{ github.sha }}.tar.gz
+          ssh deploy 'bash /opt/nvserver/deploy.sh /opt/nvserver/incoming/nvserver-${{ github.sha }}.tar.gz'
+
+  rollback:
+    if: ${{ inputs.rollback_to }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      # deploy 잡의 SSH 구성과 같다 — 필수는 DEPLOY_HOST 와 DEPLOY_SSH_KEY 뿐.
+      - name: SSH 구성
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "필수 Secret 이 비어 있다: DEPLOY_HOST, DEPLOY_SSH_KEY" >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          strict=accept-new
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            strict=yes
+          fi
+          cat > ~/.ssh/config <<EOF
+          Host deploy
+            HostName $DEPLOY_HOST
+            User ${DEPLOY_USER:-nvserver}
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking $strict
+          EOF
+
+      - name: 롤백 실행
+        run: |
+          scp NVserver/deploy/deploy.sh deploy:/opt/nvserver/deploy.sh
+          ssh deploy 'bash /opt/nvserver/deploy.sh rollback "${{ inputs.rollback_to }}"'

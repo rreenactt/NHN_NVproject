@@ -1,0 +1,8 @@
+# /etc/caddy/Caddyfile — 도메인을 실제 값으로 바꾼다. 인증서는 Caddy 가 알아서 받고 갱신한다.
+#
+# WebSocket 은 별도 설정이 없다 — reverse_proxy 가 업그레이드를 그대로 넘기고,
+# 스트리밍 연결에 유휴 타임아웃을 걸지 않으므로 서버의 30초 keepalive 와도 충돌하지 않는다.
+# (nginx 로 바꾼다면 proxy_read_timeout 을 늘려야 한다 — deploy-plan.md 의 함정 2.)
+game.example.com {
+    reverse_proxy 127.0.0.1:5202
+}
