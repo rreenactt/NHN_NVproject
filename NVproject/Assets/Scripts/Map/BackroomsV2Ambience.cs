@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace NV.Client.Map
 {
@@ -20,19 +20,19 @@ namespace NV.Client.Map
     {
         [Header("Fog — the far end of a hall should be a guess, not a fact")]
         [Tooltip("Cold grey-green. The fog does most of the dread.")]
-        public Color fogColor = new Color(0.41f, 0.47f, 0.45f);
+        public Color fogColor = new Color(0.048f, 0.057f, 0.054f);
 
         [Tooltip("Exponential-squared density. Sets how far a Seeker can see down a hall.")]
-        public float fogDensity = 0.03f;
+        public float fogDensity = 0.034f;
 
         [Tooltip("Flat ambient — dim and cool, so the light pools around the strips.")]
-        public Color ambientColor = new Color(0.12f, 0.15f, 0.14f);
+        public Color ambientColor = new Color(0.020f, 0.025f, 0.024f);
 
         [Header("Lights — built from the baked asset's lamp positions")]
         [Tooltip("Copied from the level palette at bake time by the generator's decorator.")]
         public Color lightColor = new Color(0.82f, 1.00f, 0.94f);
 
-        public float lightIntensity = 1.5f;
+        public float lightIntensity = 0.34f;
 
         [Tooltip("Range in grid cells; multiplied by the grid's cell size at build time.")]
         public float lightRangeCells = 2.2f;
@@ -41,7 +41,12 @@ namespace NV.Client.Map
                  "deliberately nowhere near the level seed: presentation must not be able to " +
                  "shift the terrain.")]
         [Range(0f, 1f)]
-        public float flickerFraction = 0.12f;
+        public float flickerFraction = 0.2f;
+
+        [Tooltip("Fraction of lamps that are simply dead. Drawn from the same roll as the " +
+                 "flicker so the two sets never overlap.")]
+        [Range(0f, 1f)]
+        public float deadFraction = 0.2f;
 
         [Tooltip("Seed for which lamps flicker and how. Isolated from the level seed on purpose.")]
         public int flickerSeed = 60301;
@@ -80,6 +85,9 @@ namespace NV.Client.Map
             RenderSettings.fogDensity = fogDensity;
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
             RenderSettings.ambientLight = ambientColor;
+
+            // 역할별 밝기의 기준이 방금 바뀌었다. 이유는 `RoleVision.Forget` 에 적혀 있다.
+            NV.Game.RoleVision.Forget();
             RenderSettings.skybox = null;
 
             BuildLights();
@@ -102,6 +110,16 @@ namespace NV.Client.Map
 
             for (var index = 0; index < asset.Lights.Count; index++)
             {
+                // **모든 등기구가 뽑는다, 켜지든 아니든.** 그래야 씨드가 같으면 같은 등기구가
+                // 죽는다. 그리고 한 번만 뽑아서 죽음과 깜빡임이 겹치지 않게 한다.
+                var roll = flicker.NextDouble();
+                var dead = roll < deadFraction;
+                var flickers = !dead && roll < deadFraction + flickerFraction;
+
+                // 죽은 등기구는 조명 자체를 만들지 않는다. 여기 패널은 프리팹에 구워진
+                // 메시라 어둡게 만들 수 없다 — v2 에서 꺼진 자리는 빛이 없는 판으로 보인다.
+                if (dead) continue;
+
                 var lamp = new GameObject($"Lamp {index}");
                 lamp.transform.SetParent(_lightRoot, false);
                 lamp.transform.position = asset.Lights[index];
@@ -113,8 +131,6 @@ namespace NV.Client.Map
                 light.range = lightRangeCells * cellSize;
                 light.shadows = LightShadows.None;   // flat, diffuse utility light — and cheap
 
-                // Every lamp draws, chosen or not, so the flicker set is stable per seed.
-                var flickers = flicker.NextDouble() < flickerFraction;
                 if (flickers)
                 {
                     var driver = lamp.AddComponent<LampFlicker>();

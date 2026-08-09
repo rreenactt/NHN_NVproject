@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace NV.Game
 {
@@ -53,6 +53,10 @@ namespace NV.Game
             bool seeker = agent.Role == Role.Seeker;
 
             MatchLayers.ApplyRoleVisibility(viewCamera, agent.Role);
+
+            // 이 화면이 얼마나 어두운가도 역할이 정한다. 컬링 마스크와 같은 자리에 두는 이유는
+            // 같은 종류의 규칙이기 때문이다 — 세상은 하나인데 그것에 대한 진실이 둘이다.
+            RoleVision.Apply(agent.Role);
 
             if (weaponSwitcher != null)
             {
