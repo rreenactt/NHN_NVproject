@@ -9,3 +9,8 @@ NVserver/MapData/*.json text eol=lf
 # Unity 의 .meta 도 같은 이유로 고정한다. Unity 가 LF 로 쓰고, CRLF 로 돌아오면 에디터를
 # 열기만 해도 전부 변경으로 잡힌다.
 *.meta text eol=lf
+
+# 클라이언트 배포 스크립트. 셸 스크립트가 CRLF 로 체크아웃되면 서버의 bash 가 \r 을
+# 명령 이름에 붙여 읽어 배포가 깨진다 — NVserver/.gitattributes 의 *.sh 규칙과 같은
+# 이유이고, 그 규칙은 NVserver/ 안에서만 듣는다.
+NVproject/deploy/*.sh text eol=lf

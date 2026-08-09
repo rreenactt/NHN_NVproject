@@ -78,9 +78,28 @@ bash /opt/nvserver/deploy.sh rollback 20260809-140000   # 수동 롤백 (Actions
 
 수동 롤백은 Actions 의 `server-deploy` ▸ `workflow_dispatch` ▸ `rollback_to` 입력으로도 같은 것을 한다.
 
+## 클라이언트(WebGL) 배포
+
+같은 인스턴스에서 WebGL 사이트를 함께 서빙한다. 설계는 [docs/client-deploy-plan.md](../docs/client-deploy-plan.md), 실행기는 `NVproject/deploy/client-deploy.sh`, 워크플로는 `.github/workflows/client-deploy.yml` — 빌드는 GameCI 가 GitHub 러너 안에서 하고(에디터 메뉴 **Tools ▸ NV ▸ Build Production (WebGL)** 의 메서드를 그대로 실행), 서버에는 정적 파일만 온다. **이 폴더의 서버 배포 구조는 아무것도 바뀌지 않았다.**
+
+1회성 준비 (서버 배포의 Secrets 는 그대로 재사용):
+
+1. **GitHub Secrets 추가** — `UNITY_LICENSE`(.ulf 내용 전체), `UNITY_EMAIL`, `UNITY_PASSWORD`
+2. **DNS** — `play.nhn-backroom.kro.kr` A 레코드를 인스턴스로
+   - 전용 키·최소 권한 경로(위)로 이미 옮긴 서버라면 부트스트랩의 `sudo mkdir` 이 막혀 있다 — 첫 클라이언트 배포 전에 한 번: `sudo install -d -o nvserver -g nvserver /opt/nvclient`
+3. **Caddy** — `Caddyfile.example` 의 `play.nhn-backroom.kro.kr` 블록을 서버 `/etc/caddy/Caddyfile` 에 반영, `sudo systemctl reload caddy`. `.br` 헤더 매처들이 핵심이다 — 빠지면 Brotli 빌드가 검은 화면이 된다
+
+운영 명령 (서버에서):
+
+```bash
+ls -1t /opt/nvclient/releases                              # 릴리스 목록 (3개 유지)
+bash /opt/nvclient/deploy.sh rollback 20260810-140000      # 수동 롤백 — 심링크 전환뿐, 무중단
+curl -sI https://play.nhn-backroom.kro.kr/index.html       # 서빙 확인
+```
+
 ## 함정
 
-- **프로토콜 버전을 올린 배포의 롤백은 클라이언트 재배포와 짝이다.** 서버만 되돌리면 새 버전으로 빌드된 클라이언트가 426 으로 거절된다.
+- **프로토콜 버전을 올린 배포의 롤백은 클라이언트 재배포와 짝이다.** 서버만 되돌리면 새 버전으로 빌드된 클라이언트가 426 으로 거절된다. 반대도 같다 — 클라이언트만 되돌려도 426. `ProtocolInfo.Version` 이 걸린 배포·롤백은 항상 **짝**으로 한다.
 - **재시작은 진행 중인 방을 전부 끊는다.** 상태가 전부 메모리에 있다 — 매치·룸·초대 코드가 배포와 함께 사라진다.
 - **포트 5202 를 바꾸려면 세 곳이 같이 움직인다** — `nvserver.env` 의 `ASPNETCORE_URLS`, `deploy.sh` 와 `nvserver-healthcheck.sh` 의 `HEALTH_URL`, `Caddyfile` 의 `reverse_proxy`.
 - **접속이 안 되면 iptables 부터 본다.** OCI Ubuntu 이미지는 보안 목록과 별개로 기본 iptables 에 REJECT 규칙이 있다. 배포 자체는 영향이 없다 — health check 는 서버 내부에서 한다.

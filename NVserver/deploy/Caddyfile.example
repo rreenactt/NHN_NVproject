@@ -6,3 +6,33 @@
 game.example.com {
     reverse_proxy 127.0.0.1:5202
 }
+
+# WebGL 클라이언트 — 정적 파일 서빙. 배포는 client-deploy.sh 가 /opt/nvclient/releases/ 에
+# 전개하고 current 심볼릭 링크를 전환한다. 재시작할 것이 없다 — Caddy 는 요청마다
+# 링크를 따라간다. 설계는 docs/client-deploy-plan.md 6절.
+# 이 주소는 실제 값이다 — appsettings.Production.json 의 CORS 허용 오리진과 짝이고,
+# 여기가 바뀌면 그 목록도 같이 바뀌어야 한다.
+play.nhn-backroom.kro.kr {
+    root * /opt/nvclient/current
+    file_server
+
+    # Unity 로더는 Brotli 산출물을 .br 경로 그대로 요청한다. Content-Encoding 을
+    # 우리가 붙여야 브라우저가 푼다 — 이 헤더가 없는 정적 서버에서 Brotli 빌드가
+    # 검은 화면이 되는 것이 저장소의 문서화된 함정이다 (BuildSelection 주석).
+    # Content-Type 도 같이 고친다 — 확장자가 .br 이라 추측이 틀린다.
+    @wasmBr path *.wasm.br
+    header @wasmBr Content-Encoding br
+    header @wasmBr Content-Type application/wasm
+    @jsBr path *.js.br
+    header @jsBr Content-Encoding br
+    header @jsBr Content-Type application/javascript
+    @dataBr path *.data.br
+    header @dataBr Content-Encoding br
+    header @dataBr Content-Type application/octet-stream
+
+    # 파일명에 해시가 없으므로 오래 캐시하면 배포가 반쪽만 보인다 — 진입점은 항상
+    # 재검증, 본체는 5분. COOP/COEP(교차 출처 격리)는 넣지 않는다: WebGL 스레드를
+    # 쓰지 않고, 켜면 교차 출처 리소스 로드에 새 제약만 생긴다.
+    header /index.html Cache-Control "no-cache"
+    header /Build/* Cache-Control "public, max-age=300"
+}

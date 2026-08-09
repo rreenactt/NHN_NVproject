@@ -1,0 +1,174 @@
+# main 에 NVproject(또는 NVserver/Shared) 변경이 닿으면 WebGL 을 빌드해 OCI 인스턴스로
+# 배포한다. NVserver/Shared 가 트리거에 있는 이유: 클라이언트가 같은 시뮬레이션 코드를
+# 컴파일한다 (com.nv.shared 로컬 패키지).
+#
+# 빌드는 GameCI(unity-builder)가 GitHub 러너 안에서 한다 — Docker 는 러너 안에만 있고
+# OCI 서버에는 어떤 단계에도 설치되지 않는다. 빌드 메서드는 에디터 메뉴
+# Tools ▸ NV ▸ Build Production (WebGL) 의 그 메서드다 — CI 전용 빌드 경로를 만들지 않는다.
+# workflow_dispatch 는 두 용도다 — 입력 없이 실행하면 재배포, rollback_to 를 주면 롤백.
+# 설계와 근거는 NVserver/docs/client-deploy-plan.md.
+name: client-deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'NVproject/**'
+      - 'NVserver/Shared/**'
+      - '.github/workflows/client-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      rollback_to:
+        description: '롤백할 릴리스 이름 (서버 /opt/nvclient/releases/ 의 디렉터리, 예: 20260810-140000). 비우면 일반 배포.'
+        required: false
+        default: ''
+
+# 배포가 겹치면 심볼릭 링크 전환이 얽힌다. 한 번에 하나, 취소하지 않고 줄을 세운다.
+# 서버 배포(server-deploy)와는 다른 그룹 — 서로 막지 않고, 다른 디렉터리에 쓴다.
+concurrency:
+  group: client-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # push 에서는 inputs 가 비어 있어 true, dispatch 는 rollback_to 가 비어 있을 때만 true.
+    if: ${{ !inputs.rollback_to }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # GameCI 에디터 이미지(약 7.5GB) + Library 캐시가 기본 러너의 여유 디스크를
+      # 위협한다. 이 저장소가 쓰지 않는 것들을 미리 지운다.
+      - name: 러너 디스크 확보
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      # Unity Library 캐시 — 첫 빌드는 수십 분, 캐시 히트 후로는 크게 준다.
+      - uses: actions/cache@v4
+        with:
+          path: NVproject/Library
+          key: Library-WebGL-${{ hashFiles('NVproject/Packages/packages-lock.json', 'NVproject/ProjectSettings/ProjectSettings.asset', 'NVproject/ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-WebGL-
+
+      # 빌드 메서드는 에디터 메뉴 Tools ▸ NV ▸ Build Production (WebGL) 그것이다.
+      # production 환경 굽기(BakeEnvironment) → 릴리스 빌드 → Brotli 압축까지 메뉴가
+      # 이미 다 하므로 CI 전용 진입점이 없다. versioning: None — 기본값은 git 태그를
+      # 읽고 커밋을 만들려 든다.
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: NVproject
+          targetPlatform: WebGL
+          buildMethod: NV.Client.EditorTools.BuildMenu.BuildProductionWebGl
+          versioning: None
+
+      # BuildProductionWebGl 은 BuildRunner.Run 의 반환값을 버리므로 빌드가 실패해도
+      # Unity 는 exit 0 으로 끝난다 — 성공의 증거는 산출물이다. 러너 작업 공간은 매번
+      # 새것이고 Builds/ 는 캐시하지 않으므로 이전 빌드의 잔재가 이 검증을 속일 수 없다.
+      - name: 산출물 검증
+        run: |
+          out=NVproject/Builds/production/WebGL
+          if [ ! -f "$out/index.html" ] || [ ! -d "$out/Build" ]; then
+            echo "빌드 산출물이 없다 — 위 스텝의 Unity 로그에서 '[NV] 빌드 실패' 를 찾는다" >&2
+            exit 1
+          fi
+          du -sh "$out"
+
+      # unity-builder 는 도커 안에서 root 로 쓴다 — tar 도 sudo 로 읽는다.
+      - name: 아티팩트 구성
+        run: sudo tar -czf nvclient.tar.gz -C NVproject/Builds/production/WebGL .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nvclient-${{ github.sha }}
+          path: nvclient.tar.gz
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nvclient-${{ github.sha }}
+
+      # server-deploy.yml 의 SSH 구성과 같다 — 같은 서버, 같은 Secrets.
+      - name: SSH 구성
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "필수 Secret 이 비어 있다: DEPLOY_HOST, DEPLOY_SSH_KEY" >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          strict=accept-new
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            strict=yes
+          fi
+          cat > ~/.ssh/config <<EOF
+          Host deploy
+            HostName $DEPLOY_HOST
+            User ${DEPLOY_USER:-nvserver}
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking $strict
+          EOF
+
+      - name: 전송 및 배포
+        run: |
+          scp NVproject/deploy/client-deploy.sh deploy:/tmp/nvclient-deploy.sh
+          scp nvclient.tar.gz deploy:/tmp/nvclient-${{ github.sha }}.tar.gz
+          ssh deploy 'bash /tmp/nvclient-deploy.sh /tmp/nvclient-${{ github.sha }}.tar.gz'
+
+  rollback:
+    if: ${{ inputs.rollback_to }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SSH 구성
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "필수 Secret 이 비어 있다: DEPLOY_HOST, DEPLOY_SSH_KEY" >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          strict=accept-new
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            strict=yes
+          fi
+          cat > ~/.ssh/config <<EOF
+          Host deploy
+            HostName $DEPLOY_HOST
+            User ${DEPLOY_USER:-nvserver}
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking $strict
+          EOF
+
+      - name: 롤백 실행
+        run: |
+          scp NVproject/deploy/client-deploy.sh deploy:/tmp/nvclient-deploy.sh
+          ssh deploy 'bash /tmp/nvclient-deploy.sh rollback "${{ inputs.rollback_to }}"'
