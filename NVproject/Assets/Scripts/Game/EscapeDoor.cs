@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace NV.Game
 {
@@ -71,8 +71,8 @@ namespace NV.Game
             // the room without reading the HUD.
             MatchManager match = MatchManager.Instance;
             float target = IsOpen ? 1f
-                : match != null && match.Config.keysRequired > 0
-                    ? Mathf.Clamp01(match.KeysInserted / (float)match.Config.keysRequired) * 0.55f
+                : match != null && match.KeysRequired > 0
+                    ? Mathf.Clamp01(match.KeysInserted / (float)match.KeysRequired) * 0.55f
                     : 0f;
 
             _openAmount = Mathf.MoveTowards(_openAmount, target, Time.deltaTime * (IsOpen ? 0.9f : 0.5f));
@@ -90,9 +90,9 @@ namespace NV.Game
 
             if (IsOpen) return "ESCAPE  —  step through";
             if (viewer.CarriedKeys <= 0)
-                return $"DOOR  {match.KeysInserted}/{match.Config.keysRequired}  —  no keys in hand";
+                return $"DOOR  {match.KeysInserted}/{match.KeysRequired}  —  no keys in hand";
 
-            return $"[E]  INSERT KEY   {match.KeysInserted}/{match.Config.keysRequired}";
+            return $"[E]  INSERT KEY   {match.KeysInserted}/{match.KeysRequired}";
         }
 
         public void Interact(PlayerAgent user)

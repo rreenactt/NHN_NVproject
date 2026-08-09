@@ -1315,7 +1315,7 @@ namespace NV.Realtime.Simulation
                     _logger.LogInformation(
                         "룸 {RoomId}: 열쇠 {Required} 개가 들어가 문이 열렸다.",
                         RoomId,
-                        MatchConstants.KeysRequired);
+                        _match.KeysRequired);
                 }
                 else
                 {
@@ -1324,7 +1324,7 @@ namespace NV.Realtime.Simulation
                         RoomId,
                         player.PlayerId,
                         _match.KeysInserted,
-                        MatchConstants.KeysRequired);
+                        _match.KeysRequired);
                 }
 
                 return true;
@@ -2832,7 +2832,10 @@ namespace NV.Realtime.Simulation
             _pendingFireCount = 0;
 
             // 매치는 역할 공개부터 시작한다. 이 시점부터 시계는 서버의 것이다.
-            _match.Begin();
+            // **시작 인원이 열쇠 요구량을 정한다**(`MatchConstants.KeysRequiredWith`).
+            // 여기서 한 번 정하고 매치 내내 고정한다 — 매 틱 다시 구하면 사람이 쓰러지거나
+            // 나갈 때마다 문이 쉬워진다.
+            _match.Begin(_players.Count);
             _matchStateDirty = true;
 
             // 목표물을 서버가 배치한다. 씨드는 서버 안에만 있고 와이어에 없다 — 좌표를

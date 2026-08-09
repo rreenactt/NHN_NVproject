@@ -78,7 +78,14 @@ namespace NV.Realtime.Simulation
         ///
         /// 따로 필드를 두면 "열쇠는 10개인데 문은 닫혀 있다" 가 표현 가능한 상태가 되고,
         /// 그 상태에 빠지는 경로를 찾는 일이 남는다.
-        public bool DoorOpen => KeysInserted >= MatchConstants.KeysRequired;
+        public bool DoorOpen => KeysInserted >= KeysRequired;
+
+        /// 이 매치가 요구하는 열쇠 수. 시작 인원이 정한다
+        /// (`MatchConstants.KeysRequiredWith`).
+        ///
+        /// **매치마다 값이라 상수가 아니다.** 시작할 때 한 번 정하고 매치 내내 고정한다 —
+        /// 매 틱 인원에서 다시 구하면 사람이 쓰러지거나 나갈 때마다 문이 쉬워진다.
+        public int KeysRequired { get; private set; } = MatchConstants.KeysRequired;
 
         /// 탈출한 Runner 수.
         ///
@@ -147,8 +154,9 @@ namespace NV.Realtime.Simulation
         ///
         /// 시계를 여기서 채운다. `Playing` 에 들어갈 때 채우면 리빌 동안 남은 시간이
         /// 0 으로 보이고, 그 값이 전문에 실려 클라이언트 HUD 가 "시간 종료" 를 그린다.
-        public void Begin()
+        public void Begin(int playersAtStart)
         {
+            KeysRequired = MatchConstants.KeysRequiredWith(playersAtStart);
             _phase = MatchPhase.RoleReveal;
             _revealTicksRemaining = RevealTicks;
             _matchTicksRemaining = MatchTicks;

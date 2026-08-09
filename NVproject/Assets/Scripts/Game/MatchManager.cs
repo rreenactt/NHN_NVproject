@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using NV.Client.Map;
+using NV.Shared.Simulation;
 using UnityEngine;
 
 namespace NV.Game
@@ -272,6 +273,19 @@ namespace NV.Game
         /// Starts a match: roles, placement, clock. Safe to call again — it tears the previous
         /// objective set down first, which is what the restart key uses.
         /// </summary>
+        /// <summary>
+        /// 이 매치가 요구하는 열쇠 수. 시작 인원이 정한다
+        /// (<c>MatchConstants.KeysRequiredWith</c>).
+        ///
+        /// **`GameConfig.keysRequired`(상수 10)는 상한이지 요구량이 아니다.** 둘을 섞으면
+        /// HUD 가 "2/10" 을 그리는 동안 문은 3개에서 열린다 — 판정은 서버의 것이므로 규칙이
+        /// 갈리지는 않지만, 화면이 거짓말을 한다.
+        public int KeysRequired { get; private set; } = MatchConstants.KeysRequired;
+
+        /// 이 매치의 요구량을 이미 받아 두었다. 매치 중에 다시 잡지 않기 위한 값이다 —
+        /// 사람이 빠질 때마다 다시 구하면 팀이 무너질수록 문이 쉬워진다.
+        private bool _keysLatched;
+
         public void BeginMatch(PlayerAgent seeker)
         {
             if (config == null) config = ScriptableObject.CreateInstance<GameConfig>();
@@ -292,6 +306,12 @@ namespace NV.Game
 
             Outcome = MatchOutcome.None;
             KeysInserted = 0;
+
+            // 오프라인 연습 경로의 요구량. 네트워크 매치에서는 전문이 도착하며 덮는다
+            // (`AcceptMatchState`) — 서버가 시작 인원으로 정한 값이 옳고, 이쪽은 그 전까지의
+            // 근사다.
+            KeysRequired = MatchConstants.KeysRequiredWith(_agents.Count);
+            _keysLatched = false;
             Escapes = 0;
             TimeRemaining = config.matchDuration;
             _globalFreeze = false;
@@ -315,7 +335,7 @@ namespace NV.Game
             PlaceObjectives(seed);
 
             RolesAssigned?.Invoke();
-            KeysChanged?.Invoke(KeysInserted, config.keysRequired);
+            KeysChanged?.Invoke(KeysInserted, KeysRequired);
             EscapesChanged?.Invoke(Escapes, EscapesNeeded);
 
             SetPhase(MatchPhase.RoleReveal);
@@ -476,9 +496,25 @@ namespace NV.Game
         /// and that path already exists (<see cref="AcceptOutcome"/>, driven by the room bulletin).
         /// Taking the phase alone would move the HUD to a result screen with no result in it.
         /// </summary>
-        public void AcceptMatchState(NV.Shared.Contracts.Enums.MatchPhase serverPhase, float secondsRemaining)
+        public void AcceptMatchState(
+            NV.Shared.Contracts.Enums.MatchPhase serverPhase,
+            float secondsRemaining,
+            int participantCount)
         {
             if (Phase == MatchPhase.Lobby || Phase == MatchPhase.Ended) return;
+
+            // **한 매치에 한 번만 잡는다.** 명단은 사람이 빠지면 줄어드는데, 그것을 따라가면
+            // 팀이 무너질수록 문이 쉬워진다. 서버도 시작 인원으로 한 번 정하고 고정한다.
+            //
+            // 이 값은 **화면에 그리기 위한 것**이다. 문이 열리는 판정은 서버의 것이고
+            // (`ObjectiveState` 의 doorOpen), 여기서 어긋나도 규칙이 갈리지는 않는다 —
+            // 다만 HUD 가 잘못된 분모를 그린다.
+            if (!_keysLatched && participantCount > 0)
+            {
+                KeysRequired = MatchConstants.KeysRequiredWith(participantCount);
+                _keysLatched = true;
+                KeysChanged?.Invoke(KeysInserted, KeysRequired);
+            }
 
             // The clock is the server's. The local countdown in Update still runs between
             // bulletins — at 2 Hz the HUD would tick visibly otherwise — but every bulletin
@@ -517,6 +553,7 @@ namespace NV.Game
         /// </summary>
         public void ReturnToLobby()
         {
+            _keysLatched = false;
             Outcome = MatchOutcome.None;
             SetPhase(MatchPhase.Lobby);
         }
@@ -526,7 +563,7 @@ namespace NV.Game
             Outcome = outcome;
             SetPhase(MatchPhase.Ended);
             MatchEnded?.Invoke(outcome);
-            Debug.Log($"[Match] Ended: {outcome}. Keys {KeysInserted}/{config.keysRequired}, escapes {Escapes}.");
+            Debug.Log($"[Match] Ended: {outcome}. Keys {KeysInserted}/{KeysRequired}, escapes {Escapes}.");
         }
 
         // ============================================================ combat
@@ -746,7 +783,7 @@ namespace NV.Game
             key.Collect();
 
             if (agent.isLocalPlayer) Notify($"KEY  ({agent.CarriedKeys} carried)");
-            KeysChanged?.Invoke(KeysInserted, config.keysRequired);
+            KeysChanged?.Invoke(KeysInserted, KeysRequired);
             return true;
         }
 
@@ -791,12 +828,12 @@ namespace NV.Game
         /// </summary>
         public void AcceptObjectiveProgress(int keysInserted, bool doorOpen)
         {
-            int clamped = Mathf.Clamp(keysInserted, 0, config.keysRequired);
+            int clamped = Mathf.Clamp(keysInserted, 0, KeysRequired);
 
             if (clamped != KeysInserted)
             {
                 KeysInserted = clamped;
-                KeysChanged?.Invoke(KeysInserted, config.keysRequired);
+                KeysChanged?.Invoke(KeysInserted, KeysRequired);
             }
 
             if (!doorOpen || _door == null || _door.IsOpen) return;
@@ -882,16 +919,16 @@ namespace NV.Game
             agent.NextInsertTime = Time.time + config.keyInsertInterval;
             KeysInserted++;
 
-            KeysChanged?.Invoke(KeysInserted, config.keysRequired);
+            KeysChanged?.Invoke(KeysInserted, KeysRequired);
 
-            if (KeysInserted >= config.keysRequired)
+            if (KeysInserted >= KeysRequired)
             {
                 door.Open();
                 Notify("THE DOOR IS OPEN");
             }
             else
             {
-                Notify($"KEY IN  {KeysInserted}/{config.keysRequired}");
+                Notify($"KEY IN  {KeysInserted}/{KeysRequired}");
             }
             return true;
         }

@@ -1,4 +1,4 @@
-# Ruleset — Backrooms Escape FPS (authoritative)
+﻿# Ruleset — Backrooms Escape FPS (authoritative)
 
 This is the source of truth. Code implements these numbers; if a rule changes,
 change it here first, then update `GameConfig` and the systems.
@@ -47,11 +47,18 @@ Escaping is not being wiped out. The wipe win requires every Runner to have gone
 counting them as such hands the Seeker a win for losing.
 
 ## Objective: keys & door
-- **10 keys** scattered at valid walkable locations. Runners pick them up and
+- **10 keys** scattered at valid walkable locations (the pool does not shrink with
+  the roster — a smaller match should not also be a barer map). Runners pick them up and
   **carry** them, then **insert one at a time** into the door.
 - The **door** spawns at a **random valid location each match**. **Visible to
   Runners only** — never rendered/highlighted for the Seeker.
-- Inserting the **10th** key opens the door; Runners escape through it.
+- The number the door **requires** is set by the headcount at match start:
+  **2 players → 3, 3 → 5, 4 → 8, 5 → 10.** It is a table, not a formula: the
+  per-head share deliberately rises (1.5 / 1.67 / 2 / 2) because a larger team can
+  cover each other while collecting.
+- The count is **frozen at match start**. Recomputing it from who is still alive would
+  make the door easier the worse the team is doing.
+- Inserting the **last required** key opens the door; Runners escape through it.
 - Escaping is **standing in the open doorway for a hold time**, not touching it.
   The hold exists so the Seeker has a moment to interrupt the last step.
 - **The hold's progress is public.** Everyone sees how far along the escaping
@@ -60,7 +67,7 @@ counting them as such hands the Seeker a win for losing.
   somebody is leaving right now is the one cue that makes the hold interruptible
   at all. A hold nobody can see is a delay, not a rule.
 - Distinguish **carried keys** (on a Runner) from **inserted keys** (in the door).
-  Total inserted is global progress toward 10.
+  Total inserted is global progress toward the required count.
 
 ## Combat
 | Rule | Value / behavior |
@@ -132,7 +139,7 @@ Each placed device provides ONE effect. Uses: **1x** = single use per match,
 - **Runner dies while carrying keys** → drop carried keys at death location (or
   return them to the pool). Pick one; default: **drop at death location** so keys
   stay findable.
-- **Simultaneous insert** of the 10th key → host resolves order; only one "door
+- **Simultaneous insert** of the last required key → host resolves order; only one "door
   opens" event fires.
 - **Shot while already bleeding** → that's the 2nd hit → death (per "2 hits = die").
 - **Teleport-on-hit lands in an invalid/occupied cell** → reroll to nearest valid
@@ -148,7 +155,8 @@ Each placed device provides ONE effect. Uses: **1x** = single use per match,
 | Key | Default |
 |-----|---------|
 | Match duration | 8:00 (tune) |
-| Keys required | 10 |
+| Keys required | 3 / 5 / 8 / 10 for 2 / 3 / 4 / 5 players (frozen at match start) |
+| Keys scattered | 10 |
 | Escapes to win | 2, capped at the number of Runners |
 | Runner hits to die | 2 |
 | Seeker magazine | 3 |
