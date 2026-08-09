@@ -1,4 +1,4 @@
-using NV.Client.Net;
+﻿using NV.Client.Net;
 using NV.Client.Net.Session;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -42,6 +42,20 @@ namespace NV.Game.UI
 
         public bool IsOpen { get; private set; }
 
+        /// <summary>
+        /// Is a menu up anywhere? Static because another screen has to be able to ask without
+        /// holding a reference.
+        ///
+        /// The result screen needs it: it hands input back to the player when the next match
+        /// starts, and doing that underneath an open menu re-locks the cursor and leaves a menu
+        /// on screen that cannot be clicked.
+        /// </summary>
+        public static bool AnyOpen { get; private set; }
+
+        /// 씬이 바뀌면 이 컴포넌트와 함께 메뉴도 사라진다. **정적 값은 사라지지 않는다** —
+        /// 내려놓지 않으면 다음 매치가 "메뉴가 열려 있다" 고 믿고 조작을 되돌려주지 않는다.
+        private void OnDisable() => AnyOpen = false;
+
         private void Update()
         {
             var keyboard = Keyboard.current;
@@ -60,6 +74,7 @@ namespace NV.Game.UI
             if (open && !EnsureTree()) return;
 
             IsOpen = open;
+            AnyOpen = open;
             if (_root != null) _root.style.display = open ? DisplayStyle.Flex : DisplayStyle.None;
             if (open) RefreshItems();
 
@@ -78,6 +93,7 @@ namespace NV.Game.UI
         private void CloseVisualOnly()
         {
             IsOpen = false;
+            AnyOpen = false;
             if (_root != null) _root.style.display = DisplayStyle.None;
         }
 

@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
@@ -217,7 +217,14 @@ public class Crosshair : MonoBehaviour
         if (_canvas == null || _up == null) { Build(); return; }
 
         bool armed = weaponSwitcher == null || weaponSwitcher.IsArmed;
-        bool visible = armed || !hideWhenUnarmed;
+
+        // 결과 화면 위에는 조준선이 없다. 이 캔버스는 ScreenSpaceOverlay 정렬 100 이고 HUD
+        // 패널은 0 이므로 **조준선이 결과 카드 위에 그려진다** — 이긴 화면 한가운데에 겨눌
+        // 것도 없는 십자가 얹힌다. 술래는 무장한 채로 매치를 끝내므로 이쪽만 해당한다.
+        var match = NV.Game.MatchManager.Instance;
+        bool over = match != null && match.Phase == NV.Game.MatchPhase.Ended;
+
+        bool visible = (armed || !hideWhenUnarmed) && !over;
         if (_canvas.enabled != visible) _canvas.enabled = visible;
         if (!visible) return;
 

@@ -412,20 +412,30 @@ namespace NV.Game.UI
 
         /// 결과를 화면에 올리고, 사람이 닫을 때까지 씬을 붙잡기 시작한다.
         ///
-        /// 커서를 푼다 — 매치 중에는 잠겨 있어서, 풀지 않으면 화면에 버튼이 보이는데 누를
-        /// 수가 없다. 이동은 이미 서버가 잠갔으므로(`Match.MovementLocked`) 여기서 조작을
-        /// 더 막을 것은 없다.
+        /// 입력을 UI 로 넘긴다. **커서를 직접 푸는 것으로는 안 된다.**
+        ///
+        /// `FirstPersonController.HandleCursor` 는 입력이 켜져 있는 동안 매 프레임 돌면서,
+        /// 커서가 풀린 상태의 좌클릭을 보면 **커서를 다시 잠근다** — 화면 아무 데나 눌러
+        /// 조작으로 돌아가는 동작이다. 그래서 커서만 풀어 두면 나가기를 누르려는 클릭이
+        /// 버튼에 닿기 전에 그 재잠금에 쓰이고, 버튼은 영원히 눌리지 않는다.
+        ///
+        /// ESC 메뉴가 `InputEnabled` 를 내리는 것이 정확히 이 이유다. 같은 손잡이를 쓴다 —
+        /// 커서가 풀리고, 컨트롤러의 커서·시선·이동 처리가 통째로 서고, 무기도 같은 값을
+        /// 보므로 버튼을 누른 클릭이 총으로 새지 않는다.
         private void ShowResult()
         {
             _endCard.style.display = DisplayStyle.Flex;
             _resultShown = true;
 
-            // `UnityEngine.UIElements` 에도 `Cursor` 가 있어 한정이 필요하다.
-            UnityEngine.Cursor.lockState = CursorLockMode.None;
-            UnityEngine.Cursor.visible = true;
+            SetPlayerInput(false);
         }
 
         /// 나가기를 눌렀다. 붙잡음을 놓으면 다음 프레임에 라우터가 대기방으로 컷한다.
+        /// 나가기를 눌렀다. 붙잡음을 놓으면 다음 프레임에 라우터가 대기방으로 컷한다.
+        ///
+        /// **입력을 되돌려주지 않는다.** 되돌리면 그 순간 커서가 다시 잠기는데, 지금 가는
+        /// 곳은 버튼으로 된 대기방이다(ESC 메뉴의 `CloseVisualOnly` 가 같은 이유로 같은
+        /// 선택을 한다). 다음 매치가 시작될 때 `OnPhaseChanged` 가 되돌린다.
         private void LeaveResult()
         {
             _resultClosed = true;
@@ -762,12 +772,11 @@ namespace NV.Game.UI
                 _resultShown = false;
             }
 
-            // 매치가 시작되면 커서를 다시 잠근다. 결과 화면이 풀어 놓은 것을 되돌리는 자리다 —
-            // 없으면 한 번 결과를 본 사람은 다음 매치를 **커서가 뜬 채로** 시작한다.
+            // 매치가 시작되면 조작을 되돌려준다. 결과 화면이 내려놓은 것을 되돌리는 자리다 —
+            // 없으면 한 번 결과를 본 사람은 다음 매치를 **움직일 수 없는 채로** 시작한다.
             if (phase == MatchPhase.RoleReveal || phase == MatchPhase.Playing)
             {
-                UnityEngine.Cursor.lockState = CursorLockMode.Locked;
-                UnityEngine.Cursor.visible = false;
+                SetPlayerInput(true);
             }
 
             if (phase != MatchPhase.RoleReveal) return;
@@ -839,6 +848,25 @@ namespace NV.Game.UI
             if (!TreeIsLive) return;
 
             RenderResult(outcome);
+        }
+
+        /// 로컬 플레이어의 조작을 켜고 끈다. ESC 메뉴와 같은 손잡이다.
+        ///
+        /// **ESC 메뉴가 열려 있으면 되돌려주지 않는다.** 결과 화면 위에서 ESC 를 눌렀다가
+        /// 다음 매치가 시작되면, 이 함수가 메뉴 뒤에서 조작을 켜서 커서를 잠가 버린다 —
+        /// 메뉴는 떠 있는데 아무것도 누를 수 없는 상태가 된다.
+        private void SetPlayerInput(bool enabled)
+        {
+            if (enabled && EscapeMenuController.AnyOpen) return;
+
+            // `_local` 은 `Rebuild` 가 채운다. 아직 비어 있으면 명단에서 직접 찾는다 —
+            // 여기서 조용히 넘어가면 조작이 켜진 채로 결과 화면이 뜨고, 그러면 나가기를
+            // 누르려는 클릭이 컨트롤러의 커서 재잠금에 쓰여 버튼이 눌리지 않는다.
+            PlayerAgent local = _local != null ? _local : MatchManager.Instance?.LocalAgent;
+
+            if (local == null || local.controller == null) return;
+
+            local.controller.InputEnabled = enabled;
         }
 
         /// 결과가 서 있는 동안 씬 전환을 미룬다.
