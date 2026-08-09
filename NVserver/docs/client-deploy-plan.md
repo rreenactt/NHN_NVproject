@@ -34,7 +34,8 @@
 - **`com.nv.shared` 는 그대로 성립한다.** `file:../../NVserver/Shared` 는 저장소 전체 체크아웃에서 해석되고, actions/checkout 은 전체를 받는다.
 - **씬 목록은 저장소가 진실이다.** CI 는 씬 생성 메뉴를 돌릴 수 없으므로, 커밋된 `EditorBuildSettings.asset` 이 곧 빌드의 씬 목록이다. `MainLobby`/`GameLobby` 등 다섯 씬은 이미 커밋되어 있다. 0번 씬이 `MainLobby` 가 아니면 `BuildRunner` 가 경고를 남긴다 — CI 로그에서 그 경고를 보면 씬 목록 커밋이 어긋난 것이다.
 - **Library 캐시**: `actions/cache` 로 `NVproject/Library` 를 캐시한다(키: `Packages/packages-lock.json` + `ProjectSettings` 해시). 첫 빌드는 30~60분, 캐시 히트 후 10~20분을 기대한다.
-- `versioning: None` 을 명시한다 — 기본 versioning 은 git 태그를 읽고 커밋을 만들려 든다.
+- `versioning: None` 을 명시한다 — 기본값(Semantic)은 git 이력으로 버전을 계산하는데 shallow checkout 에는 이력이 없고, 이 프로젝트는 `Application.version` 을 읽지 않는다.
+- `buildMethod` 의 공식 요구는 둘이다 — **static 메서드**일 것, **클래스가 `Assets/Editor`(또는 Editor 어셈블리) 안**일 것. `BuildMenu.BuildProductionWebGl` 은 `public static` 이고 `Assets/Editor/BuildManager/` 에 있다 — 둘 다 충족 (game.ci/docs/github/builder 대조).
 
 **0단계 사전 확인**: `unityci/editor` 의 6000.3.20f1 webgl 이미지 존재 — **확인 완료** (`ubuntu-6000.3.20f1-webgl-3.2.2`, 약 7.5GB, 2026-08 기준 Docker Hub 에 있다). 이미지가 7.5GB 이므로 러너 디스크 확보 스텝이 필요할 수 있다는 3절의 대비가 실제 근거를 얻었다.
 
