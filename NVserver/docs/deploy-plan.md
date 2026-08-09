@@ -29,6 +29,11 @@ Oracle Cloud Free Tier 인스턴스에 NVserver 를 올리고, GitHub Actions �
 
 인스턴스 생성 후 한 번만 한다. 이후에는 GitHub Actions 만 서버를 만진다.
 
+> **갱신** — 이 절의 3~5·7(사용자·디렉터리·systemd 유닛·health check 타이머·env 파일)은
+> 이제 `deploy/deploy.sh` 의 부트스트랩이 **첫 배포에서 자동으로** 만든다(있으면 건드리지
+> 않는다). 남는 수작업은 네트워크(1·2)와 Caddy(6), CORS 오리진 수정뿐이다. 실행 절차는
+> `deploy/readme.md` 가 원본이다.
+
 1. **네트워크** — VCN 보안 목록(또는 NSG)에서 인바운드 22, 80, 443 허용. 5202 는 열지 않는다.
 2. **OS 방화벽** — OCI 의 Ubuntu 이미지는 **기본 iptables 에 REJECT 규칙이 들어 있다.** 보안 목록을 열어도 접속이 안 되면 십중팔구 이것이다. 80/443 을 `iptables -I INPUT` 으로 허용하고 `netfilter-persistent save` 로 고정한다.
 3. **배포 사용자** — `nvserver` 시스템 사용자를 만든다. sudo 없음, 로그인 셸 있음(rsync/ssh 대상). GitHub Actions 는 이 사용자로만 접속한다. `systemctl restart nvserver` 한 줄만 sudoers 에 NOPASSWD 로 허용한다.
@@ -154,7 +159,7 @@ deploy.sh <tarball>:
 | 살아 있지만 응답 없음 | 교착, 소켓 고갈 | systemd 타이머(1분 주기)가 `curl /health` 3회 연속 실패 시 `systemctl restart nvserver` |
 | 배포 직후 기동 실패 | 잘못된 설정, 맵 파일-이름 불일치(기동이 멈추는 검증들) | `deploy.sh` 5단계 → 자동 롤백 |
 
-두 번째 겹은 `nvserver-healthcheck.timer` + 셸 스크립트로, 초기 구성 때 함께 설치한다. 외부 감시(UptimeRobot 류로 `https://도메인/health`)는 선택이지만 공짜이므로 붙인다 — 위 세 겹이 전부 실패하는 경우(인스턴스 자체가 죽음)를 사람에게 알리는 유일한 길이다.
+두 번째 겹은 `nvserver-healthcheck.timer` + 셸 스크립트로, 첫 배포의 부트스트랩이 설치한다. 외부 감시(UptimeRobot 류로 `https://도메인/health`)는 선택이지만 공짜이므로 붙인다 — 위 세 겹이 전부 실패하는 경우(인스턴스 자체가 죽음)를 사람에게 알리는 유일한 길이다.
 
 ## 7. Rollback
 

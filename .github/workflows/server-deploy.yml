@@ -48,10 +48,13 @@ jobs:
 
       # app/ 옆에 MapData/ 를 두는 구조가 appsettings 의 Game:MapDirectory(../MapData) 를
       # 저장소에서와 똑같이 성립시킨다 — 설정 변경 없이.
+      # deploy/ 도 함께 싣는다 — 사전 준비 없는 서버에서 deploy.sh 가 유닛·env 를
+      # 여기 실린 파일로 부트스트랩한다.
       - name: 아티팩트 구성
         run: |
           cp -r MapData "$RUNNER_TEMP/stage/MapData"
-          tar -czf "$RUNNER_TEMP/nvserver.tar.gz" -C "$RUNNER_TEMP/stage" app MapData
+          cp -r deploy "$RUNNER_TEMP/stage/deploy"
+          tar -czf "$RUNNER_TEMP/nvserver.tar.gz" -C "$RUNNER_TEMP/stage" app MapData deploy
 
       - uses: actions/upload-artifact@v4
         with:
@@ -99,12 +102,13 @@ jobs:
             StrictHostKeyChecking $strict
           EOF
 
-      # deploy.sh 를 매번 함께 올린다 — 서버의 사본이 저장소를 따라오게 하는 유일한 경로다.
+      # /tmp 로 올린다 — 사전 준비 없는 서버에는 /opt/nvserver 가 아직 없고,
+      # 그 디렉터리를 만드는 것은 deploy.sh 의 부트스트랩이다.
       - name: 전송 및 배포
         run: |
-          scp NVserver/deploy/deploy.sh deploy:/opt/nvserver/deploy.sh
-          scp nvserver.tar.gz deploy:/opt/nvserver/incoming/nvserver-${{ github.sha }}.tar.gz
-          ssh deploy 'bash /opt/nvserver/deploy.sh /opt/nvserver/incoming/nvserver-${{ github.sha }}.tar.gz'
+          scp NVserver/deploy/deploy.sh deploy:/tmp/nvserver-deploy.sh
+          scp nvserver.tar.gz deploy:/tmp/nvserver-${{ github.sha }}.tar.gz
+          ssh deploy 'bash /tmp/nvserver-deploy.sh /tmp/nvserver-${{ github.sha }}.tar.gz'
 
   rollback:
     if: ${{ inputs.rollback_to }}
@@ -143,5 +147,5 @@ jobs:
 
       - name: 롤백 실행
         run: |
-          scp NVserver/deploy/deploy.sh deploy:/opt/nvserver/deploy.sh
-          ssh deploy 'bash /opt/nvserver/deploy.sh rollback "${{ inputs.rollback_to }}"'
+          scp NVserver/deploy/deploy.sh deploy:/tmp/nvserver-deploy.sh
+          ssh deploy 'bash /tmp/nvserver-deploy.sh rollback "${{ inputs.rollback_to }}"'

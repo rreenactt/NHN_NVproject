@@ -1,4 +1,4 @@
-# /etc/systemd/system/nvserver.service — provision.sh 가 설치한다.
+# /etc/systemd/system/nvserver.service — deploy.sh 부트스트랩이 설치한다.
 [Unit]
 Description=NVserver game server
 After=network.target

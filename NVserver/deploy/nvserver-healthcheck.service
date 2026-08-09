@@ -1,4 +1,4 @@
-# /etc/systemd/system/nvserver-healthcheck.service — provision.sh 가 설치한다.
+# /etc/systemd/system/nvserver-healthcheck.service — deploy.sh 부트스트랩이 설치한다.
 # 실행은 타이머(nvserver-healthcheck.timer)가 한다.
 [Unit]
 Description=NVserver health check (unresponsive-process restart)
