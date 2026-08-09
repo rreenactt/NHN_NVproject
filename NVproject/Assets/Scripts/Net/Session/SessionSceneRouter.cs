@@ -1,4 +1,5 @@
 ﻿using NV.Client.Map;
+using NV.Game;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -71,10 +72,16 @@ namespace NV.Client.Net.Session
             {
                 case SessionState.InLobby:
                 case SessionState.Ended:
+                    if (ResultStillOnScreen()) break;
                     EnterGameLobby();
                     break;
 
                 case SessionState.InGame:
+                    // **매치가 도는 동안 래치를 되감는다.** 되감는 자리가 여기밖에 없다 —
+                    // `ResultStillOnScreen` 은 이 갈래에서 불리지 않으므로, 거기에만 두면
+                    // 지난 매치에서 누른 나가기가 그대로 남아 **두 번째 매치의 결과가
+                    // 붙잡히지 않는다.** 첫 판만 되고 그 다음부터 안 되는 종류의 버그다.
+                    MatchResultGate.Rearm();
                     EnterGame();
                     break;
 
@@ -83,6 +90,39 @@ namespace NV.Client.Net.Session
                     ReturnToLobby();
                     break;
             }
+        }
+
+        /// <summary>
+        /// 끝난 매치의 결과를 사람이 아직 닫지 않았다.
+        ///
+        /// **이 판정이 라우터 안에 있어야 한다.** 씬을 붙잡는 일을 HUD 에 두었던 두 번의
+        /// 시도가 모두 실패한 이유가 실행 순서다 — 이 컴포넌트는 0, `GameHudController` 는
+        /// 60 이므로, HUD 가 무엇을 세우든 그것은 라우터가 **이미 컷한 뒤**에 세워진다.
+        /// HUD 안에서 호출 위치를 아무리 앞으로 옮겨도 고쳐지지 않는다.
+        ///
+        /// 그래서 라우터가 직접 읽는다. `MatchManager.Phase` 는 `MatchSync`(-75)가 이 프레임에
+        /// 이미 써 놓았으므로 여기(0)에서 읽으면 최신이다. 닫혔는지 여부만 래치에서 온다
+        /// (<see cref="MatchResultGate"/>) — 그쪽은 **세우는 쪽이 없고 푸는 쪽만 있어서**
+        /// 순서에 걸리지 않는다.
+        ///
+        /// 대기방에 이미 서 있으면 붙잡을 것이 없다. 그 씬에는 결과 카드가 없으므로 여기서
+        /// 참을 돌려주면 대기방에서 영영 못 나온다.
+        /// </summary>
+        private bool ResultStillOnScreen()
+        {
+            if (SceneManager.GetActiveScene().name == GameLobbyScene) return false;
+
+            MatchManager match = MatchManager.Instance;
+
+            if (match == null || match.Phase != MatchPhase.Ended)
+            {
+                // 끝난 매치가 없다. 다음 결과를 위해 래치를 되감는다 — 여기서 하면 매치마다
+                // 누가 되감아 줄지 기억할 필요가 없다.
+                MatchResultGate.Rearm();
+                return false;
+            }
+
+            return !MatchResultGate.Dismissed;
         }
 
         /// 방에 들어갔다. 대기방 씬으로.

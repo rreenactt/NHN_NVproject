@@ -81,8 +81,13 @@ namespace NV.Game.UI
             // The input handoff. The controller's own ESC handler only runs while input is
             // enabled, so while the menu is up nothing fights over the cursor — and the
             // weapon checks the same flag, so the click that presses a button never fires.
+            //
+            // **결과 화면 위에서는 돌려주지 않는다.** 죽는 순간 ESC 를 눌러 두었다가 메뉴를
+            // 닫으면, 여기서 조작이 켜지며 커서가 다시 잠긴다 — 나가기 버튼은 화면에 있는데
+            // 마우스는 조준을 움직이고 있어서 누를 수가 없다. 결과 화면도 UI 이고, UI 가 두
+            // 겹일 뿐이다.
             var player = ResolvePlayer();
-            if (player != null) player.InputEnabled = !open;
+            if (player != null) player.InputEnabled = !open && !MatchResultGate.Standing;
         }
 
         /// <summary>

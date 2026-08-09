@@ -2765,6 +2765,23 @@ namespace NV.Realtime.Simulation
 
         private void Start(int sessionId)
         {
+            // **끝난 매치가 방을 막고 있으면 여기서 되돌린다.**
+            //
+            // 방을 `Waiting` 으로 되돌리는 컨트롤(`ControlKind.ReturnToLobby`)은 매치 씬의
+            // ESC 메뉴에만 있었다. 결과를 닫고 대기방으로 걸어 나온 방장에게는 그 문이 없고
+            // 누를 것은 START 뿐인데 그것은 `Waiting` 만 받으므로, 방이 영영 `Ended` 로 남아
+            // 아무도 다음 판을 시작할 수 없었다 — 방을 새로 만드는 것 말고는 길이 없다.
+            //
+            // 되돌리기만 하고 이어서 시작하지는 않는다. `ResetToWaiting` 이 준비를 전원
+            // 내리므로 아래의 준비 게이트에서 멈추는데, 그것이 맞다 — 매치가 끝난 뒤 사람이
+            // 아직 앉아 있는지는 사람만 답할 수 있다.
+            if (Phase == RoomPhase.Ended && IsAuthorized(sessionId))
+            {
+                _logger.LogInformation("룸 {RoomId}: 끝난 매치를 대기 상태로 되돌린다.", RoomId);
+                ResetToWaiting();
+                _stateDirty = true;
+            }
+
             if (Phase != RoomPhase.Waiting)
             {
                 return;
