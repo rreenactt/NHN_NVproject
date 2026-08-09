@@ -141,6 +141,36 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(MatchConstants.RunnerHitsToDie, world.HitsOnRunner());
         }
 
+        /// 쓰러진 몸은 걷지 않는다.
+        ///
+        /// **클라이언트가 이미 스스로 멈춘다**(`PlayerAgent.ApplyLock` 의 `!InPlay`). 그것은
+        /// 부탁이고 이것이 규칙이다 — 몸은 지워지지 않고 좌표도 계속 나가므로, 서버가 막지
+        /// 않으면 고쳐진 클라이언트가 **보이지 않는 몸으로 맵을 정찰한다.** 관전이 붙은
+        /// 뒤로는 남의 눈으로 보면서 자기 몸으로 걷는 셈이 되어 값이 더 커졌다.
+        [Fact]
+        public void 쓰러진_몸은_입력을_받아도_움직이지_않는다()
+        {
+            var world = Duel();
+
+            world.FireAtRunner();
+            world.Advance(Match.HitImmunityTicks);
+            world.FireAtRunner();
+            Assert.True(world.HasFlag(world.Runner, EntityFlags.Downed));
+
+            // 쓰러진 **뒤**의 자리를 기준으로 삼는다. 피격 순간이동이 이미 옮겨 놓았다.
+            var restingPlace = world.PositionOf(world.Runner);
+
+            // 전속력 전진을 여러 틱 보낸다. 반복 갈래(입력이 끊긴 뒤)도 함께 지나도록
+            // 넣은 프레임 수보다 더 돌린다.
+            world.PushForward(world.Runner, ticks: 10);
+            world.Advance(10);
+
+            var after = world.PositionOf(world.Runner);
+
+            Assert.Equal(restingPlace.X, after.X, 3);
+            Assert.Equal(restingPlace.Z, after.Z, 3);
+        }
+
         /// 사망 지점에 열쇠를 흘린다. 룰셋 — 목표가 되돌아온다.
         [Fact]
         public void 쓰러지면_소지한_열쇠를_흘린다()
@@ -365,6 +395,21 @@ namespace NV.Modules.Tests.Realtime
                         0));
 
                 Room.Advance();
+            }
+
+            /// 이 플레이어에게 전속력 전진을 여러 틱 보낸다. 틱을 돌리지는 않는다 —
+            /// 호출자가 넣은 것보다 더 돌려 반복 갈래까지 지나게 할 수 있어야 한다.
+            public void PushForward(byte playerId, int ticks)
+            {
+                for (var sent = 0; sent < ticks; sent++)
+                {
+                    _inputTick++;
+
+                    Room.PostInput(
+                        playerId + 1,
+                        _inputTick,
+                        new InputFrame(ButtonFlags.None, 0, 127, 0, 0));
+                }
             }
 
             public void Advance(int ticks)

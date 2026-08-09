@@ -29,7 +29,8 @@ namespace NV.Game.UI
         private VisualTreeAsset _uxml;
 
         // --- shared
-        private VisualElement _root, _scanlines, _vignette, _deadWash;
+        private VisualElement _root, _scanlines, _vignette, _deadWash, _spectatorBar;
+        private Label _spectatorName;
         private Label _clock, _roleLabel, _escapeLabel, _notice, _prompt;
 
         // 칩에 함께 그리는 값들. 탈출 수는 이벤트로, 진행도는 매 프레임 온다.
@@ -91,6 +92,9 @@ namespace NV.Game.UI
 
         private MatchMapView _mapViewCache;
         private SeekerFeed _feedCache;
+
+        /// 관전 카메라. 죽은 Runner 가 남의 눈을 빌리는 동안만 산다.
+        private readonly MatchSpectator _spectator = new MatchSpectator();
 
         // Lazily created, never in a field initialiser: a domain reload during play wipes plain
         // managed objects without re-running Awake, and the HUD would then throw every frame.
@@ -172,12 +176,17 @@ namespace NV.Game.UI
             if (DeviceSystem.Instance != null) DeviceSystem.Instance.EffectFired -= OnEffectFired;
 
             Feed.Release();
+
+            // 카메라를 돌려주지 않고 사라지면 로컬 카메라가 꺼진 채로 남는다 — 씬은 살아
+            // 있고 화면만 검다.
+            _spectator.Release();
         }
 
         private void OnDestroy()
         {
             MapView.Release();
             Feed.Release();
+            _spectator.Release();
             if (_scanlineTexture != null) Destroy(_scanlineTexture);
             if (_vignetteTexture != null) Destroy(_vignetteTexture);
         }
@@ -209,6 +218,8 @@ namespace NV.Game.UI
             _scanlines = _root.Q<VisualElement>("scanlines");
             _vignette = _root.Q<VisualElement>("vignette");
             _deadWash = _root.Q<VisualElement>("dead-wash");
+            _spectatorBar = _root.Q<VisualElement>("spectator-bar");
+            _spectatorName = _root.Q<Label>("spectator-name");
 
             _roleChip = _root.Q<VisualElement>("role-chip");
             _roleLabel = _root.Q<Label>("role-label");
@@ -310,6 +321,7 @@ namespace NV.Game.UI
 
             UpdateClock();
             UpdateDeadWash();
+            UpdateSpectator();
 
             // 탈출 진행도는 매 틱 바뀌므로 이벤트가 아니라 여기서 그린다. 유지 시간이 0.8초라
             // 이벤트로 받으면 바가 두 번 튀고 끝난다.
@@ -349,6 +361,32 @@ namespace NV.Game.UI
                 down ? DeadWashOpacity : 0f,
                 Time.deltaTime * (down ? DeadWashOpacity / 0.8f : 1.5f));
         }
+
+        /// <summary>
+        /// 관전 대상을 고르고 화면에 이름을 적는다.
+        ///
+        /// **공유 구간에서 돈다.** Runner 패널은 역할에 따라 트리에서 빠지므로 거기 두면
+        /// 갈림에 걸리고, 무엇보다 관전은 카메라를 건드리는 일이라 트리보다 오래 산다.
+        /// </summary>
+        private void UpdateSpectator()
+        {
+            _spectator.Tick(_local, _match != null ? _match.Agents : null, _viewCamera);
+
+            if (_spectatorBar == null || _spectatorName == null) return;
+
+            PlayerAgent target = _spectator.Target;
+            bool watching = _spectator.Watching && target != null;
+
+            _spectatorBar.style.display = watching ? DisplayStyle.Flex : DisplayStyle.None;
+
+            if (watching) _spectatorName.text = target.displayName;
+        }
+
+        /// <summary>
+        /// 관전 카메라를 대상에 붙인다. **원격 몸은 Update 에서 놓이므로** 여기서 따라가야
+        /// 한 프레임 뒤처지지 않는다 — 뒤처지면 보고 있는 대상에 대해서만 화면이 떤다.
+        /// </summary>
+        private void LateUpdate() => _spectator.LateTick();
 
         private void UpdateClock()
         {

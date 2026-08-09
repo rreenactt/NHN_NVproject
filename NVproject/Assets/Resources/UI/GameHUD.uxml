@@ -23,6 +23,19 @@
         -->
         <ui:VisualElement name="dead-wash" class="dead-wash" picking-mode="Ignore" />
 
+        <!--
+            관전 띠. 죽은 Runner 가 남의 눈으로 보고 있는 동안에만 뜬다.
+
+            **누구를 보고 있는지 적는 것이 요점이다.** 화면만 갈아 끼우면 시점이 넘어간 것이
+            아니라 자기가 순간이동한 것으로 읽힌다. 조작법을 같이 적는 이유도 같다 — 넘길 수
+            있다는 사실을 알려 주는 곳이 여기밖에 없다.
+        -->
+        <ui:VisualElement name="spectator-bar" class="spectator-bar" picking-mode="Ignore">
+            <ui:Label name="spectator-tag" class="spectator-tag" text="관전 중" />
+            <ui:Label name="spectator-name" class="spectator-name" text="—" />
+            <ui:Label name="spectator-hint" class="spectator-hint" text="좌클릭 다음 · 우클릭 이전" />
+        </ui:VisualElement>
+
         <!-- ============================================================ shared bar -->
         <ui:VisualElement name="shared-bar" class="shared-bar" picking-mode="Ignore">
             <ui:VisualElement name="role-chip" class="chip" picking-mode="Ignore">
