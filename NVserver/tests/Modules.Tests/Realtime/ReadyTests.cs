@@ -130,6 +130,23 @@ namespace NV.Modules.Tests.Realtime
             Assert.Equal(RoomPhase.Playing, room.Phase);
         }
 
+        /// 한 명만 준비해도 안 된다. 명단을 **전부** 훑는지 보는 검사다 — 첫 번째에서
+        /// 멈추는 구현은 2인 검사를 통과하고 3인에서만 샌다.
+        [Fact]
+        public void 셋_중_하나만_준비해도_시작하지_않는다()
+        {
+            var room = RoomFixture.Create();
+
+            room.PostCommand(RoomCommand.Join(1, 0, "host", true));
+            room.PostCommand(RoomCommand.Join(2, 1));
+            room.PostCommand(RoomCommand.Join(3, 2));
+            room.PostCommand(RoomCommand.SetReady(2, true));
+            room.PostCommand(RoomCommand.Start(1));
+            room.Advance();
+
+            Assert.Equal(RoomPhase.Waiting, room.Phase);
+        }
+
         /// **정적 룸도 준비를 요구한다.**
         ///
         /// 한동안 건너뛰었다 — 두 클라이언트 개발 루프가 그 룸으로 돌아가므로 편의였다.
