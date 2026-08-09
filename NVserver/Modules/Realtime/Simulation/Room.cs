@@ -3040,19 +3040,19 @@ namespace NV.Realtime.Simulation
         ///   상태가 생긴다.
         /// - **봇을 뺀다.** 봇은 준비 요청을 보낼 입이 없다. 세면 개발용 방이 영구히 시작되지
         ///   않는다.
-        /// - **정적 룸은 조건 자체를 건너뛴다.** 두 클라이언트 개발 루프가 그 룸으로 돌아가고,
-        ///   `IsAuthorized` 가 이미 정적 룸을 예외로 두고 있다 — 개발용 예외를 그 경계 안에만
-        ///   두면 실제 매치의 판정에는 닿지 않는다.
+        /// **정적 룸도 예외가 아니다.** 한동안 조건 자체를 건너뛰었는데 — 두 클라이언트 개발
+        /// 루프가 그 룸으로 돌아가므로 편의였다 — 그 룸은 **공개**라서 방 목록과 빠른 참가가
+        /// 보통 사람을 그리로 넣는다. 그래서 개발용 예외가 개발용 경계 밖으로 새어, 아무도
+        /// 준비하지 않은 채 매치가 시작되는 방이 됐다.
+        ///
+        /// 개발 루프는 그대로 돈다. 봇은 여전히 세지 않으므로 봇으로 채운 방은 방장의 START
+        /// 하나로 시작하고, 사람이 둘이면 게스트가 READY 를 한 번 누르면 된다 — 실제 매치와
+        /// 같은 순서를 밟는 편이 개발 루프로서도 낫다.
         ///
         /// <param name="waitingFor">거짓일 때 아직 준비하지 않은 사람 하나의 PlayerId. 로그용이다.</param>
         private bool EveryoneElseIsReady(int sessionId, out byte waitingFor)
         {
             waitingFor = RoomStateHeader.NoPlayer;
-
-            if (_isStatic)
-            {
-                return true;
-            }
 
             foreach (var player in _players.Values)
             {

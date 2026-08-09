@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -64,7 +64,7 @@ The client's skills (`fps-*`, `unity-mcp-ops`, `game-rules`, …) live in `NVpro
 
 1. `dotnet run --project Api` — no config edit needed, both maps are registered
 2. Either path:
-   - **Main lobby (product flow)** — generate both lobby scenes first (**Tools ▸ NV ▸ Scene ▸ Create Main Lobby Scene** and **Create Game Lobby Scene**), open `MainLobby.unity`, Play, **방 만들기** — which loads `GameLobby.unity`, the 3D waiting room where everyone stands in a row. Hand the code to the second client, the guest presses **READY**, then the host presses **START**. Ready is the gate and the host never presses it — the start button *is* the host's ready, so requiring both would make two controls mean one thing. The static dev room `test` skips the ready gate, the same boundary that already lets everyone start there. `SessionSceneRouter` loads the scene that matches the room's map. The active-room list, quick join and the online headcount all ride on `GET /rooms`, which returns **only rooms created as public** — the create-room popup defaults to private, so an untouched room is reachable by invite code alone. Visibility is fixed at creation and `POST /rooms` treats a missing `isPublic` as private, so exposure is always a choice.
+   - **Main lobby (product flow)** — generate both lobby scenes first (**Tools ▸ NV ▸ Scene ▸ Create Main Lobby Scene** and **Create Game Lobby Scene**), open `MainLobby.unity`, Play, **방 만들기** — which loads `GameLobby.unity`, the 3D waiting room where everyone stands in a row. Hand the code to the second client, the guest presses **READY**, then the host presses **START**. Ready is the gate and the host never presses it — the start button *is* the host's ready, so requiring both would make two controls mean one thing. **No room skips the ready gate**, including the static dev room `test` — that room is public, so quick join and the room list drop ordinary players into it, and an exemption there was an exemption in a real match (the symptom was "nobody pressed READY and it started"). `Room.IsAuthorized` still accepts anyone's Start in a static room, which is a different question — who may press it, not whether the room is ready. `SessionSceneRouter` loads the scene that matches the room's map. The active-room list, quick join and the online headcount all ride on `GET /rooms`, which returns **only rooms created as public** — the create-room popup defaults to private, so an untouched room is reachable by invite code alone. Visibility is fixed at creation and `POST /rooms` treats a missing `isPublic` as private, so exposure is always a choice.
    - **Dev dashboard (fast)** — open `Assets/Scenes/MultiplayerTest.unity`, Play, join room `test` (the pre-opened static room) in the panel.
 3. Second client via **Build and Launch 2 Clients**
 
