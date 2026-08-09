@@ -20,19 +20,19 @@ namespace NV.Client.Map
     {
         [Header("Fog — the far end of a hall should be a guess, not a fact")]
         [Tooltip("Cold grey-green. The fog does most of the dread.")]
-        public Color fogColor = new Color(0.048f, 0.057f, 0.054f);
+        public Color fogColor = new Color(0.030f, 0.036f, 0.034f);
 
         [Tooltip("Exponential-squared density. Sets how far a Seeker can see down a hall.")]
-        public float fogDensity = 0.034f;
+        public float fogDensity = 0.042f;
 
         [Tooltip("Flat ambient — dim and cool, so the light pools around the strips.")]
-        public Color ambientColor = new Color(0.020f, 0.025f, 0.024f);
+        public Color ambientColor = new Color(0.013f, 0.016f, 0.015f);
 
         [Header("Lights — built from the baked asset's lamp positions")]
         [Tooltip("Copied from the level palette at bake time by the generator's decorator.")]
         public Color lightColor = new Color(0.82f, 1.00f, 0.94f);
 
-        public float lightIntensity = 0.34f;
+        public float lightIntensity = 0.26f;
 
         [Tooltip("Range in grid cells; multiplied by the grid's cell size at build time.")]
         public float lightRangeCells = 2.2f;
