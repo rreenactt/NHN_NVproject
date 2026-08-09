@@ -324,13 +324,6 @@ namespace NV.Game.UI
 
         private void Update()
         {
-            // **트리보다 먼저 붙잡는다.** 결과를 붙잡는 시점은 카드가 화면에 뜬 순간이 아니라
-            // **매치가 끝난 순간**이다. 카드는 한 박자(1.6초) 뒤에 올라오는데 라우터는 방이
-            // `Ended` 가 되는 바로 그 프레임에 컷하므로, 붙잡기를 카드에 매달아 두면 카드는
-            // 뜰 기회조차 얻지 못한다 — 술래가 전멸시켜 이긴 판이 결과 없이 끝난 것이 이
-            // 구멍이었고, 시계로 끝난 판도 같은 구멍을 지나고 있었다.
-            HoldWhileResultStands();
-
             if (!TreeIsLive || _match == null)
             {
                 if (MatchManager.Instance != null && MatchManager.Instance.LocalAgent != null) Rebuild();
@@ -441,7 +434,11 @@ namespace NV.Game.UI
             _resultClosed = true;
             _resultShown = false;
             _endCard.style.display = DisplayStyle.None;
-            SceneTransitionHold.Release();
+
+            // **씬을 놓아 주는 것은 이 한 줄이다.** 라우터가 이 래치를 읽는다
+            // (`SessionSceneRouter.ResultStillOnScreen`) — 붙잡기를 여기서 걸지 않는 이유는
+            // 실행 순서에 있고, `MatchResultGate` 에 적혀 있다.
+            MatchResultGate.Dismiss();
         }
 
         /// <summary>
@@ -797,8 +794,9 @@ namespace NV.Game.UI
             // 트리가 살아 있지 않은 클라이언트는 카드를 영영 못 본다 — 그리고 그것이 곧
             // "승패 없이 로비로" 다. 단계에서 유도하면 늦게 올라온 트리도 따라잡는다.
             //
-            // 씬을 붙잡는 것은 여기가 아니다(`HoldWhileResultStands`). 아래의 한 박자가
-            // 지나기 전에 이미 붙잡고 있어야 한다.
+            // 씬을 붙잡는 것은 여기가 아니다. 라우터가 `MatchManager.Phase` 를 직접 읽어
+            // 스스로 멈춘다(`SessionSceneRouter.ResultStillOnScreen`) — 이 컴포넌트가 세우는
+            // 무엇이든 라우터보다 늦게 세워지기 때문이다(실행 순서 60 대 0).
             if (_match.Phase == MatchPhase.Ended && !_resultClosed)
             {
                 // 결과 카드는 끝난 뒤 한 박자 뒤에 올라온다. 그 사이에 마지막 장면이 보인다.
@@ -867,20 +865,6 @@ namespace NV.Game.UI
             if (local == null || local.controller == null) return;
 
             local.controller.InputEnabled = enabled;
-        }
-
-        /// 결과가 서 있는 동안 씬 전환을 미룬다.
-        ///
-        /// **상태에서 유도한다.** `MatchManager.Phase` 만 보므로 이 컴포넌트의 트리가 아직
-        /// 살아 있지 않아도, 카드가 아직 안 떴어도 동작한다. 시한을 매 프레임 갱신하는
-        /// 것이라 이 컴포넌트가 죽으면 저절로 풀린다(`SceneTransitionHold`).
-        private void HoldWhileResultStands()
-        {
-            MatchManager match = MatchManager.Instance;
-
-            if (match == null || match.Phase != MatchPhase.Ended || _resultClosed) return;
-
-            SceneTransitionHold.Hold(0.5f);
         }
 
         /// 결과 카드의 글자와 색. **여러 번 불려도 같은 값을 쓴다** — 이벤트로도 오고
