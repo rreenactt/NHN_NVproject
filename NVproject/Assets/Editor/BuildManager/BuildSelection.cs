@@ -54,12 +54,21 @@ namespace NV.Client.EditorTools
         /// 사람에게 남기되, 기본값은 **지금 바로 열어 볼 수 있는 쪽**으로 둔다.
         public WebGLCompressionFormat WebGlCompression { get; set; } = WebGLCompressionFormat.Disabled;
 
+        /// <summary>이 빌드 한 번에만 쓰는 환경. null 이면 에디터의 선택을 따른다.</summary>
+        ///
+        /// Production 지름길이 쓰는 자리다. 그 메뉴가 대신 `NVEnvironmentSelection` 을
+        /// 바꾸면 빌드 한 번이 에디터의 환경 선택을 갈아치우고, 다음 Play 모드가 말없이
+        /// 배포 서버에 붙는다. 그래서 선택은 건드리지 않고 이 호출에만 얹는다 —
+        /// `Save()` 에 들어가지 않으므로 다음 빌드로 새어 나갈 수도 없다.
+        public NVEnvironment EnvironmentOverride { get; set; }
+
         /// <summary>이 빌드가 붙을 환경. 선택은 <see cref="NVEnvironmentSelection"/> 이 갖는다.</summary>
         ///
         /// 환경을 여기 복사해 두지 않는다. 에디터의 Play 모드도 같은 선택을 읽으므로
         /// (`NVEnvironment.Active`), 저장소가 둘이면 "창에서는 dev 인데 Play 는 local"
         /// 같은 상태가 만들어진다.
-        public NVEnvironment Environment => NVEnvironment.Active;
+        public NVEnvironment Environment =>
+            EnvironmentOverride != null ? EnvironmentOverride : NVEnvironment.Active;
 
         public BuildTarget Target =>
             Platform == BuildPlatform.WebGL ? BuildTarget.WebGL : BuildTarget.StandaloneWindows64;
