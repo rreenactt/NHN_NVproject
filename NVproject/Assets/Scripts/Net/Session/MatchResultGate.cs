@@ -1,3 +1,5 @@
+using NV.Game;
+
 namespace NV.Client.Net.Session
 {
     /// <summary>
@@ -25,6 +27,23 @@ namespace NV.Client.Net.Session
     {
         /// <summary>Has the player closed this match's result?</summary>
         public static bool Dismissed { get; private set; }
+
+        /// <summary>
+        /// Is a result screen up and unanswered right now?
+        ///
+        /// Asked by anyone who would otherwise take input back from the UI. The escape menu does:
+        /// closing it hands control to the player unconditionally, and doing that over a result
+        /// screen re-locks the cursor — so the 나가기 button is on screen, the mouse is moving the
+        /// aim, and there is no way to press it. Opening ESC as you die is enough to reach that.
+        /// </summary>
+        public static bool Standing
+        {
+            get
+            {
+                MatchManager match = MatchManager.Instance;
+                return match != null && match.Phase == MatchPhase.Ended && !Dismissed;
+            }
+        }
 
         /// <summary>They pressed 나가기. The router may cut on its next frame.</summary>
         public static void Dismiss() => Dismissed = true;

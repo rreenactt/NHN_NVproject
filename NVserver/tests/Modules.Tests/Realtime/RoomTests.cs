@@ -702,6 +702,50 @@ namespace NV.Modules.Tests.Realtime
             return header.Outcome;
         }
 
+        /// 끝난 방이 START 로 풀린다.
+        ///
+        /// **막다른 길이었다.** 방을 `Waiting` 으로 되돌리는 컨트롤은 매치 씬의 ESC 메뉴에만
+        /// 있어서, 결과를 닫고 대기방으로 걸어 나온 방장에게는 그 문이 없었다. 남는 것은
+        /// START 뿐인데 그것은 `Waiting` 만 받았으므로 방이 영영 `Ended` 로 남았다.
+        [Fact]
+        public void 끝난_방에서_START_는_방을_대기로_되돌린다()
+        {
+            var room = RoomFixture.Create();
+
+            RoomFixture.FillAndStart(room);
+
+            room.PostCommand(RoomCommand.EndMatch(1, 1));
+            room.Advance();
+            Assert.Equal(RoomPhase.Ended, room.Phase);
+
+            room.PostCommand(RoomCommand.Start(1));
+            room.Advance();
+
+            Assert.Equal(RoomPhase.Waiting, room.Phase);
+
+            // **이어서 시작하지는 않는다.** 되돌리면서 준비가 전원 내려가고, 매치가 끝난 뒤
+            // 사람이 아직 앉아 있는지는 사람만 답할 수 있다.
+            Assert.Equal(MatchPhase.Lobby, room.MatchPhase);
+        }
+
+        /// 방장이 아니면 끝난 방을 되돌리지도 못한다. 되돌리기는 시작과 같은 권한이다.
+        [Fact]
+        public void 방장이_아니면_끝난_방을_되돌리지_못한다()
+        {
+            var room = RoomFixture.Create();
+
+            RoomFixture.FillAndStart(room);
+
+            room.PostCommand(RoomCommand.EndMatch(1, 1));
+            room.Advance();
+            Assert.Equal(RoomPhase.Ended, room.Phase);
+
+            room.PostCommand(RoomCommand.Start(2));
+            room.Advance();
+
+            Assert.Equal(RoomPhase.Ended, room.Phase);
+        }
+
         [Fact]
         public void 로비로_되돌리면_매치_단계도_초기화된다()
         {
