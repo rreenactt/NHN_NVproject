@@ -19,6 +19,8 @@
     top: 0;
     right: 0;
     bottom: 0;
+    /* WebGL 에는 OS 폰트 폴백이 없다 — 한글은 여기 실어 준 폰트가 전부다 (game-hud.uss 참고). */
+    -unity-font-definition: url("../Fonts/NotoSansKR-Regular.otf");
     background-color: rgb(24, 21, 14);
     flex-direction: column;
     padding-left: 48px;

@@ -22,6 +22,10 @@
     top: 0;
     right: 0;
     bottom: 0;
+    /* WebGL 에는 OS 폰트 폴백이 없다 — 에디터와 Windows 는 시스템 폰트(맑은 고딕)로
+       한글을 그려 주지만 브라우저 빌드는 여기 실어 준 폰트가 전부다. 루트에 걸면
+       상속되므로 이 문서 아래 모든 텍스트가 덮인다. */
+    -unity-font-definition: url("Fonts/NotoSansKR-Regular.otf");
 }
 
 /* ============================================================ atmosphere */
