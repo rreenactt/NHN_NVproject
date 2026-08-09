@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Numerics;
 using NV.Realtime.Transport;
 using NV.Shared.Contracts.Enums;
@@ -121,6 +121,15 @@ namespace NV.Realtime.Simulation
         /// 곳은 매치 시작과 체인이 놓아주는 순간 둘뿐이다 — 그 밖에서 채우면 기획서 §4.3 의
         /// 벌칙이 사라진다.
         public int Ammo { get; set; }
+
+        /// 술래의 달리기 게이지. 0..`MatchConstants.SprintChargeFull`.
+        ///
+        /// **정수로 센다.** 초당 비율로 누적하면 틱마다 반올림이 갈리고, 이 값은 화면의
+        /// 게이지로도 나가므로 서버와 클라이언트가 같은 그림을 그려야 한다.
+        ///
+        /// Runner 에게도 있지만 쓰이지 않는다 — 매 틱 가득 채워 두므로, 역할이 바뀌는 경로가
+        /// 생겨도 빈 게이지를 든 술래가 나오지 않는다.
+        public int SprintCharge { get; set; } = MatchConstants.SprintChargeFull;
 
         /// 다음 발사가 가능한 틱. `NextInsertTick` 과 같은 이유로 매치 시작에 되돌리지 않는다.
         public uint NextFireTick { get; set; }

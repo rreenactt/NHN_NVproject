@@ -392,6 +392,10 @@ namespace NV.Shared.Serialization
                 writer.WriteByte(hideAmmo ? (byte)0 : participant.Ammo);
                 writer.WriteByte(participant.Hits);
                 writer.WriteByte(hideKeys ? (byte)0 : participant.CarriedKeys);
+
+                // 게이지는 탄약과 같은 쪽으로 걸린다 — 쫓기는 쪽이 "지금 달릴 수 있는가" 를
+                // 숫자로 받으면, 소리와 거리로 읽어야 할 것을 무료로 가져간다.
+                writer.WriteByte(hideAmmo ? (byte)0 : participant.SprintCharge);
             }
 
             return writer.BytesWritten;
@@ -484,6 +488,7 @@ namespace NV.Shared.Serialization
                 participants[index] = new MatchParticipant(
                     reader.ReadByte(),
                     (MatchRole)reader.ReadByte(),
+                    reader.ReadByte(),
                     reader.ReadByte(),
                     reader.ReadByte(),
                     reader.ReadByte());

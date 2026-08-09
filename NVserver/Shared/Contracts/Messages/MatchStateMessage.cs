@@ -1,4 +1,4 @@
-using NV.Shared.Contracts.Enums;
+﻿using NV.Shared.Contracts.Enums;
 
 namespace NV.Shared.Contracts.Messages
 {
@@ -89,8 +89,8 @@ namespace NV.Shared.Contracts.Messages
     /// 이 전문은 2Hz 다. 2Hz 로 출혈을 받으면 피 흔적이 최대 0.5초 늦게 시작한다.
     public readonly struct MatchParticipant
     {
-        /// playerId(1) + role(1) + ammo(1) + hits(1) + carriedKeys(1)
-        public const int WireSize = 5;
+        /// playerId(1) + role(1) + ammo(1) + hits(1) + carriedKeys(1) + sprintCharge(1)
+        public const int WireSize = 6;
 
         public MatchParticipant(
             byte playerId,
@@ -98,12 +98,24 @@ namespace NV.Shared.Contracts.Messages
             byte ammo,
             byte hits,
             byte carriedKeys)
+            : this(playerId, role, ammo, hits, carriedKeys, 0)
+        {
+        }
+
+        public MatchParticipant(
+            byte playerId,
+            MatchRole role,
+            byte ammo,
+            byte hits,
+            byte carriedKeys,
+            byte sprintCharge)
         {
             PlayerId = playerId;
             Role = role;
             Ammo = ammo;
             Hits = hits;
             CarriedKeys = carriedKeys;
+            SprintCharge = sprintCharge;
         }
 
         public byte PlayerId { get; }
@@ -128,5 +140,42 @@ namespace NV.Shared.Contracts.Messages
 
         /// 들고 있는 열쇠 수. **Seeker 사본에서는 0 이다.**
         public byte CarriedKeys { get; }
+
+        /// 술래의 달리기 게이지, 0..255 로 눌러 담은 값.
+        ///
+        /// **이번에는 재활용할 죽은 바이트가 없어 와이어를 늘렸다**(5 → 6, 프로토콜 4 → 5).
+        /// `Flags` 를 `Ammo` 로 바꿔 쓸 때와 다른 상황이다 — 여기 다섯 바이트는 전부 값을
+        /// 싣고 있다. 게이지를 빼면 술래는 언제 달릴 수 있는지 화면에서 알 수 없고, 그러면
+        /// 게이지라는 규칙 자체가 성립하지 않는다.
+        ///
+        /// **Runner 사본에서는 0 이다.** 쫓기는 쪽에게 "지금 저 괴물이 달릴 수 있는가" 는
+        /// 탄약과 같은 종류의 정보다 — 소리와 거리로 읽어야 하는 것이지 숫자로 받을 것이
+        /// 아니다.
+        ///
+        /// 255 로 눌러 담는 이유는 한 바이트이기 때문이고, 그래도 된다 — 이 값은 막대의
+        /// 길이로만 쓰인다. 판정은 서버의 정수 게이지가 한다.
+        public byte SprintCharge { get; }
+
+        /// 게이지 원값(0..`MatchConstants.SprintChargeFull`)을 와이어의 한 바이트로 만든다.
+        public static byte ToWireCharge(int charge)
+        {
+            if (charge <= 0)
+            {
+                return 0;
+            }
+
+            if (charge >= Simulation.MatchConstants.SprintChargeFull)
+            {
+                return byte.MaxValue;
+            }
+
+            return (byte)((charge * byte.MaxValue) / Simulation.MatchConstants.SprintChargeFull);
+        }
+
+        /// 0..1 로 되돌린다. 화면의 막대가 쓴다.
+        public static float FromWireCharge(byte charge)
+        {
+            return charge / (float)byte.MaxValue;
+        }
     }
 }

@@ -57,6 +57,32 @@ namespace NV.Shared.Simulation
             return runnersAtStart < EscapesToWin ? runnersAtStart : EscapesToWin;
         }
 
+        // ================================================================ 술래의 달리기
+
+        /// 가득 찬 게이지로 달릴 수 있는 시간(초).
+        public const float SeekerSprintSeconds = 4f;
+
+        /// 빈 게이지가 가득 차기까지의 시간(초).
+        ///
+        /// **중간에도 쓸 수 있다.** 0 이 아니면 달릴 수 있으므로, 이 값은 "다시 달리기까지의
+        /// 대기"가 아니라 "완전히 회복되기까지"다 — 짧게 여러 번 붙는 것과 길게 한 번 붙는
+        /// 것 중 무엇을 할지가 술래의 선택으로 남는다.
+        public const float SeekerSprintRechargeSeconds = 10f;
+
+        /// 게이지의 최대값. **정수 단위로 센다** — 초당 몇 % 같은 실수 누적은 틱마다
+        /// 반올림이 달라질 수 있고, 이 값은 클라이언트와 서버가 같은 그림을 그려야 한다.
+        ///
+        /// 600 인 이유는 위의 두 초 값이 모두 정수로 나뉘기 때문이다(틱당 5 와 2).
+        public const int SprintChargeFull = 600;
+
+        /// 달리는 한 틱에 줄어드는 양.
+        public const int SprintChargeDrain =
+            (int)(SprintChargeFull / (SeekerSprintSeconds * SimConstants.TickRate));
+
+        /// 달리지 않는 한 틱에 차오르는 양.
+        public const int SprintChargeGain =
+            (int)(SprintChargeFull / (SeekerSprintRechargeSeconds * SimConstants.TickRate));
+
         // ================================================================ 열쇠와 문
 
         /// 어떤 매치도 이보다 많이 요구하지 않는다. 배치가 뿌리는 수의 하한이자

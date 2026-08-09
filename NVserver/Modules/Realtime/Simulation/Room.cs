@@ -707,7 +707,8 @@ namespace NV.Realtime.Simulation
                     RoleOf(player.PlayerId),
                     (byte)Math.Min(player.Ammo, byte.MaxValue),
                     (byte)Math.Min(player.Hits, byte.MaxValue),
-                    (byte)Math.Min(player.CarriedKeys, byte.MaxValue));
+                    (byte)Math.Min(player.CarriedKeys, byte.MaxValue),
+                    MatchParticipant.ToWireCharge(player.SprintCharge));
 
                 count++;
             }
@@ -2279,7 +2280,10 @@ namespace NV.Realtime.Simulation
 
         private void Simulate(PlayerEntity player, in InputFrame frame)
         {
-            player.State = PlayerMovement.Step(player.State, frame, _map.Collision);
+            var seeker = RoleOf(player.PlayerId) == MatchRole.Seeker;
+            var allowed = TickSprintCharge(player, frame, seeker);
+
+            player.State = PlayerMovement.Step(player.State, allowed, _map.Collision, seeker);
 
             // Shared 의 이동 함수가 이미 상한을 두지만 그것은 계산 규칙이다.
             // 여기서 걸리면 Shared 와 판정 중 하나가 어긋났다는 신호다.
@@ -2291,6 +2295,61 @@ namespace NV.Realtime.Simulation
                     player.PlayerId,
                     speed);
             }
+        }
+
+        /// 술래의 달리기 게이지를 한 틱 굴리고, 달릴 수 없으면 그 비트를 지운 프레임을 준다.
+        ///
+        /// **자격 판정이 이동 함수 밖에 있다.** 게이지를 `PlayerMovement` 의 입력으로 넣으면
+        /// 결정적으로 지켜야 할 표면이 그만큼 넓어진다 — 이동은 계산이고, 누가 달릴 수
+        /// 있는지는 판정이다(`architecture.md`).
+        ///
+        /// 서 있는 채로 누르고만 있으면 닳지 않는다. 배수는 이동 입력이 있을 때만 의미가
+        /// 있으므로(`PlayerMovement.ApplyHorizontal`), 그때만 닳는 것이 화면과 맞는다.
+        private InputFrame TickSprintCharge(PlayerEntity player, in InputFrame frame, bool seeker)
+        {
+            if (!seeker)
+            {
+                player.SprintCharge = MatchConstants.SprintChargeFull;
+                return frame;
+            }
+
+            var wants = (frame.Buttons & ButtonFlags.Sprint) != 0
+                        && (frame.MoveX != 0 || frame.MoveZ != 0);
+
+            if (wants && player.SprintCharge > 0)
+            {
+                player.SprintCharge -= MatchConstants.SprintChargeDrain;
+
+                if (player.SprintCharge < 0)
+                {
+                    player.SprintCharge = 0;
+                }
+
+                return frame;
+            }
+
+            // 달리지 않는다. 차오른다 — **0 이 되어도 잠기지 않는다.** 다음 틱에 이미 조금
+            // 차 있으므로 짧게 여러 번 붙는 것이 가능하고, 그 선택이 술래의 것으로 남는다.
+            player.SprintCharge += MatchConstants.SprintChargeGain;
+
+            if (player.SprintCharge > MatchConstants.SprintChargeFull)
+            {
+                player.SprintCharge = MatchConstants.SprintChargeFull;
+            }
+
+            if (!wants)
+            {
+                return frame;
+            }
+
+            // 달리려 했지만 게이지가 비었다. 비트를 지운다 — 남겨 두면 `PlayerMovement` 가
+            // 술래의 배수를 그대로 먹인다.
+            return new InputFrame(
+                frame.Buttons & ~ButtonFlags.Sprint,
+                frame.MoveX,
+                frame.MoveZ,
+                frame.Yaw,
+                frame.Pitch);
         }
 
         private void DrainCommands()
@@ -2911,6 +2970,9 @@ namespace NV.Realtime.Simulation
                 // 탄창은 역할과 무관하게 채운다. 역할은 발사 판정에서 본다 — 여기서 Seeker 만
                 // 채우면 매치 중 역할이 바뀌는 경로가 생길 때 빈 탄창을 든 Seeker 가 나온다.
                 player.Ammo = MatchConstants.SeekerMagazine;
+
+                // 달리기 게이지는 가득 찬 채로 시작한다.
+                player.SprintCharge = MatchConstants.SprintChargeFull;
 
                 // 지난 매치의 체인을 끊는다. 남겨 두면 새 매치의 첫 틱에 걸린 채로 시작해
                 // 지난 매치의 제단 자리로 끌려간다 — 목표물은 매치마다 다시 놓이므로 그

@@ -91,6 +91,19 @@
                 <ui:Label name="ammo-line" text="" class="panel__line" />
             </ui:VisualElement>
 
+            <!--
+                달리기 게이지. 가득 차면 4초, 비면 사람의 속도로 돌아간다.
+
+                **막대 하나다.** 숫자는 이 값에 대해 답을 주지 못한다 — 술래가 알아야 하는
+                것은 "지금 붙을 수 있는가" 이고, 그것은 길이로 읽는 편이 빠르다.
+            -->
+            <ui:VisualElement name="sprint-block" class="panel panel--bottom-right panel--above" picking-mode="Ignore">
+                <ui:Label name="sprint-caption" text="LEGS" class="panel__caption" />
+                <ui:VisualElement name="sprint-track" class="sprint-track" picking-mode="Ignore">
+                    <ui:VisualElement name="sprint-fill" class="sprint-fill" picking-mode="Ignore" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
             <ui:VisualElement name="trail-block" class="panel panel--bottom-left" picking-mode="Ignore">
                 <ui:Label name="trail-caption" text="SENSE" class="panel__caption" />
                 <ui:Label name="trail-label" text="◉ TRAIL VISION" class="panel__line panel__line--sense" />

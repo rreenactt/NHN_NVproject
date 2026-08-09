@@ -35,6 +35,14 @@
         // 발소리 거리가 무의미해진다.
         public const float MoveSpeed = 2.5f;
         public const float SprintMultiplier = 2f;
+
+        /// 술래가 달릴 때의 배수. **사람이 달리는 속도의 1.6배**이고, 그래서 여기 적힌 값은
+        /// `SprintMultiplier * 1.6` 이다 — 곱을 풀어 쓰면 사람의 속도를 바꿀 때 한쪽만 바뀐다.
+        ///
+        /// 술래는 이 속도를 계속 쓰지 못한다. 게이지가 있고 가득 차도 4초다
+        /// (`MatchConstants.SeekerSprintSeconds`) — 쫓는 쪽이 항상 빠르면 도망이 성립하지
+        /// 않고, 한 번도 빠르지 않으면 잡히는 순간이 오지 않는다.
+        public const float SeekerSprintMultiplier = SprintMultiplier * 1.6f;
         public const float CrouchMultiplier = 0.5f;
         public const float GroundAcceleration = 60f;
         public const float AirAcceleration = 12f;

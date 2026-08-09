@@ -45,6 +45,7 @@ namespace NV.Game.UI
 
         // --- seeker
         private VisualElement _seekerPanel, _shells, _destroyBlock, _destroyPips, _chainBanner;
+        private VisualElement _sprintFill;
         private Label _ammoLine, _chainLine, _trailLabel;
 
         // --- overlays and cards
@@ -296,6 +297,7 @@ namespace NV.Game.UI
         private void CacheSeeker()
         {
             _shells = _root.Q<VisualElement>("shells");
+            _sprintFill = _root.Q<VisualElement>("sprint-fill");
             _ammoLine = _root.Q<Label>("ammo-line");
             _trailLabel = _root.Q<Label>("trail-label");
             _destroyBlock = _root.Q<VisualElement>("destroy-block");
@@ -465,6 +467,20 @@ namespace NV.Game.UI
             }
         }
 
+        /// 달리기 게이지. 술래에게만 있으므로 술래 갱신 경로에서 돈다.
+        ///
+        /// 폭으로 그리고, 낮아지면 색이 바뀐다 — 길이만으로는 "거의 없다" 와 "없다" 가 같아
+        /// 보이는데, 그 둘의 차이가 붙을지 말지를 정한다.
+        private void UpdateSprintGauge()
+        {
+            if (_sprintFill == null) return;
+
+            float charge = _match.SprintCharge;
+
+            _sprintFill.style.width = new Length(Mathf.Clamp01(charge) * 100f, LengthUnit.Percent);
+            _sprintFill.EnableInClassList("sprint-fill--low", charge < 0.25f);
+        }
+
         private void UpdateClock()
         {
             float time = Mathf.Max(0f, _match.TimeRemaining);
@@ -629,6 +645,8 @@ namespace NV.Game.UI
 
         private void UpdateSeeker()
         {
+            UpdateSprintGauge();
+
             int ammo = _weapon != null ? _weapon.Ammo : 0;
             for (int i = 0; i < _shells.childCount; i++)
                 _shells[i].EnableInClassList("shell--loaded", i < ammo);

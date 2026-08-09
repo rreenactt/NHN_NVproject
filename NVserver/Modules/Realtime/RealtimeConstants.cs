@@ -1,4 +1,4 @@
-using NV.Shared.Contracts.Enums;
+﻿using NV.Shared.Contracts.Enums;
 using NV.Shared.Simulation;
 
 namespace NV.Realtime
@@ -191,7 +191,11 @@ namespace NV.Realtime
         {
             /// 스프린트까지 감안한 이론 최대 수평 속도. `SimConstants` 에서 유도한다 —
             /// 숫자를 다시 적으면 이동 속도를 바꿀 때 한쪽만 바뀐다.
-            public const float MaxHorizontalSpeed = SimConstants.MoveSpeed * SimConstants.SprintMultiplier;
+            /// **술래의 배수를 쓴다.** 역할별로 상한이 갈리지만 이 검사는 역할을 모르므로
+            /// 가장 빠른 쪽을 기준으로 잡는다 — 낮게 잡으면 정상적으로 달리는 술래가 매 틱
+            /// 잘리고, 증상은 "술래만 이상하게 느리다" 가 된다.
+            public const float MaxHorizontalSpeed =
+                SimConstants.MoveSpeed * SimConstants.SeekerSprintMultiplier;
 
             /// 양자화 오차와 부동소수점 누적을 감안한 여유.
             public const float SpeedTolerance = 1.05f;

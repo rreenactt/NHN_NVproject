@@ -198,6 +198,9 @@ namespace NV.Client.Net.Session
 
                 MatchManager.Instance.AcceptCarriedKeys(agent, participant.CarriedKeys);
                 MatchManager.Instance.AcceptAmmo(agent, participant.Ammo);
+                MatchManager.Instance.AcceptSprintCharge(
+                    agent,
+                    MatchParticipant.FromWireCharge(participant.SprintCharge));
                 ApplyBody(participant, agent);
             }
 

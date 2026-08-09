@@ -58,6 +58,36 @@
     `display` 로 껐다 켠다 — 관전은 죽어 있는 동안만이고, 그 사이 다른 HUD 는 그대로 살아
     있어야 하므로 트리에서 빼지 않는다.
 */
+/* 달리기 게이지. 탄약 블록 바로 위에 앉는다. */
+.panel--above {
+    bottom: 104px;
+}
+
+.sprint-track {
+    width: 132px;
+    height: 8px;
+    background-color: rgba(30, 28, 22, 0.85);
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-color: rgb(96, 90, 68);
+    border-right-color: rgb(96, 90, 68);
+    border-top-color: rgb(96, 90, 68);
+    border-bottom-color: rgb(96, 90, 68);
+}
+
+.sprint-fill {
+    height: 100%;
+    width: 100%;
+    background-color: rgb(206, 190, 124);
+}
+
+/* 비어 가면 붉어진다 — 길이만으로는 0 에 가까운 것과 0 인 것이 같아 보인다. */
+.sprint-fill--low {
+    background-color: rgb(178, 88, 62);
+}
+
 .spectator-bar {
     position: absolute;
     left: 0;
