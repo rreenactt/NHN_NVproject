@@ -1,5 +1,3 @@
-using NV.Game;
-
 namespace NV.Client.Net.Session
 {
     /// <summary>
@@ -37,17 +35,42 @@ namespace NV.Client.Net.Session
         /// </summary>
         public static bool Standing { get; private set; }
 
-        /// <summary>A match has ended here. Idempotent — the router calls it every frame it sees one.</summary>
-        public static void Raise() => Standing = true;
+        /// This match's result has already been put up once.
+        ///
+        /// **Without this the screen cannot be closed at all.** The router calls
+        /// <see cref="Raise"/> every frame it sees a finished match, and the match stays finished
+        /// until the host reopens the room — which only happens *after* the host has already left.
+        /// So a plain `Standing = true` undoes every <see cref="Dismiss"/> on the very next frame,
+        /// and 나가기 does nothing for anybody.
+        private static bool _raised;
+
+        /// <summary>
+        /// A match has ended here. Raises the screen **once per match** — see
+        /// <see cref="_raised"/> for why calling it every frame must not keep re-raising.
+        /// </summary>
+        public static void Raise()
+        {
+            if (_raised)
+            {
+                return;
+            }
+
+            _raised = true;
+            Standing = true;
+        }
 
         /// <summary>They pressed 나가기. The router may cut on its next frame.</summary>
         public static void Dismiss() => Standing = false;
 
         /// <summary>
-        /// A new match is running, so no old result is owed. Called from the router's in-game
-        /// branch — self-maintaining, and the one place allowed to drop an unread result, because
-        /// by then there is a match to be in.
+        /// A new match is running, so no old result is owed — and the next one may be raised.
+        /// Called from the router's in-game branch, which is the one place that can know a match
+        /// is actually running, and the one place allowed to drop an unread result.
         /// </summary>
-        public static void Rearm() => Standing = false;
+        public static void Rearm()
+        {
+            _raised = false;
+            Standing = false;
+        }
     }
 }
