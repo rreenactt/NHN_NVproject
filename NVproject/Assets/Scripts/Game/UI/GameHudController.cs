@@ -54,12 +54,13 @@ namespace NV.Game.UI
         private VisualElement _revealCard, _endCard;
         private Button _endExit;
 
-        /// 이 매치의 결과를 사람이 이미 닫았다. 닫은 카드가 다시 올라오지 않게 하고,
-        /// 씬을 붙잡는 것도 여기서 끝난다.
-        private bool _resultClosed;
-
         /// 카드가 올라와 있다. 커서를 한 번만 푸는 데 쓴다.
         private bool _resultShown;
+
+        /// 끝난 순간의 결과. **`MatchManager.Outcome` 을 나중에 읽지 않는다** — 방이 대기로
+        /// 되돌아가면 그 값은 `None` 으로 지워지는데, 카드는 한 박자(1.6초) 뒤에 올라오므로
+        /// 그 사이에 방장이 방을 되돌리면 승패 없는 카드가 그려진다.
+        private MatchOutcome _endOutcome;
         private Label _revealRole, _revealFlavor, _revealCount, _endTitle, _endDetail;
 
         // --- state
@@ -433,7 +434,6 @@ namespace NV.Game.UI
         /// 선택을 한다). 다음 매치가 시작될 때 `OnPhaseChanged` 가 되돌린다.
         private void LeaveResult()
         {
-            _resultClosed = true;
             _resultShown = false;
             _endCard.style.display = DisplayStyle.None;
 
@@ -777,20 +777,18 @@ namespace NV.Game.UI
             if (!TreeIsLive) return;
 
             _revealCard.style.display = phase == MatchPhase.RoleReveal ? DisplayStyle.Flex : DisplayStyle.None;
-            if (phase != MatchPhase.Ended)
-            {
-                _endCard.style.display = DisplayStyle.None;
-
-                // 방이 결과를 떠났다. 아직 읽고 있었더라도 놓아 준다 — 여기서 계속 붙잡으면
-                // 방은 다음 매치를 시작했는데 이 클라이언트만 지난 결과 화면에 남는다.
-                _resultClosed = false;
-                _resultShown = false;
-            }
-
-            // 매치가 시작되면 조작을 되돌려준다. 결과 화면이 내려놓은 것을 되돌리는 자리다 —
-            // 없으면 한 번 결과를 본 사람은 다음 매치를 **움직일 수 없는 채로** 시작한다.
+            // **결과 카드는 여기서 내리지 않는다.** 방이 `Ended` 를 떠나는 것은 방장이
+            // 대기방에서 방을 되돌렸다는 뜻일 뿐이고, 그것은 이 사람이 결과를 다 읽었다는
+            // 뜻이 아니다. 카드를 내리는 것은 나가기 버튼(`LeaveResult`)과 다음 매치의
+            // 시작, 둘뿐이다.
             if (phase == MatchPhase.RoleReveal || phase == MatchPhase.Playing)
             {
+                _endCard.style.display = DisplayStyle.None;
+                _resultShown = false;
+
+                // 매치가 시작되면 조작을 되돌려준다. 결과 화면이 내려놓은 것을 되돌리는
+                // 자리다 — 없으면 한 번 결과를 본 사람은 다음 매치를 **움직일 수 없는
+                // 채로** 시작한다.
                 SetPlayerInput(true);
             }
 
@@ -815,7 +813,10 @@ namespace NV.Game.UI
             // 씬을 붙잡는 것은 여기가 아니다. 라우터가 `MatchManager.Phase` 를 직접 읽어
             // 스스로 멈춘다(`SessionSceneRouter.ResultStillOnScreen`) — 이 컴포넌트가 세우는
             // 무엇이든 라우터보다 늦게 세워지기 때문이다(실행 순서 60 대 0).
-            if (_match.Phase == MatchPhase.Ended && !_resultClosed)
+            // **방의 단계가 아니라 내 래치를 본다.** 방장이 대기방에서 방을 되돌리면 단계가
+            // `Ended` 를 떠나는데, 그것을 조건으로 두면 아직 읽고 있던 사람의 카드가 남의
+            // 버튼에 의해 사라진다 — 나가기는 각자 자기 것을 누른다.
+            if (MatchResultGate.Standing)
             {
                 // 결과 카드는 끝난 뒤 한 박자 뒤에 올라온다. 그 사이에 마지막 장면이 보인다.
                 if (_endCardDelay > 0f)
@@ -826,7 +827,7 @@ namespace NV.Game.UI
                 {
                     if (!_resultShown)
                     {
-                        RenderResult(_match.Outcome);
+                        RenderResult(_endOutcome);
                         ShowResult();
                     }
 
@@ -849,8 +850,8 @@ namespace NV.Game.UI
             // 트리가 살아 있지 않아도 여기까지는 온다. 카드를 그리는 것은 `UpdateCards` 이고,
             // 그쪽은 단계에서 유도하므로 이 지연이 그냥 지나가도 결과는 뜬다.
             _endCardDelay = EndCardDelaySeconds;
-            _resultClosed = false;
             _resultShown = false;
+            _endOutcome = outcome;
 
             // 진 쪽의 몸이 터진다. 시간 초과는 아무도 쓰러지지 않은 채 끝나므로, 그것이
             // 없으면 화면에서 벌어지는 일이 하나도 없이 숫자만 0 이 된다.

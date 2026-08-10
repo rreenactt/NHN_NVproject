@@ -25,33 +25,29 @@ namespace NV.Client.Net.Session
     /// </summary>
     public static class MatchResultGate
     {
-        /// <summary>Has the player closed this match's result?</summary>
-        public static bool Dismissed { get; private set; }
-
         /// <summary>
-        /// Is a result screen up and unanswered right now?
+        /// A result has been put up and nobody has closed it yet.
         ///
-        /// Asked by anyone who would otherwise take input back from the UI. The escape menu does:
-        /// closing it hands control to the player unconditionally, and doing that over a result
-        /// screen re-locks the cursor — so the 나가기 button is on screen, the mouse is moving the
-        /// aim, and there is no way to press it. Opening ESC as you die is enough to reach that.
+        /// **This is a latch, not a reading of the room's phase.** It used to be
+        /// `Phase == Ended && !Dismissed`, and that made one player's 나가기 close everyone's
+        /// screen: the host reaching the waiting room asks the room back to `Waiting`
+        /// (`GameLobbyBootstrap.ReopenFinishedRoom`), the phase leaves `Ended`, and every other
+        /// client's gate opened at once. Whose result is on screen is a **local** question — the
+        /// room moving on is not an answer to it.
         /// </summary>
-        public static bool Standing
-        {
-            get
-            {
-                MatchManager match = MatchManager.Instance;
-                return match != null && match.Phase == MatchPhase.Ended && !Dismissed;
-            }
-        }
+        public static bool Standing { get; private set; }
+
+        /// <summary>A match has ended here. Idempotent — the router calls it every frame it sees one.</summary>
+        public static void Raise() => Standing = true;
 
         /// <summary>They pressed 나가기. The router may cut on its next frame.</summary>
-        public static void Dismiss() => Dismissed = true;
+        public static void Dismiss() => Standing = false;
 
         /// <summary>
-        /// A new result may come. Called by the router itself whenever it sees a match that is not
-        /// over — self-maintaining, so nothing has to remember to reset it between matches.
+        /// A new match is running, so no old result is owed. Called from the router's in-game
+        /// branch — self-maintaining, and the one place allowed to drop an unread result, because
+        /// by then there is a match to be in.
         /// </summary>
-        public static void Rearm() => Dismissed = false;
+        public static void Rearm() => Standing = false;
     }
 }
