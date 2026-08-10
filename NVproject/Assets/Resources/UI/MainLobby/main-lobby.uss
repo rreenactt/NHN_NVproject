@@ -419,6 +419,24 @@
     -unity-text-align: middle-center;
 }
 
+/* Toggle 은 라벨과 체크박스 색을 런타임 기본 테마에서 받는다 — 검정 글자라
+   어두운 팝업 위에서는 라벨이 아예 보이지 않는다. 팝업 본문과 입력 필드의
+   팔레트로 맞춘다. 방 만들기의 공개 토글과 설정의 HTTPS 토글이 이 규칙을 쓴다. */
+.unity-toggle .unity-toggle__label {
+    color: rgb(242, 231, 194);
+    font-size: 13px;
+    min-width: auto;
+}
+
+.unity-toggle .unity-toggle__checkmark {
+    background-color: rgba(201, 179, 107, 0.10);
+    border-left-color: rgb(120, 104, 58);
+    border-right-color: rgb(120, 104, 58);
+    border-top-color: rgb(120, 104, 58);
+    border-bottom-color: rgb(120, 104, 58);
+    -unity-background-image-tint-color: rgb(255, 246, 214);
+}
+
 .hint {
     color: rgb(183, 172, 126);
     font-size: 11px;
