@@ -61,7 +61,10 @@ namespace NV.Game.UI
             var keyboard = Keyboard.current;
             if (keyboard == null) return;
 
-            if (keyboard.escapeKey.wasPressedThisFrame) Toggle();
+            // 이 ESC 가 안내서를 닫는 데 이미 쓰였으면 여기서 또 읽지 않는다 — 실행 순서상
+            // 안내서(60)가 먼저 닫았고, 같은 키로 메뉴까지 열면 닫은 손이 연 셈이 된다.
+            if (keyboard.escapeKey.wasPressedThisFrame && !GuideOverlayController.ConsumedEscThisFrame)
+                Toggle();
         }
 
         public void Toggle()
@@ -169,12 +172,34 @@ namespace NV.Game.UI
 
             var resume = documentRoot.Q<Button>("esc-resume");
             if (resume != null) resume.clicked += () => SetOpen(false);
+
+            var help = documentRoot.Q<Button>("esc-help");
+            if (help != null) help.clicked += OpenGuide;
             if (_return != null) _return.clicked += ReturnRoomToLobby;
             if (_leave != null) _leave.clicked += LeaveRoom;
             if (_quit != null) _quit.clicked += QuitGame;
 
             _root.style.display = DisplayStyle.None;
             return true;
+        }
+
+        /// <summary>
+        /// 메뉴를 접고 게임 안내서를 편다. <see cref="CloseVisualOnly"/>인 이유: 입력을 되돌리면
+        /// 커서가 한 프레임 잠겼다가 안내서가 다시 풀게 된다 — 인계는 안내서가 이어받는다.
+        /// 안내서가 없는 씬이면 그냥 메뉴를 닫는다.
+        /// </summary>
+        private void OpenGuide()
+        {
+            var guide = FindFirstObjectByType<GuideOverlayController>();
+
+            if (guide == null)
+            {
+                SetOpen(false);
+                return;
+            }
+
+            CloseVisualOnly();
+            guide.Open();
         }
 
         private void ReturnRoomToLobby()

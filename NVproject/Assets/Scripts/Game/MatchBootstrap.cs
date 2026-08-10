@@ -92,6 +92,10 @@ namespace NV.Game
             // every match scene has one without any scene carrying it.
             Create<UI.EscapeMenuController>("Escape Menu");
 
+            // The in-game guide (H) — rules, roles, controls, objects, flow. Same rule: its own
+            // document, created at runtime, no scene carries it. Content lives in GuideCatalog.
+            Create<UI.GuideOverlayController>("Guide Overlay");
+
             EnsureMatchSync();
         }
 

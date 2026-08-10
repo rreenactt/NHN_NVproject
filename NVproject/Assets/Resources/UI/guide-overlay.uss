@@ -1,0 +1,139 @@
+/* 게임 안내서 — ESC 메뉴와 같은 낡은 표지판 무드: 어두운 바탕, 바랜 스텐실 글씨.
+   내용은 GuideCatalog 가 채우고, 이 시트는 틀과 글줄의 생김새만 안다. */
+
+.guide-hint {
+    position: absolute;
+    right: 18px;
+    bottom: 14px;
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: rgba(206, 190, 148, 0.45);
+    /* WebGL 에는 OS 폰트 폴백이 없다 — 한글은 여기 실어 준 폰트가 전부다. */
+    -unity-font-definition: url("Fonts/NotoSansKR-Regular.otf");
+}
+
+.guide-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    -unity-font-definition: url("Fonts/NotoSansKR-Regular.otf");
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(8, 7, 4, 0.78);
+}
+
+.guide-panel {
+    width: 760px;
+    max-width: 92%;
+    height: 78%;
+    padding: 24px 30px 16px 30px;
+    background-color: rgba(22, 19, 11, 0.97);
+    border-width: 1px;
+    border-color: rgba(196, 172, 100, 0.55);
+}
+
+.guide-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.guide-title {
+    -unity-font-style: bold;
+    font-size: 20px;
+    letter-spacing: 10px;
+    color: rgb(226, 205, 138);
+}
+
+.guide-close {
+    height: 30px;
+    padding: 0 14px;
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: rgb(222, 210, 172);
+    background-color: rgba(52, 46, 28, 0.9);
+    border-width: 1px;
+    border-color: rgba(196, 172, 100, 0.4);
+}
+
+.guide-close:hover {
+    background-color: rgba(88, 77, 44, 0.95);
+    border-color: rgb(226, 205, 138);
+    color: rgb(255, 244, 205);
+}
+
+.guide-rule {
+    height: 1px;
+    background-color: rgba(196, 172, 100, 0.35);
+    margin: 12px 0 16px 0;
+}
+
+.guide-body {
+    flex-direction: row;
+    flex-grow: 1;
+    min-height: 0;
+}
+
+.guide-tabs {
+    width: 168px;
+    margin-right: 22px;
+    flex-shrink: 0;
+}
+
+.guide-tab {
+    height: 38px;
+    margin: 3px 0;
+    font-size: 14px;
+    letter-spacing: 2px;
+    -unity-text-align: middle-left;
+    padding-left: 14px;
+    color: rgb(206, 190, 148);
+    background-color: rgba(38, 34, 20, 0.85);
+    border-width: 1px;
+    border-color: rgba(196, 172, 100, 0.25);
+}
+
+.guide-tab:hover {
+    background-color: rgba(70, 62, 36, 0.9);
+    color: rgb(240, 226, 180);
+}
+
+.guide-tab--active {
+    background-color: rgba(88, 77, 44, 0.95);
+    border-color: rgb(226, 205, 138);
+    color: rgb(255, 244, 205);
+}
+
+.guide-content {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.guide-heading {
+    -unity-font-style: bold;
+    font-size: 15px;
+    letter-spacing: 3px;
+    color: rgb(226, 205, 138);
+    margin: 14px 0 6px 0;
+}
+
+.guide-heading:first-child {
+    margin-top: 0;
+}
+
+.guide-line {
+    font-size: 13px;
+    color: rgb(216, 204, 168);
+    margin: 3px 0 3px 12px;
+    white-space: normal;
+}
+
+.guide-footer {
+    margin-top: 12px;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: rgba(206, 190, 148, 0.55);
+    -unity-text-align: middle-center;
+}

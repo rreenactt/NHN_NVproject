@@ -70,6 +70,17 @@ namespace NV.Client.Lobby.GameLobby
             // 아니라 로비 흐름의 일부이므로 스스로 붙이는 것이 맞다.
             SessionSceneRouter.EnsureOn(_session);
 
+            // 게임 안내서(H). 매치가 시작되기 전이 초보자가 규칙을 물어볼 바로 그 순간이므로,
+            // 대기방에도 매치 씬과 같은 오버레이를 세운다. 플레이어가 없는 씬이라 입력 인계는
+            // 스스로 건너뛴다 — 붙이는 비용은 오브젝트 하나다.
+            var guide = new GameObject("Guide Overlay");
+            guide.transform.SetParent(transform, false);
+            var overlay = guide.AddComponent<NV.Game.UI.GuideOverlayController>();
+
+            // 처음 온 사람에게는 스스로 펼쳐진다. H 키를 아는 것도 규칙을 읽고 나서의 일이다 —
+            // 한 번 직접 닫으면 그 뒤로는 구석 힌트만 남는다.
+            overlay.autoOpenOnStart = true;
+
             // 로비는 서 있는 방이므로 포인터는 플레이어의 것이다.
             //
             // 이름을 다 적는다. `UnityEngine.UIElements` 에도 `Cursor` 가 있고, UI Toolkit 을

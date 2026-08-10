@@ -1,0 +1,25 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <Style src="guide-overlay.uss" />
+
+    <!-- 닫혀 있는 동안 남는 한 줄. 읽는 것이지 누르는 것이 아니다 — 픽킹은 코드가 끈다. -->
+    <ui:Label name="guide-hint" class="guide-hint" text="H — 게임 방법" />
+
+    <!-- 열리면 이 루트가 클릭 방패다: ESC 메뉴와 같은 규칙. 탭과 닫기 버튼은 눌린다. -->
+    <ui:VisualElement name="guide-root" class="guide-root">
+        <ui:VisualElement name="guide-panel" class="guide-panel">
+            <ui:VisualElement class="guide-header">
+                <ui:Label name="guide-title" class="guide-title" text="게임 방법" />
+                <ui:Button name="guide-close" class="guide-close" text="닫기" />
+            </ui:VisualElement>
+            <ui:VisualElement class="guide-rule" />
+
+            <ui:VisualElement class="guide-body">
+                <!-- 탭도 내용도 코드가 GuideCatalog 에서 채운다 — 여기는 틀뿐이다. -->
+                <ui:VisualElement name="guide-tabs" class="guide-tabs" />
+                <ui:ScrollView name="guide-content" class="guide-content" />
+            </ui:VisualElement>
+
+            <ui:Label class="guide-footer" text="H 또는 ESC — 닫기" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

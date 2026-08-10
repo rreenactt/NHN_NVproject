@@ -9,6 +9,7 @@
             <ui:VisualElement class="esc-rule" />
 
             <ui:Button name="esc-resume" class="esc-button" text="계속한다" />
+            <ui:Button name="esc-help" class="esc-button" text="게임 방법" />
             <ui:Button name="esc-return" class="esc-button" text="대기방으로 되돌린다" />
             <ui:Button name="esc-leave" class="esc-button esc-button--danger" text="방에서 나간다" />
             <ui:Button name="esc-quit" class="esc-button esc-button--danger" text="게임을 종료한다" />
