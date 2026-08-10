@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- 어두운 복도 끝의 열린 문. 팔레트는 레벨의 것이다 (game-hud.uss). -->
+  <rect width="32" height="32" fill="#0E0C08"/>
+  <rect x="6.5" y="4.5" width="19" height="23" fill="none" stroke="#A8924E" stroke-width="1"/>
+  <rect x="11" y="9" width="10" height="19" fill="#FFF6D6"/>
+  <rect x="11" y="9" width="10" height="19" fill="none" stroke="#C9B36B" stroke-width="1"/>
+  <circle cx="19" cy="19" r="1.1" fill="#0E0C08"/>
+</svg>

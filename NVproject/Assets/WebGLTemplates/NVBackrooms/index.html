@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="한 명은 찾고, 나머지는 나간다. 브라우저에서 하는 비대칭 술래잡기 FPS.">
+    <title>{{{ PRODUCT_NAME }}}</title>
+    <link rel="icon" href="TemplateData/favicon.svg" type="image/svg+xml">
+#if SHOW_DIAGNOSTICS
+    <link rel="stylesheet" href="<<<TemplateData/diagnostics.css>>>">
+    <script src="<<<TemplateData/diagnostics.js>>>"></script>
+#endif
+#if DEVELOPMENT_PLAYER
+    <script src="<<<TemplateData/profiler.js>>>"></script>
+#endif
+    <style>
+      /*
+         이 페이지의 팔레트는 레벨의 것이고 UI 팔레트가 아니다 — 게임 안 HUD 와 같은 규칙을
+         따른다 (Assets/Resources/UI/game-hud.uss 머리 주석). 순백도 순흑도 쓰지 않는다:
+         그 값들은 소프트웨어처럼 읽히고, 아래 값들은 꺼져 가는 형광등 아래 표지판처럼 읽힌다.
+         패널은 사각이고 테두리가 얇다 — 둥근 카드도, 그림자도, 그라디언트도 없다.
+
+         웹폰트는 싣지 않는다. 이 페이지의 값어치는 "빨리 무언가 보여 주는 것" 인데
+         웹폰트는 첫 페인트 앞에 네트워크 왕복을 하나 더 놓는다. 게임 안의 한글은
+         별개 문제이고 NotoSansKR 로 이미 해결되어 있다.
+      */
+      :root {
+        --wall: #C9B36B;
+        --trim: #A8924E;
+        --ceiling: #D8CFA8;
+        --fluorescent: #FFF6D6;
+        --fog: #B7AC7E;
+        --bone: #F2E7C2;
+        --dark: #0E0C08;
+        --alert: #C2452F;
+        --ui: system-ui, -apple-system, "Segoe UI", Roboto, "Malgun Gothic",
+              "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      }
+
+      html, body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: var(--dark);
+        color: var(--bone);
+        font-family: var(--ui);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* 캔버스는 창 전체다. 크기를 JS 로 따라가지 않는다 — 유니티의
+         matchWebGLToCanvasSize 가 기본으로 켜져 있어 엔진이 캔버스의 DOM 크기에
+         렌더 타깃을 맞춘다. 여기서 또 계산하면 두 값이 어긋나 화면이 늘어난다.
+
+         높이에 100vh 를 쓰지 않는다: 모바일 브라우저에서 100vh 는 주소창을 뺀
+         높이가 아니라 화면 아래가 잘린다. html/body 에 height:100% 를 준 위의
+         규칙이 이것을 대신한다. */
+      canvas#unity-canvas {
+        position: fixed;
+        inset: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: var(--dark);
+        /* 마우스 잠금이 풀린 동안 캔버스를 드래그하면 텍스트 선택 커서가 뜬다 */
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+      }
+
+      /* ============================================================ 분위기 */
+
+      /* 스캔라인과 비네트는 로딩 화면 *위*에 깔린다 — 아래 두면 불투명한 화면에
+         가려 아무것도 보이지 않는다. pointer-events 가 없으므로 덮여 있는
+         버튼은 그대로 눌린다. 게임이 뜨면 둘 다 지운다. */
+      .veil {
+        position: fixed;
+        inset: 0;
+        z-index: 5;
+        pointer-events: none;
+      }
+
+      /* 스캔라인. 게임 안에서는 화면 높이에 맞춰 텍스처를 만들지만 여기서는
+         CSS 한 줄로 충분하다. 농도는 HUD 와 같은 0.16. */
+      .veil-scanlines {
+        opacity: 0.16;
+        background: repeating-linear-gradient(
+          to bottom,
+          rgba(14, 12, 8, 0) 0px,
+          rgba(14, 12, 8, 0) 2px,
+          rgba(14, 12, 8, 0.9) 3px
+        );
+      }
+
+      .veil-vignette {
+        background: radial-gradient(
+          ellipse at center,
+          rgba(14, 12, 8, 0) 35%,
+          rgba(14, 12, 8, 0.75) 100%
+        );
+      }
+
+      /* ============================================================ 화면 */
+
+      .screen {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+        padding: 32px;
+        box-sizing: border-box;
+        z-index: 1;
+        background: var(--dark);
+        text-align: center;
+      }
+
+      .screen[hidden] {
+        display: none;
+      }
+
+      .title {
+        margin: 0;
+        font-size: clamp(22px, 5.2vw, 46px);
+        font-weight: 700;
+        letter-spacing: 0.34em;
+        /* letter-spacing 은 마지막 글자 뒤에도 붙는다 — 그만큼 왼쪽으로 당겨야
+           가운데로 보인다 */
+        text-indent: 0.34em;
+        color: var(--fluorescent);
+        text-shadow: 0 0 24px rgba(255, 246, 214, 0.28), 0 2px 0 rgba(14, 12, 8, 0.9);
+        animation: tube-flicker 7s infinite steps(1, end);
+      }
+
+      .subtitle {
+        margin: 0;
+        font-size: clamp(12px, 1.7vw, 15px);
+        letter-spacing: 0.16em;
+        color: var(--fog);
+      }
+
+      /* 형광등이 한 번씩 나간다. 제목에만 준다 — 페이지 전체가 깜빡이면
+         분위기가 아니라 고장으로 읽힌다. */
+      @keyframes tube-flicker {
+        0%, 41%, 43%, 47%, 92%, 94%, 100% { opacity: 1; }
+        42%, 46%, 93% { opacity: 0.55; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .title { animation: none; }
+      }
+
+      /* ============================================================ 진행 */
+
+      .progress {
+        width: min(440px, 78vw);
+      }
+
+      .progress-track {
+        height: 10px;
+        border: 1px solid var(--trim);
+        background: rgba(14, 12, 8, 0.9);
+      }
+
+      .progress-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--wall);
+        transition: width 0.18s linear;
+      }
+
+      .progress-label {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 10px;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        color: var(--fog);
+      }
+
+      /* ============================================================ 패널 */
+
+      /* 시설 안내판이지 게임 오버레이가 아니다 — 사각, 얇은 테두리, 반투명. */
+      .panel {
+        width: min(560px, 88vw);
+        border: 1px solid var(--trim);
+        background: rgba(14, 12, 8, 0.86);
+        padding: 22px 24px;
+        text-align: left;
+        font-size: 14px;
+        line-height: 1.75;
+        color: var(--bone);
+      }
+
+      .panel h2 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        letter-spacing: 0.2em;
+        color: var(--fluorescent);
+      }
+
+      .panel-alert {
+        border-color: var(--alert);
+      }
+
+      .panel-alert h2 {
+        color: var(--alert);
+      }
+
+      .panel ul {
+        margin: 12px 0 0;
+        padding-left: 18px;
+        color: var(--fog);
+      }
+
+      .panel details {
+        margin-top: 14px;
+      }
+
+      .panel summary {
+        cursor: pointer;
+        color: var(--fog);
+        letter-spacing: 0.1em;
+      }
+
+      .panel pre {
+        margin: 10px 0 0;
+        padding: 10px;
+        max-height: 30vh;
+        overflow: auto;
+        border: 1px solid rgba(168, 146, 78, 0.5);
+        background: rgba(0, 0, 0, 0.35);
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--ceiling);
+      }
+
+      .button {
+        margin-top: 18px;
+        padding: 9px 20px;
+        border: 1px solid var(--wall);
+        background: transparent;
+        color: var(--bone);
+        font-family: inherit;
+        font-size: 13px;
+        letter-spacing: 0.16em;
+        cursor: pointer;
+      }
+
+      .button:hover,
+      .button:focus-visible {
+        background: rgba(201, 179, 107, 0.16);
+        color: var(--fluorescent);
+      }
+
+      /* ============================================================ 힌트 */
+
+      .hints {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 22px;
+        margin: 0;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        color: rgba(183, 172, 126, 0.75);
+      }
+
+      /* ============================================================ 게임 위 */
+
+      /* 로드가 끝나고 화면에 남는 유일한 요소다. 그래서 최소 크기이고,
+         마우스가 다가오기 전에는 거의 보이지 않는다. */
+      .fullscreen-button {
+        position: fixed;
+        right: 12px;
+        bottom: 12px;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border: 1px solid rgba(168, 146, 78, 0.55);
+        background: rgba(14, 12, 8, 0.45);
+        color: var(--fog);
+        cursor: pointer;
+        opacity: 0.28;
+        transition: opacity 0.18s ease;
+      }
+
+      .fullscreen-button:hover,
+      .fullscreen-button:focus-visible {
+        opacity: 1;
+        color: var(--fluorescent);
+      }
+
+      .fullscreen-button[hidden] {
+        display: none;
+      }
+
+      .fullscreen-button svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+        margin: auto;
+      }
+
+      /* ============================================================ 배너 */
+
+      .banner {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: 0;
+        z-index: 10;
+      }
+
+      .banner div {
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--trim);
+        background: rgba(14, 12, 8, 0.94);
+        color: var(--bone);
+        font-size: 13px;
+        text-align: center;
+      }
+
+      .banner div.is-warning {
+        border-bottom-color: var(--wall);
+        color: var(--fluorescent);
+      }
+
+      .banner div.is-error {
+        border-bottom-color: var(--alert);
+        color: var(--alert);
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="unity-canvas" width={{{ WIDTH }}} height={{{ HEIGHT }}} tabindex="-1"></canvas>
+
+    <div id="veil-scanlines" class="veil veil-scanlines"></div>
+    <div id="veil-vignette" class="veil veil-vignette"></div>
+
+    <!-- 불러오는 중 -->
+    <div id="loading-screen" class="screen">
+      <h1 class="title">{{{ PRODUCT_NAME }}}</h1>
+      <p class="subtitle">한 명은 찾고, 나머지는 나간다</p>
+      <div class="progress">
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+        <div class="progress-label">
+          <span id="progress-stage">연결하는 중</span>
+          <span id="progress-percent">0%</span>
+        </div>
+      </div>
+      <p class="hints">WASD 이동 · 마우스 시점 · Ctrl 은 발소리를 죽인다 · 화면을 클릭하면 마우스가 잠긴다</p>
+    </div>
+
+    <!-- 안내 / 실패. 내용은 JS 가 채운다 -->
+    <div id="notice-screen" class="screen" hidden>
+      <div id="notice-panel" class="panel">
+        <h2 id="notice-title"></h2>
+        <div id="notice-body"></div>
+      </div>
+    </div>
+
+    <button id="fullscreen-button" class="fullscreen-button" type="button" title="전체화면" aria-label="전체화면" hidden>
+      <svg viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4">
+        <path d="M1 5V1h4M13 5V1H9M1 9v4h4M13 9v4H9"/>
+      </svg>
+    </button>
+
+    <div id="unity-warning" class="banner"></div>
+
+    <script>
+      var canvas = document.querySelector("#unity-canvas");
+      var loadingScreen = document.querySelector("#loading-screen");
+      var noticeScreen = document.querySelector("#notice-screen");
+      var noticePanel = document.querySelector("#notice-panel");
+      var noticeTitle = document.querySelector("#notice-title");
+      var noticeBody = document.querySelector("#notice-body");
+      var progressFill = document.querySelector("#progress-fill");
+      var progressStage = document.querySelector("#progress-stage");
+      var progressPercent = document.querySelector("#progress-percent");
+      var fullscreenButton = document.querySelector("#fullscreen-button");
+
+      // ---------------------------------------------------------------- 알림
+
+      // 배너는 유니티 로더가 부른다. 기본 템플릿의 노랑/빨강 대신 이 페이지의
+      // 팔레트로 칠한다 — 경고 하나가 화면 전체의 분위기를 깬다.
+      function unityShowBanner(msg, type) {
+        var banner = document.querySelector("#unity-warning");
+        var line = document.createElement("div");
+        line.innerHTML = msg;
+        if (type == "error") {
+          line.className = "is-error";
+        } else if (type == "warning") {
+          line.className = "is-warning";
+        }
+        banner.appendChild(line);
+        if (type != "error") {
+          setTimeout(function () {
+            if (line.parentNode) line.parentNode.removeChild(line);
+          }, 5000);
+        }
+      }
+
+      function showNotice(title, html, options) {
+        options = options || {};
+        noticeTitle.textContent = title;
+        noticeBody.innerHTML = html;
+        noticePanel.className = options.alert ? "panel panel-alert" : "panel";
+        loadingScreen.hidden = true;
+        noticeScreen.hidden = false;
+        if (options.button) {
+          var button = document.createElement("button");
+          button.type = "button";
+          button.className = "button";
+          button.textContent = options.button;
+          button.onclick = function () {
+            noticeScreen.hidden = true;
+            loadingScreen.hidden = false;
+            options.onclick();
+          };
+          noticeBody.appendChild(button);
+          button.focus();
+        }
+      }
+
+      // 실패한 이유의 원문을 접어서 같이 보여 준다. 이것이 기본 템플릿의
+      // alert(message) 를 대신한다 — 브라우저 대화상자는 게임 화면이 아니고,
+      // 무엇이 잘못됐는지 다음 사람에게 아무것도 남기지 않는다.
+      function showFatal(reason, detail) {
+        var html =
+          "<div>" + reason + "</div>" +
+          "<ul>" +
+          "<li>페이지를 새로고침하면 대개 해결된다 (Ctrl+Shift+R)</li>" +
+          "<li>최신 데스크톱 Chrome · Edge · Firefox 에서 동작한다</li>" +
+          "<li>직접 띄운 정적 서버라면 <code>Content-Encoding</code> 헤더를 확인한다 — " +
+          "Brotli 로 압축된 빌드는 이 헤더 없이는 열리지 않는다</li>" +
+          "</ul>";
+        if (detail) {
+          html +=
+            "<details><summary>기술적인 원문</summary><pre>" +
+            String(detail).replace(/&/g, "&amp;").replace(/</g, "&lt;") +
+            "</pre></details>";
+        }
+        showNotice("실행하지 못했다", html, { alert: true });
+      }
+
+      // ---------------------------------------------------------------- 환경
+
+      function hasWebGL2() {
+        try {
+          return !!document.createElement("canvas").getContext("webgl2");
+        } catch (e) {
+          return false;
+        }
+      }
+
+      var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      // ---------------------------------------------------------------- 로드
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+        frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_THREADS
+        workerUrl: buildUrl + "/{{{ WORKER_FILENAME }}}",
+#endif
+#if USE_WASM
+        codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+        symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
+#endif
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+        productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+        productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        showBanner: unityShowBanner,
+      };
+
+      // 고해상도 디스플레이가 느리면 여기가 레버다. devicePixelRatio 를 그대로
+      // 따르면 4K·레티나에서 실제 픽셀이 네 배가 되고 그 비용은 프레임레이트다.
+      // 이 게임의 부하를 아직 재 보지 않았으므로 미리 깎지 않는다.
+      //   config.devicePixelRatio = 1;
+
+#if BACKGROUND_FILENAME
+      canvas.style.background = "url('" + buildUrl + "/{{{ BACKGROUND_FILENAME.replace(/'/g, '%27') }}}') center / cover";
+#endif
+
+      // 진행률은 두 단계로 읽힌다 — 내려받기가 대부분이고 마지막에 압축을 푼다.
+      // 숫자만 있으면 90% 에서 멈춘 것처럼 보이므로 단계를 같이 적는다.
+      function setProgress(progress) {
+        var percent = Math.round(progress * 100);
+        progressFill.style.width = percent + "%";
+        progressPercent.textContent = percent + "%";
+        progressStage.textContent = progress < 0.9 ? "자산을 내려받는 중" : "준비하는 중";
+      }
+
+      function startLoad() {
+        var script = document.createElement("script");
+        script.src = loaderUrl;
+
+        // 로더 자체를 못 받는 경우. 기본 템플릿은 이 갈래를 다루지 않아
+        // 진행바가 0% 에 멈춘 화면이 영원히 남는다.
+        script.onerror = function () {
+          showFatal(
+            "게임을 불러오는 스크립트를 받지 못했다. 배포가 반쯤 올라갔거나 주소가 잘못됐을 수 있다.",
+            loaderUrl);
+        };
+
+        script.onload = function () {
+          createUnityInstance(canvas, config, setProgress)
+            .then(function (unityInstance) {
+              // 로딩 화면은 로딩 중에만 존재한다. 장식은 남기지 않는다.
+              loadingScreen.remove();
+              document.querySelector("#veil-scanlines").remove();
+              document.querySelector("#veil-vignette").remove();
+
+              // 캔버스에 포커스를 준다. 포커스가 body 에 있으면 첫 클릭이
+              // 포커스를 옮기는 데 쓰이고 마우스 잠금과 키 입력이 한 박자
+              // 늦는데, 그 증상은 "가끔 첫 클릭이 씹힌다" 로만 보인다.
+              canvas.focus();
+
+              fullscreenButton.hidden = false;
+              fullscreenButton.onclick = function () {
+                unityInstance.SetFullscreen(1);
+                canvas.focus();
+              };
+#if SHOW_DIAGNOSTICS
+              var diagnostics = document.createElement("img");
+              diagnostics.src = "TemplateData/webmemd-icon.png";
+              diagnostics.style = "position:fixed;bottom:12px;right:50px;cursor:pointer";
+              diagnostics.onclick = function () {
+                unityDiagnostics.openDiagnosticsDiv(unityInstance.GetMetricsInfo);
+              };
+              document.body.appendChild(diagnostics);
+#endif
+#if DEVELOPMENT_PLAYER
+              var profile = unityProfiler.createButton(unityInstance);
+              profile.style = "position:fixed;bottom:12px;left:12px";
+              document.body.appendChild(profile);
+#endif
+            })
+            .catch(function (message) {
+              showFatal("게임을 시작하지 못했다.", message);
+            });
+        };
+
+        document.body.appendChild(script);
+      }
+
+      // ---------------------------------------------------------------- 시작
+
+      // 주소는 손대지 않는다. 초대 링크가 ?code=XXXXXX 로 오고 게임이 그것을
+      // Application.absoluteURL 에서 읽는다 (InviteLink.ReadCodeFromLaunchUrl).
+      // history.replaceState 로 주소를 정리하면 초대 링크가 조용히 죽는다.
+
+      if (!hasWebGL2()) {
+        // 로더보다 먼저 판단한다. 이 확인이 없으면 수십 MB 를 다 받은 뒤에
+        // 실패한다.
+        showFatal(
+          "이 브라우저가 WebGL 2 를 지원하지 않는다. 최신 데스크톱 Chrome · Edge · Firefox 에서 열면 된다.");
+      } else if (isMobile) {
+        // 막지는 않는다 — 다만 조작할 수 없는 화면을 꽉 채워 주는 것보다는
+        // 먼저 말해 주는 편이 낫다. 이 게임은 마우스 잠금과 WASD 전제다.
+        showNotice(
+          "데스크톱에서 하는 게임이다",
+          "<div>키보드와 마우스로 하는 1인칭 게임이라 터치로는 조작할 수 없다. " +
+          "PC 브라우저에서 이 주소를 열면 된다.</div>",
+          { button: "그래도 계속한다", onclick: startLoad });
+      } else {
+        startLoad();
+      }
+    </script>
+  </body>
+</html>
