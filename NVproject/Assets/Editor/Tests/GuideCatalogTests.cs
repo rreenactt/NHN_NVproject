@@ -50,6 +50,23 @@ namespace NV.Game.Tests
             }
         }
 
+        /// <summary>플레이하는 두 역할의 브리핑은 비어 있으면 안 된다 — 빈 브리핑은 무장을 건너뛴다.</summary>
+        [Test]
+        public void 플레이_역할의_브리핑은_내용이_있다()
+        {
+            foreach (var role in new[] { Role.Runner, Role.Seeker })
+            {
+                var lines = GuideCatalog.BriefFor(role);
+                Assert.That(lines.Length, Is.GreaterThan(1), role.ToString());
+
+                foreach (var line in lines)
+                    Assert.That(string.IsNullOrWhiteSpace(line), Is.False, role.ToString());
+            }
+
+            // 역할이 없으면 브리핑도 없다 — 뜨지 않는 것이 맞다.
+            Assert.That(GuideCatalog.BriefFor(Role.Unassigned).Length, Is.EqualTo(0));
+        }
+
         /// <summary>역할별 첫 탭은 실제로 존재하는 탭이어야 한다 — 없는 id 는 빈 내용으로 열린다.</summary>
         [Test]
         public void 역할별_첫_탭은_존재하는_주제다()

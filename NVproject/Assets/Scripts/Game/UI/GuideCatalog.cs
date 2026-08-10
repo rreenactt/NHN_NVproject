@@ -40,6 +40,33 @@ namespace NV.Game.UI
             }
         }
 
+        /// <summary>
+        /// 매치가 시작되는 순간 화면에 몇 초 떠 있는 역할별 요약. 지금 당장 해야 할 일과
+        /// 그 일에 필요한 키만 — 나머지는 전부 안내서(H)의 몫이다. 첫 줄이 제목이다.
+        /// </summary>
+        public static string[] BriefFor(Role role)
+        {
+            if (role == Role.Runner)
+                return new[]
+                {
+                    "당신은 러너다",
+                    "열쇠를 모아 문에 꽂고 탈출하라 — 문은 러너에게만 보인다",
+                    "E 상호작용 · Ctrl 숨죽여 걷기 · 발소리가 당신을 판다",
+                    "H — 자세한 게임 방법",
+                };
+
+            if (role == Role.Seeker)
+                return new[]
+                {
+                    "당신은 시커다",
+                    "러너의 탈출을 막아라 — 탄창은 3발, 다 쓰면 사슬이 끌고 간다",
+                    "발소리와 피 흔적을 따라가라 · Shift 달리기는 게이지를 쓴다",
+                    "H — 자세한 게임 방법",
+                };
+
+            return System.Array.Empty<string>();
+        }
+
         /// <summary>매치에서 열었을 때 먼저 펼칠 탭. 역할이 없으면 소개 탭.</summary>
         public static string TopicFor(Role role)
         {

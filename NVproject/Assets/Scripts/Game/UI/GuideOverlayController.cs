@@ -41,7 +41,11 @@ namespace NV.Game.UI
         private Label _hint;
         private VisualElement _tabs;
         private ScrollView _content;
+        private VisualElement _brief;
         private FirstPersonController _player;
+        private MatchManager _match;
+        private float _briefTimer;
+        private bool _briefArmed;
 
         public bool IsOpen { get; private set; }
 
@@ -64,6 +68,10 @@ namespace NV.Game.UI
                  "구석 힌트만 남긴다. 대기방이 켠다: 매치가 시작되기 전이 규칙을 읽을 시간이다.")]
         public bool autoOpenOnStart;
 
+        [Tooltip("매치 시작 브리핑이 떠 있는 시간(초). 역할이 정해진 직후, 입력을 잠그지 않고 " +
+                 "상단에 요약만 보여 준다.")]
+        public float briefSeconds = 12f;
+
         private void Start()
         {
             // ESC 메뉴와 달리 닫힌 상태에도 보여 줄 것(구석 힌트)이 있으므로 트리를 미리 세운다.
@@ -74,6 +82,8 @@ namespace NV.Game.UI
 
         private void Update()
         {
+            UpdateBrief();
+
             var keyboard = Keyboard.current;
             if (keyboard == null) return;
 
@@ -88,6 +98,66 @@ namespace NV.Game.UI
                 _escConsumedFrame = Time.frameCount;
                 SetOpen(false);
             }
+        }
+
+        /// <summary>
+        /// 매치 시작 브리핑. 게임 씬의 규칙대로 전문을 읽지, 알려 주기를 기다리지 않는다 —
+        /// 페이즈가 Playing 이 되고 역할이 정해진 것을 매 프레임 확인해 한 번 무장하고,
+        /// Playing 을 벗어나면 풀린다. 그래서 디버그 재시작(F1/F2)도 새 역할로 다시 뜬다.
+        /// </summary>
+        private void UpdateBrief()
+        {
+            if (_brief == null) return;
+
+            var match = ResolveMatch();
+            var phase = match != null ? match.Phase : MatchPhase.Lobby;
+
+            if (phase != MatchPhase.Playing)
+            {
+                _briefArmed = false;
+                _briefTimer = 0f;
+            }
+            else if (!_briefArmed)
+            {
+                var role = match.LocalAgent != null ? match.LocalAgent.Role : Role.Unassigned;
+                var lines = GuideCatalog.BriefFor(role);
+
+                // 역할이 아직 안 왔으면 다음 프레임에 다시 본다 — 무장은 역할과 함께다.
+                if (lines.Length > 0)
+                {
+                    PopulateBrief(lines);
+                    _briefArmed = true;
+                    _briefTimer = briefSeconds;
+                }
+            }
+
+            if (_briefTimer > 0f) _briefTimer -= Time.deltaTime;
+
+            // 전체 안내서나 ESC 메뉴가 떠 있는 동안은 비킨다 — 같은 말이 두 겹일 이유가 없다.
+            bool visible = _briefArmed && _briefTimer > 0f && !IsOpen && !EscapeMenuController.AnyOpen;
+            _brief.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        private void PopulateBrief(string[] lines)
+        {
+            _brief.Clear();
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var label = new Label(lines[i]);
+                label.AddToClassList(i == 0 ? "guide-brief-title" : "guide-brief-line");
+                label.pickingMode = PickingMode.Ignore;
+                _brief.Add(label);
+            }
+        }
+
+        /// <summary>매치 층은 매치 씬에만 있다 — 없으면 없는 대로, 브리핑이 안 뜰 뿐이다.</summary>
+        private MatchManager ResolveMatch()
+        {
+            if (_match != null) return _match;
+
+            _match = FindFirstObjectByType<MatchManager>();
+            return _match;
         }
 
         public void Toggle() => SetOpen(!IsOpen);
@@ -170,7 +240,10 @@ namespace NV.Game.UI
             _hint = documentRoot.Q<Label>("guide-hint");
             _tabs = documentRoot.Q<VisualElement>("guide-tabs");
             _content = documentRoot.Q<ScrollView>("guide-content");
+            _brief = documentRoot.Q<VisualElement>("guide-brief");
             _hint.pickingMode = PickingMode.Ignore;
+            _brief.pickingMode = PickingMode.Ignore;
+            _brief.style.display = DisplayStyle.None;
 
             BuildTabs();
 

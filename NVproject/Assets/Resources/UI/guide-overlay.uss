@@ -12,6 +12,35 @@
     -unity-font-definition: url("Fonts/NotoSansKR-Regular.otf");
 }
 
+/* 매치 시작 브리핑 — 상단 중앙, 몇 초 뒤 사라진다. 조준선(화면 중앙)을 가리지 않는다. */
+.guide-brief {
+    position: absolute;
+    top: 46px;
+    left: 0;
+    right: 0;
+    align-items: center;
+    -unity-font-definition: url("Fonts/NotoSansKR-Regular.otf");
+}
+
+.guide-brief-title {
+    -unity-font-style: bold;
+    font-size: 20px;
+    letter-spacing: 8px;
+    color: rgb(240, 222, 156);
+    background-color: rgba(14, 12, 6, 0.66);
+    padding: 6px 22px 4px 22px;
+    margin-bottom: 4px;
+}
+
+.guide-brief-line {
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: rgb(222, 210, 172);
+    background-color: rgba(14, 12, 6, 0.55);
+    padding: 3px 14px;
+    margin: 1px 0;
+}
+
 .guide-root {
     position: absolute;
     left: 0;
