@@ -69,8 +69,8 @@ namespace NV.Game.UI
         public bool autoOpenOnStart;
 
         [Tooltip("매치 시작 브리핑이 떠 있는 시간(초). 역할이 정해진 직후, 입력을 잠그지 않고 " +
-                 "상단에 요약만 보여 준다.")]
-        public float briefSeconds = 12f;
+                 "왼쪽 가장자리에 요약만 보여 준다. 시야를 막지 않는 자리라 넉넉히 두어도 된다.")]
+        public float briefSeconds = 15f;
 
         private void Start()
         {

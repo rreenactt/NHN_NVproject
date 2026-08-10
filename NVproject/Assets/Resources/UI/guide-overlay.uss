@@ -12,33 +12,38 @@
     -unity-font-definition: url("Fonts/NotoSansKR-Regular.otf");
 }
 
-/* 매치 시작 브리핑 — 상단 중앙, 몇 초 뒤 사라진다. 조준선(화면 중앙)을 가리지 않는다. */
+/* 매치 시작 브리핑 — 왼쪽 가장자리 중단, 몇 초 뒤 사라진다.
+   중앙은 조준선과 문 나침반의 자리다: 여기 있는 어떤 것도 화면 가운데를 가리면 안 된다.
+   하단 좌우와 우측 중단은 HUD(목표·상태·장치·탄창)가 쓰므로 왼쪽 중단이 빈 자리다. */
 .guide-brief {
     position: absolute;
-    top: 46px;
-    left: 0;
-    right: 0;
-    align-items: center;
+    left: 18px;
+    top: 32%;
+    max-width: 27%;
+    align-items: flex-start;
     -unity-font-definition: url("Fonts/NotoSansKR-Regular.otf");
 }
 
 .guide-brief-title {
     -unity-font-style: bold;
-    font-size: 20px;
-    letter-spacing: 8px;
+    font-size: 16px;
+    letter-spacing: 4px;
     color: rgb(240, 222, 156);
     background-color: rgba(14, 12, 6, 0.66);
-    padding: 6px 22px 4px 22px;
+    border-left-width: 2px;
+    border-left-color: rgb(226, 205, 138);
+    padding: 5px 14px 4px 10px;
     margin-bottom: 4px;
 }
 
 .guide-brief-line {
-    font-size: 13px;
+    font-size: 12px;
     letter-spacing: 1px;
     color: rgb(222, 210, 172);
     background-color: rgba(14, 12, 6, 0.55);
-    padding: 3px 14px;
+    padding: 3px 10px;
     margin: 1px 0;
+    white-space: normal;
 }
 
 .guide-root {
