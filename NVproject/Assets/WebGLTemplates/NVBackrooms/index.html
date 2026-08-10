@@ -5,8 +5,42 @@
     <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
     <meta name="description" content="한 명은 찾고, 나머지는 나간다. 브라우저에서 하는 비대칭 술래잡기 FPS.">
+    <meta name="theme-color" content="#0E0C08">
     <title>{{{ PRODUCT_NAME }}}</title>
     <link rel="icon" href="TemplateData/favicon.svg" type="image/svg+xml">
+
+    <!--
+       링크를 붙여 넣었을 때 나오는 카드(Open Graph / Twitter). 이것이 없으면
+       카카오톡·디스코드·슬랙이 유니티 기본 템플릿의 제목 "Unity Web Player" 를
+       그대로 퍼 간다 — 초대 코드를 채팅으로 주고받는 게임이라 이 카드는 사실상
+       이 게임의 첫인상이다.
+
+       **주소가 절대 경로인 것은 타협이 아니라 요구다.** 크롤러는 상대 경로
+       og:image 를 신뢰성 있게 풀지 않고, 자바스크립트를 실행하지 않으므로
+       런타임에 location 을 읽어 채울 수도 없다. 그래서 배포 도메인을 여기에
+       적는다 — 이 값은 Caddyfile 의 play 블록, appsettings.Production.json 의
+       CORS 허용 오리진과 한 벌이고, 도메인이 바뀌면 셋이 같이 바뀐다.
+       로컬 빌드에서는 이 태그가 틀린 주소를 가리키지만, 로컬 빌드의 링크는
+       아무도 공유하지 않으므로 대가가 없다.
+
+       제목만 매크로에서 뽑는다 — <title> 과 같은 값이어야 하고, productName 을
+       바꿨을 때 여기만 옛 이름으로 남는 것이 가장 흔한 어긋남이다.
+    -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{{ PRODUCT_NAME }}}">
+    <meta property="og:title" content="{{{ PRODUCT_NAME }}}">
+    <meta property="og:description" content="한 명은 찾고, 나머지는 나간다. 설치 없이 브라우저에서 바로 하는 비대칭 술래잡기 FPS.">
+    <meta property="og:locale" content="ko_KR">
+    <meta property="og:url" content="https://play.nhn-backroom.kro.kr/">
+    <meta property="og:image" content="https://play.nhn-backroom.kro.kr/TemplateData/social-card.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="어두운 복도 끝에 빛나는 문 하나. Backrooms Escape.">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{{ PRODUCT_NAME }}}">
+    <meta name="twitter:description" content="한 명은 찾고, 나머지는 나간다. 설치 없이 브라우저에서 바로 하는 비대칭 술래잡기 FPS.">
+    <meta name="twitter:image" content="https://play.nhn-backroom.kro.kr/TemplateData/social-card.png">
 #if SHOW_DIAGNOSTICS
     <link rel="stylesheet" href="<<<TemplateData/diagnostics.css>>>">
     <script src="<<<TemplateData/diagnostics.js>>>"></script>
