@@ -1,5 +1,5 @@
 # Backrooms Escape
-
+![Main Page](./Image/mainpage.png)
 **하나가 쫓고 나머지가 빠져나가는, 2층짜리 백룸스 미로의 비대칭 술래잡기 FPS.**
 
 브라우저에서 도는 Unity WebGL 클라이언트와, 이동과 전투를 판정하는 .NET 서버가
