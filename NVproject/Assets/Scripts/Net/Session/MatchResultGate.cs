@@ -1,5 +1,3 @@
-using NV.Game;
-
 namespace NV.Client.Net.Session
 {
     /// <summary>
@@ -25,33 +23,54 @@ namespace NV.Client.Net.Session
     /// </summary>
     public static class MatchResultGate
     {
-        /// <summary>Has the player closed this match's result?</summary>
-        public static bool Dismissed { get; private set; }
+        /// <summary>
+        /// A result has been put up and nobody has closed it yet.
+        ///
+        /// **This is a latch, not a reading of the room's phase.** It used to be
+        /// `Phase == Ended && !Dismissed`, and that made one player's 나가기 close everyone's
+        /// screen: the host reaching the waiting room asks the room back to `Waiting`
+        /// (`GameLobbyBootstrap.ReopenFinishedRoom`), the phase leaves `Ended`, and every other
+        /// client's gate opened at once. Whose result is on screen is a **local** question — the
+        /// room moving on is not an answer to it.
+        /// </summary>
+        public static bool Standing { get; private set; }
+
+        /// This match's result has already been put up once.
+        ///
+        /// **Without this the screen cannot be closed at all.** The router calls
+        /// <see cref="Raise"/> every frame it sees a finished match, and the match stays finished
+        /// until the host reopens the room — which only happens *after* the host has already left.
+        /// So a plain `Standing = true` undoes every <see cref="Dismiss"/> on the very next frame,
+        /// and 나가기 does nothing for anybody.
+        private static bool _raised;
 
         /// <summary>
-        /// Is a result screen up and unanswered right now?
-        ///
-        /// Asked by anyone who would otherwise take input back from the UI. The escape menu does:
-        /// closing it hands control to the player unconditionally, and doing that over a result
-        /// screen re-locks the cursor — so the 나가기 button is on screen, the mouse is moving the
-        /// aim, and there is no way to press it. Opening ESC as you die is enough to reach that.
+        /// A match has ended here. Raises the screen **once per match** — see
+        /// <see cref="_raised"/> for why calling it every frame must not keep re-raising.
         /// </summary>
-        public static bool Standing
+        public static void Raise()
         {
-            get
+            if (_raised)
             {
-                MatchManager match = MatchManager.Instance;
-                return match != null && match.Phase == MatchPhase.Ended && !Dismissed;
+                return;
             }
+
+            _raised = true;
+            Standing = true;
         }
 
         /// <summary>They pressed 나가기. The router may cut on its next frame.</summary>
-        public static void Dismiss() => Dismissed = true;
+        public static void Dismiss() => Standing = false;
 
         /// <summary>
-        /// A new result may come. Called by the router itself whenever it sees a match that is not
-        /// over — self-maintaining, so nothing has to remember to reset it between matches.
+        /// A new match is running, so no old result is owed — and the next one may be raised.
+        /// Called from the router's in-game branch, which is the one place that can know a match
+        /// is actually running, and the one place allowed to drop an unread result.
         /// </summary>
-        public static void Rearm() => Dismissed = false;
+        public static void Rearm()
+        {
+            _raised = false;
+            Standing = false;
+        }
     }
 }

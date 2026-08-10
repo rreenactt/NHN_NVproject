@@ -114,15 +114,16 @@ namespace NV.Client.Net.Session
 
             MatchManager match = MatchManager.Instance;
 
-            if (match == null || match.Phase != MatchPhase.Ended)
+            // 결과가 생기면 래치를 올린다. **올린 뒤에는 방의 단계를 더 보지 않는다** —
+            // 방장이 대기방에서 방을 `Waiting` 으로 되돌리면 단계가 `Ended` 를 떠나는데,
+            // 그때 단계를 보고 있으면 아직 읽고 있던 사람들까지 한꺼번에 풀려 나간다.
+            // 누구의 결과가 화면에 떠 있는가는 **각자의 질문**이다.
+            if (match != null && match.Phase == MatchPhase.Ended)
             {
-                // 끝난 매치가 없다. 다음 결과를 위해 래치를 되감는다 — 여기서 하면 매치마다
-                // 누가 되감아 줄지 기억할 필요가 없다.
-                MatchResultGate.Rearm();
-                return false;
+                MatchResultGate.Raise();
             }
 
-            return !MatchResultGate.Dismissed;
+            return MatchResultGate.Standing;
         }
 
         /// 방에 들어갔다. 대기방 씬으로.
