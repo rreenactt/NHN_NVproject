@@ -148,6 +148,8 @@ opcode 우선, 리틀 엔디언. **현재 버전 5** — 불일치는 WebSocket 
 | 새 파일을 어디 둘지 | `NVserver/docs/structure.md` |
 | **밟았던 함정 목록** | `NVserver/docs/conventions.md` |
 | 설계 결정 기록 | `docs/adr/` |
+| 배포 (서버·클라이언트·Caddy) | `NVserver/deploy/readme.md` |
+| **AI 활용 내역** | `docs/ai-usage.md` |
 
 `NVserver/docs/` 와 서버 코드 주석은 한국어입니다. `NVproject/CLAUDE.md` 는
 영어입니다. **편집하는 파일의 언어를 따르세요.**
