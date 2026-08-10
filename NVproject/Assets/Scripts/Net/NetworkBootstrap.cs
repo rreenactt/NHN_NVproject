@@ -41,6 +41,9 @@ namespace NV.Client.Net
         public bool showOverlay = false;
 
         private NetworkClient _client;
+
+        /// 이 씬이 놓은 입력원. `OnDestroy` 가 내 것만 지우기 위해 들고 있는다.
+        private LocalInputSource _inputSource;
         private FirstPersonController _localPlayer;
         private BlockRig _localRig;
         private INetworkMapSource _map;
@@ -204,7 +207,8 @@ namespace NV.Client.Net
 
             // 입력원은 씬이 준다. 세션은 플레이어가 어디 있는지 모르고, 알게 만들면
             // 세션이 씬 구조에 묶여 로비 씬에서 살아 있을 수 없다.
-            _client.InputSource = new LocalInputSource(_localPlayer);
+            _inputSource = new LocalInputSource(_localPlayer);
+            _client.InputSource = _inputSource;
 
             _client.WelcomeReceived += OnWelcome;
             _client.Ended += OnEnded;
@@ -231,6 +235,22 @@ namespace NV.Client.Net
             _client.WelcomeReceived -= OnWelcome;
             _client.Ended -= OnEnded;
             _client.FireObserved -= OnFireObserved;
+
+            // **입력원도 돌려준다.** 이것을 남기면 세션의 `NetworkClient` 는 씬보다 오래
+            // 살면서 **파괴된 컨트롤러를 매 프레임 표본한다** — 매치 씬을 나오는 순간부터
+            // `LocalInputSource.Sample` → `FirstPersonController.Yaw` → `transform` 에서
+            // `NullReferenceException` 이 프레임마다 쏟아진다. 구독을 끊는 것과 같은
+            // 종류의 뒷정리이고, 여기 빠져 있었다.
+            //
+            // 내가 놓은 것일 때만 지운다. 다음 씬의 부트스트랩이 이미 자기 것을 놓았다면
+            // 그것을 지워 버리는 셈이 된다 — 씬 전환에서 `OnDestroy` 가 새 씬의 `Awake`
+            // 뒤에 오는 경우가 있다.
+            if (ReferenceEquals(_client.InputSource, _inputSource))
+            {
+                _client.InputSource = null;
+            }
+
+            _inputSource = null;
         }
 
         /// 남이 쏜 총알의 예광탄을 그린다(IG-028b2).
@@ -610,6 +630,14 @@ namespace NV.Client.Net
 
         public InputFrame Sample()
         {
+            // 몸이 사라졌다. **두 번째 방어선이다** — 놓은 쪽이 `OnDestroy` 에서 지우는 것이
+            // 본래의 수리이고(`NetworkBootstrap`), 이것은 다른 경로가 그것을 잊었을 때
+            // 로그가 예외로 덮이는 대신 조용히 아무것도 하지 않게 한다.
+            if (_controller == null)
+            {
+                return default;
+            }
+
             var buttons = ButtonFlags.None;
 
             // 점프는 눌린 프레임에 래치되고 여기서 소비된다. 30Hz 틱 사이에 눌린 점프를

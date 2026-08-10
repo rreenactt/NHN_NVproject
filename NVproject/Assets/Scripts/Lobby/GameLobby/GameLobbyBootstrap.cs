@@ -89,6 +89,10 @@ namespace NV.Client.Lobby.GameLobby
             UnityEngine.Cursor.visible = true;
         }
 
+        /// 되돌리기 요청을 이미 보냈다. 요청과 반영 사이의 몇 프레임 동안 다시 보내지
+        /// 않기 위한 값이다.
+        private bool _reopenSent;
+
         private void OnEnable()
         {
             if (_session != null)
@@ -117,6 +121,8 @@ namespace NV.Client.Lobby.GameLobby
             {
                 return;
             }
+
+            ReopenFinishedRoom();
 
             // 정원은 참가 전 조회로 오므로 씬이 열린 뒤에 정해질 수 있다. 바뀌면 줄을 다시 세운다.
             var capacity = Capacity();
@@ -341,6 +347,39 @@ namespace NV.Client.Lobby.GameLobby
         /// **스탠드 번호는 `PlayerId` 다.** 서버가 슬롯을 그 번호로 예약하고 스폰도 그것으로
         /// 고르므로, 화면의 줄과 게임 안의 몸이 같은 번호를 쓴다 — 명단의 어느 줄이 누구인지
         /// 눈으로 맞출 수 있는 이유가 그것이다.
+        /// <summary>
+        /// 끝난 매치를 대기 상태로 되돌린다. **대기방에 도착한 방장만 부른다.**
+        ///
+        /// 매치가 끝나면 방은 `Ended` 로 남고, 그것을 `Waiting` 으로 되돌리는 컨트롤을 보내는
+        /// UI 는 **매치 씬의 ESC 메뉴 하나**였다. 결과를 닫고 여기로 걸어 나오면 그 문이 씬과
+        /// 함께 사라진다 — 그리고 이 화면은 `Ended` 동안 <c>waiting</c> 이 거짓이라 START·
+        /// READY·캐릭터 선택이 전부 빠지므로, 아무도 아무것도 할 수 없는 방이 된다. 서버도
+        /// `Ended` 인 방의 준비 요청을 거절하므로 버튼을 보여 준다고 풀리지도 않는다.
+        ///
+        /// 그래서 조용히 되돌린다. 사람이 보는 것은 매치 전과 똑같은 대기방이고, 다시 READY
+        /// 를 누르고 다시 시작하면 된다 — 그것이 "자연스럽게 다시 한 판" 이다.
+        ///
+        /// **한 번만 보낸다.** 요청과 반영 사이에 몇 프레임이 있고, 그동안 상태는 계속
+        /// `Ended` 다 — 매 프레임 보내면 같은 요청이 수십 개 쌓인다.
+        private void ReopenFinishedRoom()
+        {
+            if (_session == null || _session.State != SessionState.Ended)
+            {
+                _reopenSent = false;
+                return;
+            }
+
+            // 방장만 되돌릴 수 있다(`Room.ReturnToLobby` 의 `IsAuthorized`). 나머지는
+            // 방장이 도착할 때까지 기다린다.
+            if (!_session.IsHost || _reopenSent)
+            {
+                return;
+            }
+
+            _reopenSent = true;
+            _session.RequestReturnToLobby();
+        }
+
         private void Refresh()
         {
             if (!HudIsLive)
