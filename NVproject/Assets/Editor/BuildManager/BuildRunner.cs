@@ -61,6 +61,7 @@ namespace NV.Client.EditorTools
 
             WarnAboutDirtyScenes();
             WarnIfEntrySceneIsNotLobby(scenes);
+            WarnIfUnitySplashIsOn();
 
             if (!BakeEnvironment(environment))
             {
@@ -239,6 +240,30 @@ namespace NV.Client.EditorTools
                     "[NV] 진입 씬(0번)이 MainLobby 가 아니다: " + scenes[0] + "\n"
                     + "Tools ▸ NV ▸ Scene ▸ Create Main Lobby Scene 이 그 자리를 다시 잡아 준다.");
             }
+        }
+
+        /// 유니티 스플래시는 이 제품에 들어가지 않는다. 켜져 있으면 말한다.
+        ///
+        /// 여기서 끄지 않고 경고만 하는 이유가 있다. 이 값은 `ProjectSettings.asset` 에
+        /// 있는 프로젝트 설정이고, 빌드마다 빌려 갚는 값이 아니라 **항상 꺼져 있어야 하는**
+        /// 값이다. 빌드가 몰래 꺼 주면 설정이 켜진 채로 커밋되어도 아무도 모르고, 에디터
+        /// 플레이나 남의 빌드 경로에서는 그대로 로고가 뜬다.
+        ///
+        /// 이 경고가 실제로 필요한 경우는 라이선스다. 스플래시를 끌 수 없는 라이선스에서는
+        /// 유니티가 이 값을 **조용히 되돌린다** — 그 사실은 빌드를 실행해 봐야 보인다.
+        private static void WarnIfUnitySplashIsOn()
+        {
+            if (!PlayerSettings.SplashScreen.show && !PlayerSettings.SplashScreen.showUnityLogo)
+            {
+                return;
+            }
+
+            Debug.LogWarning(
+                "[NV] 유니티 스플래시가 켜져 있다 (show=" + PlayerSettings.SplashScreen.show
+                + ", unityLogo=" + PlayerSettings.SplashScreen.showUnityLogo + "). "
+                + "이 빌드는 실행 시 유니티 로고를 띄운다. "
+                + "Project Settings ▸ Player ▸ Splash Image 에서 'Show Splash Screen' 을 끈다 — "
+                + "껐는데도 다시 켜져 있다면 그 라이선스로는 끌 수 없다는 뜻이다.");
         }
 
         /// 선택된 환경을 `Resources` 안으로 옮긴다. 이것이 빌드와 런타임을 잇는 유일한 줄이다.
